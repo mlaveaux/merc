@@ -123,6 +123,7 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         accumulator
     }
 
+    /// Sorts the given range (begin, end) of the vector using an unstable sort.
     pub fn sort_unstable_range(&mut self, begin: usize, end: usize)
     where
         T: Ord,
@@ -132,6 +133,14 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         for (i, element) in elements.into_iter().enumerate() {
             self.set(begin + i, element);
         }
+    }
+
+    /// Swaps the entries at the given indices.
+    pub fn swap(&mut self, index1: usize, index2: usize) {
+        let entry1 = self.index(index1);
+        let entry2 = self.index(index2);
+        self.set(index1, entry2);
+        self.set(index2, entry1);
     }
 
     /// Resizes the vector to the given length, filling new entries with the provided value.
