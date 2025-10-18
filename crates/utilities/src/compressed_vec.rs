@@ -4,6 +4,8 @@ use std::marker::PhantomData;
 use crate::BytesFormatter;
 
 /// A vector data structure that stores objects in a byte compressed format
+/// 
+/// The `drop()` function of `T` is never called.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ByteCompressedVec<T> {
     data: Vec<u8>,
