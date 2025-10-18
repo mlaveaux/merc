@@ -15,6 +15,7 @@ use mcrl3_utilities::MCRL3Error;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
+use crate::LtsBuilder;
 use crate::StateIndex;
 
 #[derive(Error, Debug)]
@@ -87,7 +88,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let mut labels_index: HashMap<String, LabelIndex> = HashMap::new();
     let mut labels: Vec<String> = Vec::new();
 
-    let mut transitions: Vec<(StateIndex, LabelIndex, StateIndex)> = Vec::with_capacity(num_of_transitions);
+    let mut transitions = LtsBuilder::new();
     let mut progress = Progress::new(
         |value, increment| debug!("Reading transitions {}%...", value / increment),
         num_of_transitions,
@@ -115,7 +116,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
 
         trace!("Read transition {from} --[{label_txt}]-> {to}");
 
-        transitions.push((from, label_index, to));
+        transitions.add_transition(from, label_index, to);
 
         if labels[*label_index].is_empty() {
             labels[*label_index] = label_txt.to_string();
@@ -125,17 +126,16 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     }
 
     // Remove duplicated transitions, it is not clear if they are allowed in the .aut format.
-    transitions.sort_unstable();
-    transitions.dedup();
+    transitions.remove_duplicates();
 
     debug!("Finished reading LTS");
 
     hidden_labels.push("tau".to_string());
-    debug!("Time read_aut: {:.3}s", start.elapsed().as_secs_f64());
+    debug!("Time read_aut: {:.3}s", start.elapsed               ().as_secs_f64());
     Ok(LabelledTransitionSystem::new(
         initial_state,
         Some(num_of_states),
-        || transitions.iter().cloned(),
+        || transitions.iter(),
         labels,
         hidden_labels,
     ))
