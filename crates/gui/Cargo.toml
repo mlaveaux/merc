@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 mcrl3_utilities.workspace = true
 
+clap.workspace = true
 log.workspace = true
 streaming-iterator.workspace = true
 winapi.workspace = true

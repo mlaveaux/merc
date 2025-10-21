@@ -1,4 +1,3 @@
-use core::num;
 use std::collections::VecDeque;
 use std::io::Error;
 use std::io::ErrorKind;
@@ -290,6 +289,7 @@ impl<W: Write> Drop for BinaryATermWriter<W> {
     }
 }
 
+/// The reader counterpart of [`BinaryATermWriter`], which reads ATerms from a binary aterm input stream.
 pub struct BinaryATermReader<R: Read> {
     stream: BitStreamReader<R>,
     function_symbols: Vec<Symbol>,
@@ -422,6 +422,12 @@ impl<R: Read> BinaryATermReader<R> {
             "term_index_width does not match bits_for_value",
         );
         self.term_index_width
+    }
+}
+
+impl Read for BinaryATermReader<std::io::Cursor<Vec<u8>>> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        self.stream.reader.read(buf)
     }
 }
 
