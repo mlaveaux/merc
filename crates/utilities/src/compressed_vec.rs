@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::BytesFormatter;
 
 /// A vector data structure that stores objects in a byte compressed format
-/// 
+///
 /// The `drop()` function of `T` is never called.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ByteCompressedVec<T> {
@@ -81,13 +81,17 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         ByteCompressedVecIterator {
             vector: self,
             current: 0,
-            end: self.len()
+            end: self.len(),
         }
     }
 
     /// Returns an iterator over the elements in the vector for the begin, end range.
     pub fn iter_range(&self, begin: usize, end: usize) -> ByteCompressedVecIterator<'_, T> {
-        ByteCompressedVecIterator { vector: self, current: begin, end }
+        ByteCompressedVecIterator {
+            vector: self,
+            current: begin,
+            end,
+        }
     }
 
     /// Updates the given entry using a closure.
@@ -101,13 +105,14 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
     }
 
     /// Iterate over all elements and adapt the elements using a closure.
-    pub fn map<F>(&mut self, mut f: F) 
-        where F: FnMut(&mut T) 
+    pub fn map<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut T),
     {
         for index in 0..self.len() {
             let mut entry = self.index(index);
             f(&mut entry);
-            self.set(index, entry);          
+            self.set(index, entry);
         }
     }
 
@@ -165,7 +170,7 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
             }
         }
     }
-    
+
     /// Resizes all entries in the vector to the given length.
     fn resize_entries(&mut self, new_bytes_required: usize) {
         if new_bytes_required > self.bytes_per_entry {
@@ -184,7 +189,6 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
             self.data = new_data;
         }
     }
-
 }
 
 impl<T: CompressedEntry + Clone> ByteCompressedVec<T> {
@@ -289,7 +293,8 @@ impl CompressedEntry for usize {
 mod tests {
     use super::*;
 
-    use crate::{bytevec, random_test};
+    use crate::bytevec;
+    use crate::random_test;
 
     use rand::Rng;
     use rand::distr::Uniform;

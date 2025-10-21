@@ -70,11 +70,12 @@ pub trait ATermStreamable {
 
     /// Reads the object from the given binary aterm input stream.
     fn read<R: Read>(stream: &mut BinaryATermReader<R>) -> Result<Self, MCRL3Error>
-        where Self: Sized;
+    where
+        Self: Sized;
 }
 
 /// Writes terms in a streamable binary aterm format to an output stream.
-/// 
+///
 /// # The streamable aterm format:
 ///
 /// Aterms (and function symbols) are written as packets (with an identifier in the header) and their
@@ -212,7 +213,7 @@ impl<W: Write> BinaryATermWriter<W> {
 
         Ok(())
     }
-    
+
     /// Write an exact size iterator into the stream
     pub fn write_iter<I>(&mut self, iter: I) -> Result<(), MCRL3Error>
     where
@@ -252,7 +253,7 @@ impl<W: Write> BinaryATermWriter<W> {
 
         Ok(*index)
     }
-    
+
     /// Returns the current bit width needed to encode a function symbol index.
     ///
     /// In debug builds, this asserts that the cached width equals the
@@ -260,8 +261,7 @@ impl<W: Write> BinaryATermWriter<W> {
     fn function_symbol_index_width(&self) -> u8 {
         let expected = bits_for_value(self.function_symbols.len());
         debug_assert_eq!(
-            self.function_symbol_index_width,
-            expected,
+            self.function_symbol_index_width, expected,
             "function_symbol_index_width does not match bits_for_value",
         );
 
@@ -275,8 +275,7 @@ impl<W: Write> BinaryATermWriter<W> {
     fn term_index_width(&self) -> u8 {
         let expected = bits_for_value(self.terms.len());
         debug_assert_eq!(
-            self.term_index_width,
-            expected,
+            self.term_index_width, expected,
             "term_index_width does not match bits_for_value",
         );
         self.term_index_width
@@ -300,7 +299,6 @@ pub struct BinaryATermReader<R: Read> {
 }
 
 impl<R: Read> BinaryATermReader<R> {
-
     /// Checks for the header and initializes the binary aterm input stream.
     pub fn new(reader: R) -> Result<Self, MCRL3Error> {
         let mut stream = BitStreamReader::new(reader);
@@ -398,7 +396,7 @@ impl<R: Read> BinaryATermReader<R> {
             remaining: number_of_elements,
         })
     }
-    
+
     /// Returns the current bit width needed to encode a function symbol index.
     ///
     /// In debug builds, this asserts that the cached width equals the
@@ -406,8 +404,7 @@ impl<R: Read> BinaryATermReader<R> {
     fn function_symbol_index_width(&self) -> u8 {
         let expected = bits_for_value(self.function_symbols.len());
         debug_assert_eq!(
-            self.function_symbol_index_width,
-            expected,
+            self.function_symbol_index_width, expected,
             "function_symbol_index_width does not match bits_for_value",
         );
 
@@ -421,8 +418,7 @@ impl<R: Read> BinaryATermReader<R> {
     fn term_index_width(&self) -> u8 {
         let expected = bits_for_value(self.terms.len());
         debug_assert_eq!(
-            self.term_index_width,
-            expected,
+            self.term_index_width, expected,
             "term_index_width does not match bits_for_value",
         );
         self.term_index_width
@@ -449,7 +445,8 @@ impl<'a, R: Read> Iterator for ATermReadIter<'a, R> {
             Ok(None) => Some(Err(Error::new(
                 ErrorKind::UnexpectedEof,
                 "Unexpected end of stream while reading iterator",
-            ).into())),
+            )
+            .into())),
             Err(e) => Some(Err(e)),
         }
     }
@@ -521,8 +518,7 @@ mod tests {
                 let term_read = term_read.expect("Reading term from stream must succeed");
                 println!("Term {}", term_written);
                 debug_assert_eq!(
-                    *term_written,
-                    term_read,
+                    *term_written, term_read,
                     "The read term must match the term that we have written"
                 );
             }

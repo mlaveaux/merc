@@ -153,7 +153,7 @@ impl<T: CompressedEntry, Tag> CompressedEntry for TagIndex<T, Tag> {
         to self.index {
             fn to_bytes(&self, bytes: &mut [u8]);
             fn bytes_required(&self) -> usize;
-        }    
+        }
     }
 
     fn from_bytes(bytes: &[u8]) -> Self {

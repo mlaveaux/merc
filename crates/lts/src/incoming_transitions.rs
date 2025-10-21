@@ -24,19 +24,15 @@ struct TransitionIndex {
 
 impl TransitionIndex {
     fn new(start: usize) -> TransitionIndex {
-        TransitionIndex {
-            start,
-        }
+        TransitionIndex { start }
     }
 }
 
 impl IncomingTransitions {
     pub fn new(lts: &LabelledTransitionSystem) -> IncomingTransitions {
         let num_states = lts.num_of_states();
-        let mut transition_labels =
-            bytevec![LabelIndex::new(0); lts.num_of_transitions()];
-        let mut transition_from =
-            bytevec![StateIndex::new(0); lts.num_of_transitions()];
+        let mut transition_labels = bytevec![LabelIndex::new(0); lts.num_of_transitions()];
+        let mut transition_from = bytevec![StateIndex::new(0); lts.num_of_transitions()];
         let mut state2incoming = bytevec![TransitionIndex::default(); num_states];
 
         // Count the number of incoming transitions for each state
@@ -77,17 +73,17 @@ impl IncomingTransitions {
         for state_index in 0..num_states {
             let state = state2incoming.index(state_index);
             let next_state = state2incoming.index(state_index + 1);
-            
+
             // Get the ranges to sort
             let start = state.start;
             let end = next_state.start;
-            
+
             // Extract, sort, and put back
             let mut pairs: Vec<_> = (start..end)
                 .map(|i| (transition_labels.index(i), transition_from.index(i)))
                 .collect();
             pairs.sort_unstable_by_key(|(label, _)| *label);
-            
+
             for (i, (label, from)) in pairs.into_iter().enumerate() {
                 transition_labels.set(start + i, label);
                 transition_from.set(start + i, from);
@@ -105,9 +101,8 @@ impl IncomingTransitions {
     pub fn incoming_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_ {
         let state = self.state2incoming.index(state_index.value());
         let next_state = self.state2incoming.index(state_index.value() + 1);
-        (state.start..next_state.start).map(move |i| {
-            Transition::new(self.transition_labels.index(i), self.transition_from.index(i))
-        })
+        (state.start..next_state.start)
+            .map(move |i| Transition::new(self.transition_labels.index(i), self.transition_from.index(i)))
     }
 
     // Return an iterator over the incoming silent transitions for the given state.
@@ -115,9 +110,7 @@ impl IncomingTransitions {
         let state = self.state2incoming.index(state_index.value());
         let next_state = self.state2incoming.index(state_index.value() + 1);
         (state.start..next_state.start)
-            .map(move |i| {
-                Transition::new(self.transition_labels.index(i), self.transition_from.index(i))
-            })
+            .map(move |i| Transition::new(self.transition_labels.index(i), self.transition_from.index(i)))
             .take_while(|transition| transition.label == 0)
     }
 }

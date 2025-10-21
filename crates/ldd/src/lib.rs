@@ -33,9 +33,9 @@
 #[forbid(unsafe_code)]
 mod format;
 mod io_ldd;
+pub mod iterators;
 mod operations;
 mod storage;
-pub mod iterators;
 
 #[cfg(test)]
 mod test_utility;
