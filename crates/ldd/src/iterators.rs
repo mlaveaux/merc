@@ -28,6 +28,66 @@ pub fn iter<'a>(storage: &'a Storage, ldd: &Ldd) -> Iter<'a> {
     }
 }
 
+// Returns an iterator over all nodes in the given LDD. Visits each node only if the predicate holds.
+pub fn iter_node<'a, P>(storage: &'a Storage, ldd: &Ldd, filter: P) -> IterNode<'a, P>
+where
+    P: Fn(&Ldd) -> bool,
+{
+    let mut stack = Vec::new();
+
+    if ldd != storage.empty_set() {
+        stack.push((ldd.clone(), false));
+    }
+
+    IterNode {
+        storage,
+        stack,
+        predicate: filter,
+    }
+}
+
+pub struct IterNode<'a, P>
+where
+    P: Fn(&Ldd) -> bool,
+{
+    storage: &'a Storage,
+    stack: Vec<(Ldd, bool)>,
+    predicate: P,
+}
+
+impl<P> Iterator for IterNode<'_, P>
+where
+    P: Fn(&Ldd) -> bool,
+{
+    type Item = (Ldd, Data);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((current, visited)) = self.stack.pop() {
+            let data = self.storage.get(&current);
+
+            if visited {
+                return Some((current, data));
+            }
+
+            let Data(_, down, right) = &data;
+
+            // Next time we can actually process the current node.
+            self.stack.push((current.clone(), true));
+
+            // Add unvisited children to stack
+            if (self.predicate)(down) {
+                self.stack.push((down.clone(), false));
+            }
+
+            if (self.predicate)(right) {
+                self.stack.push((right.clone(), false));
+            }
+        }
+
+        None
+    }
+}
+
 pub struct IterRight<'a> {
     storage: &'a Storage,
     current: Ldd,

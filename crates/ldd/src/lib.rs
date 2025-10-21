@@ -32,13 +32,15 @@
 //!
 #[forbid(unsafe_code)]
 mod format;
-pub mod iterators;
+mod io_ldd;
 mod operations;
 mod storage;
+pub mod iterators;
 
 #[cfg(test)]
 mod test_utility;
 
 pub use format::*;
+pub use io_ldd::*;
 pub use operations::*;
 pub use storage::*;
