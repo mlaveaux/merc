@@ -71,6 +71,12 @@ impl<W: Write> BitStreamWriter<W> {
     }
 }
 
+impl<W: Write> Drop for BitStreamWriter<W> {
+    fn drop(&mut self) {
+        self.flush().expect("Panicked while flushing the stream when dropped");
+    }
+}
+
 /// Reader for bit-level input operations from an underlying reader.
 pub struct BitStreamReader<R: Read> {
     reader: BitReader<R, BigEndian>,

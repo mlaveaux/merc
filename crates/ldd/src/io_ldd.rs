@@ -10,7 +10,7 @@ use mcrl3_utilities::MCRL3Error;
 use crate::Data;
 use crate::Ldd;
 use crate::Storage;
-use crate::iterators::iter_node;
+use crate::iterators::iter_nodes;
 
 ///  The magic value for a binary LDD format stream.
 const BLF_MAGIC: u64 = 0x8baf;
@@ -38,8 +38,8 @@ impl<W: Write> BinaryLddWriter<W> {
 
         // Add the true and false constants
         let mut nodes = IndexedSet::new();
-        nodes.insert(storage.empty_set().clone());
         nodes.insert(storage.empty_vector().clone());
+        nodes.insert(storage.empty_set().clone());
 
         Ok(Self {
             writer,
@@ -49,9 +49,9 @@ impl<W: Write> BinaryLddWriter<W> {
 
     /// Writes an LDD to the stream.
     pub fn write(&mut self, ldd: &Ldd, storage: &Storage) -> Result<(), MCRL3Error> {
-        for (node, Data(value, down, right)) in iter_node(storage, ldd, |node| {
+        for (node, Data(value, down, right)) in iter_nodes(storage, ldd, |node| {
             // Skip any LDD that we have already inserted in the stream
-            self.nodes.borrow().contains(node)
+            !self.nodes.borrow().contains(node)
         }) {
             let mut nodes = self.nodes.borrow_mut();
             let (index, inserted) = nodes.insert(node.clone());
@@ -63,20 +63,20 @@ impl<W: Write> BinaryLddWriter<W> {
                     *nodes
                         .index(&down)
                         .expect("The down node must have already been written") as u64,
-                    self.ldd_index_width(),
+                    Self::ldd_index_width(&nodes),
                 )?;
                 self.writer.write_bits(
                     *nodes
                         .index(&right)
                         .expect("The right node must have already been written") as u64,
-                    self.ldd_index_width(),
+                    Self::ldd_index_width(&nodes),
                 )?;
             }
 
             if node == *ldd {
                 // Write output LDD
                 self.writer.write_bits(1, 1)?;
-                self.writer.write_bits(*index as u64, self.ldd_index_width())?;
+                self.writer.write_bits(*index as u64, Self::ldd_index_width(&nodes))?;
             }
         }
 
@@ -84,8 +84,8 @@ impl<W: Write> BinaryLddWriter<W> {
     }
 
     /// Returns the number of bits required to represent an LDD index.
-    fn ldd_index_width(&self) -> u8 {
-        (self.nodes.borrow().len().ilog2() + 1) as u8 // Assume that size is one larger to contain the input ldd.
+    fn ldd_index_width(nodes: &IndexedSet<Ldd>) -> u8 {
+        (nodes.len().ilog2() + 1) as u8 // Assume that size is one larger to contain the input ldd.
     }
 }
 
@@ -104,6 +104,7 @@ impl<R: Read> BinaryLddReader<R> {
         if magic != BLF_MAGIC {
             return Err("Invalid magic number in binary LDD stream".into());
         }
+
         let version = reader.read_bits(16)?;
         if version != BLF_VERSION {
             return Err(format!("The BLF version ({version}) of the input file is incompatible with the version ({BLF_VERSION}) of this tool. The input file must be regenerated.").into());
@@ -111,8 +112,8 @@ impl<R: Read> BinaryLddReader<R> {
 
         // Add the true and false constants
         let mut nodes = Vec::new();
-        nodes.push(Storage::default().empty_set().clone());
         nodes.push(Storage::default().empty_vector().clone());
+        nodes.push(Storage::default().empty_set().clone());
 
         Ok(Self { reader, nodes })
     }

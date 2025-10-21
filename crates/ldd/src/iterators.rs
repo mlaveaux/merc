@@ -29,7 +29,7 @@ pub fn iter<'a>(storage: &'a Storage, ldd: &Ldd) -> Iter<'a> {
 }
 
 // Returns an iterator over all nodes in the given LDD. Visits each node only if the predicate holds.
-pub fn iter_node<'a, P>(storage: &'a Storage, ldd: &Ldd, filter: P) -> IterNode<'a, P>
+pub fn iter_nodes<'a, P>(storage: &'a Storage, ldd: &Ldd, filter: P) -> IterNode<'a, P>
 where
     P: Fn(&Ldd) -> bool,
 {
