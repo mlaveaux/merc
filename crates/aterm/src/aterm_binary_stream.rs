@@ -229,7 +229,7 @@ impl<W: Write> BinaryATermWriter<W> {
     ///
     /// This method should be called when you're done writing terms to ensure
     /// all data is properly written and the stream is correctly terminated.
-    pub fn flush(&mut self) -> Result<(), std::io::Error> {
+    pub fn flush(&mut self) -> Result<(), MCRL3Error> {
         // Write the end of stream marker
         self.stream.write_bits(PacketType::ATerm as u64, PACKET_BITS)?;
         self.stream.write_bits(0, self.function_symbol_index_width())?;

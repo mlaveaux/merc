@@ -5,8 +5,6 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use clap::Subcommand;
-use clap::ValueEnum;
-use log::LevelFilter;
 use mcrl3_gui::verbosity::Verbosity;
 use mcrl3_rec_tests::load_rec_from_file;
 use mcrl3_unsafety::print_allocator_metrics;

@@ -3162,10 +3162,12 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
+ "mcrl3_gui",
  "mcrl3_lts",
  "mcrl3_reduction",
  "mcrl3_unsafety",
  "mcrl3_utilities",
+ "mcrl3_version",
 ]
 
 [[package]]
@@ -3291,6 +3293,7 @@ dependencies = [
 name = "mcrl3_gui"
 version = "1.0.0"
 dependencies = [
+ "clap",
  "log",
  "mcrl3_utilities",
  "streaming-iterator",
@@ -3318,6 +3321,7 @@ version = "1.0.0"
 dependencies = [
  "ahash",
  "log",
+ "mcrl3_io",
  "mcrl3_utilities",
  "rand 0.9.2",
  "rustc-hash 2.1.1",
@@ -3329,6 +3333,8 @@ version = "1.0.0"
 dependencies = [
  "bumpalo",
  "log",
+ "mcrl3_aterm",
+ "mcrl3_data",
  "mcrl3_io",
  "mcrl3_utilities",
  "rand 0.9.2",
@@ -3484,6 +3490,7 @@ dependencies = [
  "allocator-api2 0.3.1",
  "dashmap",
  "equivalent",
+ "itertools 0.14.0",
  "log",
  "mcrl3_utilities",
  "mimalloc",
@@ -3522,6 +3529,7 @@ dependencies = [
  "log",
  "mcrl3_aterm",
  "mcrl3_data",
+ "mcrl3_gui",
  "mcrl3_rec-tests",
  "mcrl3_sabre",
  "mcrl3_sabre-compiling",
