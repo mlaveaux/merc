@@ -425,12 +425,6 @@ impl<R: Read> BinaryATermReader<R> {
     }
 }
 
-impl Read for BinaryATermReader<std::io::Cursor<Vec<u8>>> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        self.stream.reader.read(buf)
-    }
-}
-
 /// A read iterator for ATerms from a binary aterm input stream.
 pub struct ATermReadIter<'a, R: Read> {
     reader: &'a mut BinaryATermReader<R>,
