@@ -88,7 +88,7 @@ pub trait ATermRead {
     fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error>;
 
     /// Reads an iterator of ATerms from the stream.
-    fn read_iaterm_ter(&mut self) -> Result<Box<dyn ExactSizeIterator<Item = Result<ATerm, MCRL3Error>> + '_>, MCRL3Error>;
+    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error>;
 }
 
 /// Trait for objects that can be written to and read from an ATerm stream.
@@ -196,7 +196,6 @@ impl<W: Write> ATermWrite for BinaryATermWriter<W> {
                     // Add arguments to stack for processing first
                     for arg in current_term.arguments() {
                         if !self.terms.contains(&arg) {
-                            println!("Adding term {}", arg);
                             self.stack.push_back((arg.protect(), false));
                         }
                     }
@@ -391,12 +390,12 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
         }
     }
 
-    fn read_iaterm_ter(&mut self) -> Result<Box<dyn ExactSizeIterator<Item = Result<ATerm, MCRL3Error>> + '_>, MCRL3Error> {
+    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error> {
         let number_of_elements = self.stream.read_integer()? as usize;
-        Ok(Box::new(ATermReadIter {
+        Ok(ATermReadIter {
             reader: self,
             remaining: number_of_elements,
-        }))
+        })
     }
 }
 
@@ -563,7 +562,7 @@ mod tests {
             drop(output_stream); // Explicitly drop to release the mutable borrow
 
             let mut input_stream = BinaryATermReader::new(&stream[..]).unwrap();
-            let read_iter = input_stream.read_iaterm_ter().unwrap();
+            let read_iter = input_stream.read_aterm_iter().unwrap();
             for (term_written, term_read) in input.iter().zip(read_iter) {
                 let term_read = term_read.expect("Reading term from stream must succeed");
                 println!("Term {}", term_written);
