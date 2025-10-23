@@ -8,6 +8,8 @@ use mcrl3_io::BitStreamRead;
 use mcrl3_io::BitStreamReader;
 use mcrl3_io::BitStreamWrite;
 use mcrl3_io::BitStreamWriter;
+use mcrl3_number::bits_for_value;
+use mcrl3_utilities::debug_trace;
 use mcrl3_utilities::IndexedSet;
 use mcrl3_utilities::MCRL3Error;
 
@@ -133,12 +135,77 @@ pub struct BinaryATermWriter<W: Write> {
     stack: VecDeque<(ATerm, bool)>,
 }
 
-/// Returns the number of bits needed to represent the given value.
-fn bits_for_value(value: usize) -> u8 {
-    if value == 0 {
-        1
-    } else {
-        (usize::BITS - value.leading_zeros()) as u8
+impl<W: Write> BinaryATermWriter<W> {
+    /// Creates a new binary ATerm output stream with the given writer.
+    ///
+    /// # Arguments
+    /// * `writer` - The underlying writer to write binary data to
+    ///
+    /// # Returns
+    /// A new `BinaryATermOutputStream` instance or an error if header writing fails
+    pub fn new(writer: W) -> Result<Self, MCRL3Error> {
+        let mut stream = BitStreamWriter::new(writer);
+
+        // Write the header of the binary aterm format
+        stream.write_bits(0, 8)?;
+        stream.write_bits(BAF_MAGIC as u64, 16)?;
+        stream.write_bits(BAF_VERSION as u64, 16)?;
+
+        let mut function_symbols = IndexedSet::new();
+        // The term with function symbol index 0 indicates the end of the stream
+        function_symbols.insert(Symbol::new("end_of_stream".to_string(), 0));
+
+        Ok(Self {
+            stream,
+            function_symbols,
+            function_symbol_index_width: 1,
+            terms: IndexedSet::new(),
+            term_index_width: 1,
+            stack: VecDeque::new(),
+            flushed: false,
+        })
+    }
+
+    /// \brief Write a function symbol to the output stream.
+    fn write_function_symbol(&mut self, symbol: &SymbolRef<'_>) -> Result<usize, MCRL3Error> {
+        let (index, inserted) = self.function_symbols.insert(symbol.protect());
+
+        if inserted {
+            // Write the function symbol to the stream
+            self.stream.write_bits(PacketType::FunctionSymbol as u64, PACKET_BITS)?;
+            self.stream.write_string(symbol.name())?;
+            self.stream.write_integer(symbol.arity() as u64)?;
+            self.function_symbol_index_width = bits_for_value(self.function_symbols.len());
+        }
+
+        Ok(*index)
+    }
+
+    /// Returns the current bit width needed to encode a function symbol index.
+    ///
+    /// In debug builds, this asserts that the cached width equals the
+    /// computed width based on the current number of function symbols.
+    fn function_symbol_index_width(&self) -> u8 {
+        let expected = bits_for_value(self.function_symbols.len());
+        debug_assert_eq!(
+            self.function_symbol_index_width, expected,
+            "function_symbol_index_width does not match bits_for_value",
+        );
+
+        self.function_symbol_index_width
+    }
+
+    /// Returns the current bit width needed to encode a term index.
+    ///
+    /// In debug builds, this asserts that the cached width equals the
+    /// computed width based on the current number of terms.
+    fn term_index_width(&self) -> u8 {
+        let expected = bits_for_value(self.terms.len());
+        debug_assert_eq!(
+            self.term_index_width, expected,
+            "term_index_width does not match bits_for_value",
+        );
+        self.term_index_width
     }
 }
 
@@ -230,80 +297,6 @@ impl<W: Write> ATermWrite for BinaryATermWriter<W> {
     }
 }
 
-impl<W: Write> BinaryATermWriter<W> {
-    /// Creates a new binary ATerm output stream with the given writer.
-    ///
-    /// # Arguments
-    /// * `writer` - The underlying writer to write binary data to
-    ///
-    /// # Returns
-    /// A new `BinaryATermOutputStream` instance or an error if header writing fails
-    pub fn new(writer: W) -> Result<Self, MCRL3Error> {
-        let mut stream = BitStreamWriter::new(writer);
-
-        // Write the header of the binary aterm format
-        stream.write_bits(0, 8)?;
-        stream.write_bits(BAF_MAGIC as u64, 16)?;
-        stream.write_bits(BAF_VERSION as u64, 16)?;
-
-        let mut function_symbols = IndexedSet::new();
-        // The term with function symbol index 0 indicates the end of the stream
-        function_symbols.insert(Symbol::new("end_of_stream".to_string(), 0));
-
-        Ok(Self {
-            stream,
-            function_symbols,
-            function_symbol_index_width: 1,
-            terms: IndexedSet::new(),
-            term_index_width: 1,
-            stack: VecDeque::new(),
-            flushed: false,
-        })
-    }
-
-    /// \brief Write a function symbol to the output stream.
-    fn write_function_symbol(&mut self, symbol: &SymbolRef<'_>) -> Result<usize, MCRL3Error> {
-        let (index, inserted) = self.function_symbols.insert(symbol.protect());
-
-        if inserted {
-            // Write the function symbol to the stream
-            self.stream.write_bits(PacketType::FunctionSymbol as u64, PACKET_BITS)?;
-            self.stream.write_string(symbol.name())?;
-            self.stream.write_integer(symbol.arity() as u64)?;
-            self.function_symbol_index_width = bits_for_value(self.function_symbols.len());
-        }
-
-        Ok(*index)
-    }
-
-    /// Returns the current bit width needed to encode a function symbol index.
-    ///
-    /// In debug builds, this asserts that the cached width equals the
-    /// computed width based on the current number of function symbols.
-    fn function_symbol_index_width(&self) -> u8 {
-        let expected = bits_for_value(self.function_symbols.len());
-        debug_assert_eq!(
-            self.function_symbol_index_width, expected,
-            "function_symbol_index_width does not match bits_for_value",
-        );
-
-        self.function_symbol_index_width
-    }
-
-    /// Returns the current bit width needed to encode a term index.
-    ///
-    /// In debug builds, this asserts that the cached width equals the
-    /// computed width based on the current number of terms.
-    fn term_index_width(&self) -> u8 {
-        let expected = bits_for_value(self.terms.len());
-        debug_assert_eq!(
-            self.term_index_width, expected,
-            "term_index_width does not match bits_for_value",
-        );
-        self.term_index_width
-    }
-}
-
 impl<W: Write> BitStreamWrite for BinaryATermWriter<W> {
     delegate::delegate! {
         to self.stream {
@@ -326,77 +319,17 @@ impl<W: Write> Drop for BinaryATermWriter<W> {
 /// The reader counterpart of [`BinaryATermWriter`], which reads ATerms from a binary aterm input stream.
 pub struct BinaryATermReader<R: Read> {
     stream: BitStreamReader<R>,
+
+    /// Stores the function symbols read so far, and the width needed to encode their indices.
     function_symbols: Vec<Symbol>,
     function_symbol_index_width: u8,
+    
+    /// Stores the terms read so far, and the width needed to encode their indices.
     terms: Vec<ATerm>,
     term_index_width: u8,
-}
 
-impl<R: Read> ATermRead for BinaryATermReader<R> {
-    fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error> {
-        loop {
-            let header = self.stream.read_bits(PACKET_BITS)?;
-            let packet = PacketType::from(header as u8);
-
-            match packet {
-                PacketType::FunctionSymbol => {
-                    let name = self.stream.read_string()?;
-                    let arity = self.stream.read_integer()? as usize;
-                    let symbol = Symbol::new(name, arity);
-                    self.function_symbols.push(symbol);
-                    self.function_symbol_index_width = bits_for_value(self.function_symbols.len());
-                }
-                PacketType::ATermIntOutput => {
-                    let value = self.stream.read_integer()?.try_into()?;
-                    return Ok(Some(ATermInt::new(value).into()));
-                }
-                PacketType::ATerm | PacketType::ATermOutput => {
-                    let symbol_index = self.stream.read_bits(self.function_symbol_index_width())? as usize;
-                    if symbol_index == 0 {
-                        // End of stream marker
-                        return Ok(None);
-                    }
-
-                    let symbol = &self.function_symbols[symbol_index];
-
-                    if is_int_symbol(symbol) {
-                        let value = self.stream.read_integer()?.try_into()?;
-                        let term = ATermInt::new(value);
-
-                        if packet == PacketType::ATermOutput {
-                            return Ok(Some(term.into()));
-                        }
-
-                        self.terms.push(term.into());
-                        self.term_index_width = bits_for_value(self.terms.len());
-                    } else {
-                        let mut arguments = Vec::with_capacity(symbol.arity());
-                        for _ in 0..symbol.arity() {
-                            let arg_index = self.stream.read_bits(self.term_index_width())? as usize;
-                            arguments.push(self.terms[arg_index].clone());
-                        }
-
-                        let term = ATerm::with_args(&symbol, &arguments);
-
-                        if packet == PacketType::ATermOutput {
-                            return Ok(Some(term));
-                        }
-
-                        self.terms.push(term);
-                        self.term_index_width = bits_for_value(self.terms.len());
-                    }
-                }
-            }
-        }
-    }
-
-    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error> {
-        let number_of_elements = self.stream.read_integer()? as usize;
-        Ok(ATermReadIter {
-            reader: self,
-            remaining: number_of_elements,
-        })
-    }
+    /// Indicates whether the end of stream marker has already been encountered.
+    ended: bool,
 }
 
 impl<R: Read> BinaryATermReader<R> {
@@ -428,6 +361,7 @@ impl<R: Read> BinaryATermReader<R> {
             function_symbol_index_width: 1,
             terms: Vec::new(),
             term_index_width: 1,
+            ended: false,
         })
     }
 
@@ -461,6 +395,105 @@ impl<R: Read> BinaryATermReader<R> {
             "term_index_width does not match bits_for_value",
         );
         self.term_index_width
+    }
+}
+
+impl<R: Read> ATermRead for BinaryATermReader<R> {
+    fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error> {
+        if self.ended {
+            return Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "Attempted to read_aterm() after end of stream",
+            ).into());
+        }
+
+        loop {
+            let header = self.stream.read_bits(PACKET_BITS)?;
+            let packet = PacketType::from(header as u8);
+
+            match packet {
+                PacketType::FunctionSymbol => {
+                    let name = self.stream.read_string()?;
+                    let arity = self.stream.read_integer()? as usize;
+                    let symbol = Symbol::new(name, arity);
+                    debug_trace!("Read symbol {symbol}");
+                    self.function_symbols.push(symbol);
+                    self.function_symbol_index_width = bits_for_value(self.function_symbols.len());
+                }
+                PacketType::ATermIntOutput => {
+                    let value = self.stream.read_integer()?.try_into()?;
+                    return Ok(Some(ATermInt::new(value).into()));
+                }
+                PacketType::ATerm | PacketType::ATermOutput => {
+                    let symbol_index = self.stream.read_bits(self.function_symbol_index_width())? as usize;
+                    if symbol_index == 0 {
+                        // End of stream marker
+                        debug_trace!("End of stream marker reached");
+                        self.ended = true;
+                        return Ok(None);
+                    }
+
+                    let symbol = self.function_symbols.get(symbol_index).ok_or(format!(
+                        "Read invalid function symbol index {symbol_index}, length {}",
+                        self.function_symbols.len()
+                    ))?;
+
+                    if is_int_symbol(symbol) {
+                        let value = self.stream.read_integer()?.try_into()?;
+                        let term = ATermInt::new(value);
+
+                        if packet == PacketType::ATermOutput {
+                            debug_trace!("Output int term: {term}");
+                            return Ok(Some(term.into()));
+                        }                          
+                        
+                        debug_trace!("Read int term: {term}");
+                        self.terms.push(term.into());
+                        self.term_index_width = bits_for_value(self.terms.len());
+                    } else {
+                        let mut arguments = Vec::with_capacity(symbol.arity());
+                        for _ in 0..symbol.arity() {
+                            let arg_index = self.stream.read_bits(self.term_index_width())? as usize;
+                            let arg = self.terms.get(arg_index)
+                                    .ok_or(format!(
+                                        "Read invalid aterm index {arg_index}, length {}",
+                                        self.terms.len()
+                                    ))?;
+                            debug_trace!("Read arg: {arg}");
+                            arguments.push(
+                                arg.clone(),
+                            );
+                        }
+
+                        let term = ATerm::with_args(&symbol, &arguments);
+
+                        if packet == PacketType::ATermOutput {
+                            debug_trace!("Output term: {term}");
+                            return Ok(Some(term));
+                        }
+                        debug_trace!("Read term: {term}");
+
+                        self.terms.push(term);
+                        self.term_index_width = bits_for_value(self.terms.len());
+                    }
+                }
+            }
+        }
+    }
+
+    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error> {
+        if self.ended {
+            return Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "Attempted to read_aterm_iter() after end of stream",
+            ).into());
+        }
+
+        let number_of_elements = self.stream.read_integer()? as usize;
+        Ok(ATermReadIter {
+            reader: self,
+            remaining: number_of_elements,
+        })
     }
 }
 

@@ -116,7 +116,7 @@ impl<R: Read> BitStreamRead for BitStreamReader<R> {
         let length = self.read_integer()?;
         self.text_buffer.clear();
         self.text_buffer
-            .reserve((length + 1).try_into().expect("String size exceeds usize!"));
+            .reserve(length.try_into().expect("String size exceeds usize!"));
 
         for _ in 0..length {
             let byte = self.reader.read::<8, u64>()? as u8;
@@ -148,7 +148,7 @@ mod tests {
         /// (value, num_of_bits), where num_of_bits must be at most 64.
         Bits(u64, u8),
     }
-    
+
     /// Calculate minimum bits needed to represent the value
     /// Use 1 bit if value is 0 to ensure at least 1 bit is written
     pub fn required_bits(value: u64) -> u8 {

@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 mcrl3_aterm.workspace = true
 mcrl3_io.workspace = true
+mcrl3_number.workspace = true
 mcrl3_utilities.workspace = true
 
 ahash.workspace = true

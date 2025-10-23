@@ -123,13 +123,27 @@ impl<R: BitStreamRead> BinaryLddReader<R> {
             if is_output {
                 // The output is simply an index of the LDD
                 let index = self.reader.read_bits(self.ldd_index_width(false))? as usize;
-                return Ok(self.nodes[index].clone());
+                return Ok(self
+                    .nodes
+                    .get(index)
+                    .ok_or(format!("Read invalid ldd index {index}, length {}", self.nodes.len()))?
+                    .clone());
             }
 
             let value = self.reader.read_integer()?;
             let down_index = self.reader.read_bits(self.ldd_index_width(true))? as usize;
             let right_index = self.reader.read_bits(self.ldd_index_width(true))? as usize;
-            let ldd = storage.insert(value as u32, &self.nodes[down_index], &self.nodes[right_index]);
+            let ldd = storage.insert(
+                value as u32,
+                self.nodes.get(down_index).ok_or(format!(
+                    "Read invalid down ldd index {down_index}, length {}",
+                    self.nodes.len()
+                ))?,
+                self.nodes.get(right_index).ok_or(format!(
+                    "Read invalid right lddindex {right_index}, length {}",
+                    self.nodes.len()
+                ))?,
+            );
             self.nodes.push(ldd);
         }
     }
