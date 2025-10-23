@@ -16,11 +16,11 @@ impl ATermStreamable for DataSpecification {
     where
         Self: Sized,
     {
-        let _sorts: Result<Vec<ATerm>, MCRL3Error> = reader.read_iaterm_ter()?.collect();
-        let _aliases: Result<Vec<ATerm>, MCRL3Error> = reader.read_iaterm_ter()?.collect();
-        let _constructors: Result<Vec<ATerm>, MCRL3Error> = reader.read_iaterm_ter()?.collect();
-        let _user_defined_mappings: Result<Vec<ATerm>, MCRL3Error> = reader.read_iaterm_ter()?.collect();
-        let _user_defined_equations: Result<Vec<ATerm>, MCRL3Error> = reader.read_iaterm_ter()?.collect();
+        let _sorts: Result<Vec<ATerm>, MCRL3Error> = reader.read_aterm_iter()?.collect();
+        let _aliases: Result<Vec<ATerm>, MCRL3Error> = reader.read_aterm_iter()?.collect();
+        let _constructors: Result<Vec<ATerm>, MCRL3Error> = reader.read_aterm_iter()?.collect();
+        let _user_defined_mappings: Result<Vec<ATerm>, MCRL3Error> = reader.read_aterm_iter()?.collect();
+        let _user_defined_equations: Result<Vec<ATerm>, MCRL3Error> = reader.read_aterm_iter()?.collect();
 
         // Ignore results for now.
         Ok(DataSpecification {})

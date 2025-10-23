@@ -141,14 +141,11 @@ impl<R: BitStreamRead> BinaryLddReader<R> {
 }
 
 impl<R: BitStreamRead + ATermRead> ATermRead for BinaryLddReader<R> {
-    fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error> {
-        ATermRead::read_aterm(&mut self.reader)
-    }
-
-    fn read_iaterm_ter(
-        &mut self,
-    ) -> Result<Box<dyn ExactSizeIterator<Item = Result<ATerm, MCRL3Error>> + '_>, MCRL3Error> {
-        self.reader.read_iaterm_ter()
+    delegate::delegate! {
+        to self.reader {
+            fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error>;
+            fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error>;
+        }
     }
 }
 
