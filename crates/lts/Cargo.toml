@@ -12,6 +12,7 @@ mcrl3_io.workspace = true
 mcrl3_utilities.workspace = true
 
 bumpalo.workspace = true
+itertools.workspace = true
 log.workspace = true
 rand.workspace = true
 regex.workspace = true

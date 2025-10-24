@@ -124,10 +124,6 @@ impl LabelledTransitionSystem {
             }
         });
 
-        debug!("States {}", states.metrics());
-        debug!("Transition labels {}", transition_labels.metrics());
-        debug!("Transition to {}", transition_to.metrics());
-
         LabelledTransitionSystem {
             initial_state,
             labels,
@@ -270,7 +266,10 @@ impl fmt::Display for LabelledTransitionSystem {
         // Print some information about the LTS.
         writeln!(f, "Number of states: {}", self.num_of_states())?;
         writeln!(f, "Number of action labels: {}", self.labels.len())?;
-        write!(f, "Number of transitions: {}", self.num_of_transitions())
+        writeln!(f, "Number of transitions: {}", self.num_of_transitions())?;
+        writeln!(f, "States {}", self.states.metrics());
+        writeln!(f, "Transition labels {}", self.transition_labels.metrics());
+        write!(f, "Transition to {}", self.transition_to.metrics())
     }
 }
 

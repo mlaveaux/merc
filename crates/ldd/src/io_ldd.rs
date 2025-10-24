@@ -1,3 +1,12 @@
+//!
+//! # The streamable ldd format:
+//!
+//! Every LDD is traversed in order and assigned a unique number. Whenever traversal 
+//! encounters an LDD for which all children have been visited it is written to the stream 
+//! as `0:[value, down_index, right_index]`. Every output LDD is written as `1:index`, and 
+//! will be returned by `read_ldd()`.
+//! 
+
 use std::cell::RefCell;
 
 use mcrl3_aterm::ATerm;
@@ -18,13 +27,6 @@ const BLF_MAGIC: u64 = 0x8baf;
 const BLF_VERSION: u64 = 0x8306;
 
 /// \brief Writes ldds in a streamable binary format to an output stream.
-/// \details The streamable ldd format:
-///
-/// Every LDD is traversed in order and assigned a unique number.
-/// Whenever traversal encounters an LDD of which all children have
-/// been visited it is written to the stream as 0:[value, down_index,
-/// right_index]. An output LDD (as returned by
-/// binary_ldd_istream::get()) is written as 1:index.
 pub struct BinaryLddWriter<W: BitStreamWrite> {
     writer: W,
     nodes: RefCell<IndexedSet<Ldd>>,

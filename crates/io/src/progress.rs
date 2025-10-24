@@ -4,6 +4,7 @@
 //! progress indications.
 //!
 
+use std::marker::PhantomData;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -25,8 +26,7 @@ impl<F: Fn(usize, usize)> Progress<F> {
         }
     }
 
-    /// Increase the progress with the given amount, prints periodic progress
-    /// messages.
+    /// Increase the progress with the given amount, prints the message when 1% progress has been made.
     pub fn add(&mut self, amount: usize) {
         let increment = (self.maximum / 100usize).max(1);
 
@@ -40,32 +40,30 @@ impl<F: Fn(usize, usize)> Progress<F> {
 }
 
 /// A time-based progress tracker that prints messages at regular intervals.
-pub struct TimeProgress<F: Fn(usize)> {
+pub struct TimeProgress<F: Fn(T), T> {
     interval: Duration,
-    counter: usize,
     last_update: Instant,
     message: F,
+    _marker: PhantomData<T>,
 }
 
-impl<F: Fn(usize)> TimeProgress<F> {
+impl<F: Fn(T), T> TimeProgress<F, T> {
     /// Create a new time-based progress tracker with a given interval in seconds.
-    pub fn new(message: F, interval_seconds: u64) -> TimeProgress<F> {
+    pub fn new(message: F, interval_seconds: u64) -> TimeProgress<F, T> {
         TimeProgress {
             message,
             interval: Duration::from_secs(interval_seconds),
-            counter: 0,
             last_update: Instant::now(),
+            _marker: PhantomData,
         }
     }
 
     /// Increase the progress with the given amount, prints periodic progress
     /// messages based on time intervals.
-    pub fn add(&mut self, amount: usize) {
-        self.counter += amount;
-
+    pub fn print(&mut self, object: T) {
         let now = Instant::now();
         if now.duration_since(self.last_update) >= self.interval {
-            (self.message)(self.counter);
+            (self.message)(object);
             self.last_update = now;
         }
     }
