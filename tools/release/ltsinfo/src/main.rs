@@ -45,9 +45,6 @@ struct Cli {
     #[command(subcommand)]
     commands: Option<Commands>,
 
-
-    output: Option<String>,
-
     #[arg(long)]
     timings: bool,
 }
@@ -68,9 +65,11 @@ struct InfoArgs {
 #[derive(clap::Args, Debug)]
 #[command(about = "Reduces the given explicit LTS modulo an equivalent relation")]
 struct ReduceArgs {
+    equivalence: Equivalence,
+
     filename: String,
 
-    equivalence: Equivalence,
+    output: Option<String>,
 
     #[arg(short, long, help="List of actions that are considered tau actions", value_delimiter = ',')]
     tau: Option<Vec<String>>,
@@ -130,7 +129,7 @@ fn main() -> Result<ExitCode, MCRL3Error> {
                         matches!(args.equivalence, Equivalence::BranchingBisim)
                             || matches!(args.equivalence, Equivalence::BranchingBisimNaive),
                     );
-                    if let Some(file) = cli.output {
+                    if let Some(file) = args.output {
                         let mut writer = BufWriter::new(File::create(file)?);
                         write_aut(&mut writer, &quotient_lts)?;
                     } else {
