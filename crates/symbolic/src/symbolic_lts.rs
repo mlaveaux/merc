@@ -18,6 +18,8 @@ pub struct SymbolicLts {
     data_specification: DataSpecification,
 
     states: Ldd,
+
+    /// A singleton LDD representing the initial state.
     initial_state: Ldd,
 
     summand_groups: Vec<SummandGroup>,
@@ -35,12 +37,12 @@ impl SymbolicLts {
     }
 }
 
-///
+/// Represents a short vector transition relation for a group of summands.
 struct SummandGroup {
     read_parameters: Vec<ATerm>,
     write_parameters: Vec<ATerm>,
     
-    /// The transition relation for this summand group.
+    /// The transition relation T -> U for this summand group, such that T are the original parameters projected on the read_parameters and U the ones projected on the write_parameters.
     relation: Ldd,
 }
 
@@ -75,6 +77,7 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
         let _action_label = stream.read_aterm()?;
     }
 
+    // Read the summand groups.
     let mut summand_groups = Vec::new();
     let num_of_groups = stream.read_integer()?;
     for _ in 0..num_of_groups {
@@ -108,4 +111,17 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
 /// Returns the ATerm mark for symbolic labelled transition systems.
 fn symbolic_labelled_transition_system_mark() -> ATerm {
     ATerm::constant(&Symbol::new("symbolic_labelled_transition_system", 0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_wms_sym() {
+        let input = include_bytes!("../../../examples/lts/WMS.sym");
+
+        let mut storage = Storage::new();
+        let lts = super::read_symbolic_lts(&input[..], &mut storage).unwrap();
+    }
 }
