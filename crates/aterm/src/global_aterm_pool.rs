@@ -96,9 +96,9 @@ impl GlobalTermPool {
     fn new() -> GlobalTermPool {
         // Insert the default symbols.
         let symbol_pool = SymbolPool::new();
-        let int_symbol = symbol_pool.create("Int", 0, |index| unsafe { SymbolRef::from_index(&index) });
-        let list_symbol = symbol_pool.create("List", 2, |index| unsafe { SymbolRef::from_index(&index) });
-        let empty_list_symbol = symbol_pool.create("[]", 0, |index| unsafe { SymbolRef::from_index(&index) });
+        let int_symbol = symbol_pool.create("<aterm_int>", 0, |index| unsafe { SymbolRef::from_index(&index) });
+        let list_symbol = symbol_pool.create("<list_constructor>", 2, |index| unsafe { SymbolRef::from_index(&index) });
+        let empty_list_symbol = symbol_pool.create("<empty_list>", 0, |index| unsafe { SymbolRef::from_index(&index) });
 
         GlobalTermPool {
             terms: StablePointerSet::with_hasher(FxBuildHasher),
