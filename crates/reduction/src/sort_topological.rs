@@ -153,7 +153,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use mcrl3_lts::{is_valid_permutation, random_lts};
+    use mcrl3_lts::random_lts;
     use mcrl3_utilities::random_test;
     use rand::seq::SliceRandom;
     use test_log::test;
