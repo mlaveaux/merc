@@ -8,7 +8,7 @@ use crate::BytesFormatter;
 /// For numbers this means that we only store the number of bytes required to represent the largest number added so far. Note that the number of bytes used per entry is only increased over time as larger entries are added.
 /// 
 /// TODO: The `drop()` function of `T` is never called.
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub struct ByteCompressedVec<T> {
     data: Vec<u8>,
     bytes_per_entry: usize,
@@ -31,6 +31,23 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
             bytes_per_entry,
             _marker: PhantomData,
         }
+    }
+
+    /// This is basically the collect() of `Vec`.
+    /// 
+    /// However, we use it to determine the required bytes per entry in advance.
+    pub fn with_iter<I>(iter: I) -> ByteCompressedVec<T>
+        where I: ExactSizeIterator<Item = T> + Clone,
+    {
+        let bytes_per_entry = iter
+            .clone()
+            .fold(0, |max_bytes, entry| max_bytes.max(entry.bytes_required()));
+
+        let mut vec = ByteCompressedVec::with_capacity(iter.len(), bytes_per_entry);
+        for entry in iter {
+            vec.push(entry);
+        }
+        vec
     }
 
     /// Adds a new entry to the vector.
@@ -318,6 +335,12 @@ impl CompressedEntry for usize {
     }
 }
 
+impl fmt::Debug for ByteCompressedVec<usize> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn test_usize_entry() {
+    fn test_random_usize_entry() {
         random_test(100, |rng| {
             let value = rng.random_range(0..1024);
             assert!(value.bytes_required() <= 2);
@@ -385,5 +408,19 @@ mod tests {
             value.to_bytes(&mut bytes);
             assert_eq!(usize::from_bytes(&bytes), value);
         });
+    }
+
+    #[test]
+    fn test_swap() {
+        let mut vec = ByteCompressedVec::new();
+        vec.push(1);
+        vec.push(256);
+        vec.push(65536);
+
+        vec.swap(0, 2);
+
+        assert_eq!(vec.index(0), 65536);
+        assert_eq!(vec.index(1), 256);
+        assert_eq!(vec.index(2), 1);
     }
 }
