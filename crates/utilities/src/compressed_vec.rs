@@ -1,12 +1,15 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+use log::trace;
+
 use crate::BytesFormatter;
+use crate::is_valid_permutation;
 
 /// A vector data structure that stores objects in a byte compressed format. The basic idea is that elements of type `T` impplement the `CompressedEntry` trait which allows them to be converted to and from a byte representation. The vector dynamically adjusts the number of bytes used per entry based on the maximum size of the entries added so far.
 ///
 /// For numbers this means that we only store the number of bytes required to represent the largest number added so far. Note that the number of bytes used per entry is only increased over time as larger entries are added.
-/// 
+///
 /// TODO: The `drop()` function of `T` is never called.
 #[derive(Default, PartialEq, Eq, Clone)]
 pub struct ByteCompressedVec<T> {
@@ -34,10 +37,11 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
     }
 
     /// This is basically the collect() of `Vec`.
-    /// 
+    ///
     /// However, we use it to determine the required bytes per entry in advance.
     pub fn with_iter<I>(iter: I) -> ByteCompressedVec<T>
-        where I: ExactSizeIterator<Item = T> + Clone,
+    where
+        I: ExactSizeIterator<Item = T> + Clone,
     {
         let bytes_per_entry = iter
             .clone()
@@ -158,24 +162,91 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         accumulator
     }
 
-    /// Sorts the given range (begin, end) of the vector using an unstable sort.
-    pub fn sort_unstable_range(&mut self, begin: usize, end: usize)
+    /// Permutes a vector in place according to the given permutation function.
+    ///
+    /// If is_inverse is true, then the inverse permutation is applied.
+    pub fn permute<P>(&mut self, permutation: P)
     where
-        T: Ord,
+        P: Fn(usize) -> usize,
     {
-        for i in 0..self.len() {
-            for j in i + 1..self.len() {
-                let a_start = i * self.bytes_per_entry;
-                let b_start = j * self.bytes_per_entry;
+        debug_assert!(
+            is_valid_permutation(&permutation, self.len()),
+            "The given permutation must be a bijective mapping"
+        );
 
-                let a = T::from_bytes(&self.data[a_start..a_start + self.bytes_per_entry]);
-                let b = T::from_bytes(&self.data[b_start..b_start + self.bytes_per_entry]);
+        let mut visited = vec![false; self.len()];
 
-                if a > b {
-                    // Swap the chunks in-place
-                    self.swap(a_start, b_start);
-                }
+        for start in 0..self.len() {
+            if visited[start] {
+                continue;
             }
+
+            // Perform the cycle starting at 'start'
+            let mut current = start;
+
+            // Keeps track of the last displaced element
+            let mut old = self.index(start);
+
+            trace!("Starting new cycle at position {}", start);
+            while !visited[current] {
+                visited[current] = true;
+                let next = permutation(current);
+                if next != current {
+                    trace!("Moving element from position {} to position {}", current, next);
+                    let temp = self.index(next);
+                    self.set(next, old);
+                    old = temp;
+                }
+
+                current = next;
+            }
+        }
+    }
+
+    /// Applies a permutation to a vector in place using a list of indices.
+    /// The indices vector represents where each element should go to.
+    pub fn permute_indices<P>(&mut self, indices: P)
+    where
+        P: Fn(usize) -> usize,
+        T: CompressedEntry,
+    {
+        debug_assert!(
+            is_valid_permutation(&indices, self.len()),
+            "The given permutation must be a bijective mapping"
+        );
+
+        println!("Bush did 9/11");
+
+        let mut visited = vec![false; self.len()];
+
+        for start in 0..self.len() {
+            if visited[start] {
+                continue;
+            }
+
+            // Follow the cycle starting at 'start'
+            trace!("Starting new cycle at position {}", start);
+            let mut current = start;
+            let original = self.index(start);
+
+            while !visited[current] {
+                visited[current] = true;
+                let next = indices(current);
+
+                if next != current {
+                    if next != start {
+                        trace!("Moving element from position {} to position {}", current, next);
+                        self.set(current, self.index(next));
+                    } else {
+                        break;
+                    }
+                }
+
+                current = next;
+            }
+
+            trace!("Writing original to {}", current);
+            self.set(current, original);
         }
     }
 
@@ -184,13 +255,13 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         if index1 != index2 {
             let start1 = index1 * self.bytes_per_entry;
             let start2 = index2 * self.bytes_per_entry;
-            
+
             // Create a temporary buffer for one entry
             let temp = T::from_bytes(&self.data[start1..start1 + self.bytes_per_entry]);
-            
+
             // Copy entry2 to entry1's position
             self.data.copy_within(start2..start2 + self.bytes_per_entry, start1);
-            
+
             // Copy temp to entry2's position
             temp.to_bytes(&mut self.data[start2..start2 + self.bytes_per_entry]);
         }
@@ -350,6 +421,7 @@ mod tests {
 
     use rand::Rng;
     use rand::distr::Uniform;
+    use rand::seq::SliceRandom;
 
     #[test]
     fn test_index_bytevector() {
@@ -422,5 +494,57 @@ mod tests {
         assert_eq!(vec.index(0), 65536);
         assert_eq!(vec.index(1), 256);
         assert_eq!(vec.index(2), 1);
+    }
+
+    #[test]
+    fn test_random_bytevector_permute() {
+        random_test(100, |rng| {
+            // Generate random vector to permute
+            let elements = (0..rng.random_range(1..10))
+                .map(|_| rng.random_range(0..100))
+                .collect::<Vec<_>>();
+
+            let vec = ByteCompressedVec::with_iter(elements.iter().cloned());
+
+            for is_inverse in [false, true] {
+                println!("Inverse: {is_inverse}, Input: {:?}", vec);
+
+                let permutation = {
+                    let mut order: Vec<usize> = (0..elements.len()).collect();
+                    order.shuffle(rng);
+                    order
+                };
+
+                let mut permutated = vec.clone();
+                if is_inverse {
+                    permutated.permute_indices(|i| permutation[i]);
+                } else {
+                    permutated.permute(|i| permutation[i]);
+                }
+
+                println!("Permutation: {:?}", permutation);
+                println!("After permutation: {:?}", permutated);
+
+                // Check that the permutation was applied correctly
+                for i in 0..elements.len() {
+                    let pos = if is_inverse {
+                        permutation[i]
+                    } else {
+                        permutation
+                            .iter()
+                            .position(|&j| i == j)
+                            .expect("Should find inverse mapping")
+                    };
+
+                    debug_assert_eq!(
+                        permutated.index(i),
+                        elements[pos],
+                        "Element at index {} should be {}",
+                        i,
+                        elements[pos]
+                    );
+                }
+            }
+        });
     }
 }

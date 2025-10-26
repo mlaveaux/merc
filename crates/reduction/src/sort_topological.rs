@@ -1,10 +1,10 @@
 use log::debug;
 use log::trace;
 
-use mcrl3_lts::is_valid_permutation;
 use mcrl3_lts::LabelIndex;
 use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
+use mcrl3_utilities::is_valid_permutation;
 use mcrl3_utilities::MCRL3Error;
 
 /// Returns a topological ordering of the states of the given LTS.
@@ -128,7 +128,10 @@ where
     F: Fn(LabelIndex, StateIndex) -> bool,
     P: Fn(StateIndex) -> StateIndex,
 {
-    debug_assert!(is_valid_permutation(|i| permutation(StateIndex::new(i)).value(), lts.num_of_states()));
+    debug_assert!(is_valid_permutation(
+        |i| permutation(StateIndex::new(i)).value(),
+        lts.num_of_states()
+    ));
 
     // Check that each vertex appears before its successors.
     for state_index in lts.iter_states() {

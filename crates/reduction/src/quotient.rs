@@ -79,7 +79,7 @@ pub trait Partition {
 }
 
 /// Returns a new LTS based on the given partition.
-/// 
+///
 /// The naive version will add the transitions of all states in the block to the quotient LTS.
 pub fn quotient_lts_naive(
     lts: &LabelledTransitionSystem,
@@ -130,9 +130,12 @@ pub fn quotient_lts_naive(
 }
 
 /// Optimised implementation for block partitions.
-/// 
+///
 /// Chooses a single state in the block as representative. If BRANCHING then the chosen state is a bottom state.
-pub fn quotient_lts_block<const BRANCHING: bool>(lts: &LabelledTransitionSystem, partition: &BlockPartition) -> LabelledTransitionSystem {
+pub fn quotient_lts_block<const BRANCHING: bool>(
+    lts: &LabelledTransitionSystem,
+    partition: &BlockPartition,
+) -> LabelledTransitionSystem {
     let start = Instant::now();
     let mut transitions = LtsBuilder::new();
 
@@ -150,9 +153,10 @@ pub fn quotient_lts_block<const BRANCHING: bool>(lts: &LabelledTransitionSystem,
             while !found {
                 found = true;
 
-                if let Some(trans) = lts.outgoing_transitions(candidate).find(|trans| {
-                    lts.is_hidden_label(trans.label) && partition.block_number(trans.to) == block
-                }) {
+                if let Some(trans) = lts
+                    .outgoing_transitions(candidate)
+                    .find(|trans| lts.is_hidden_label(trans.label) && partition.block_number(trans.to) == block)
+                {
                     found = false;
                     candidate = trans.to;
                 }
@@ -164,17 +168,18 @@ pub fn quotient_lts_block<const BRANCHING: bool>(lts: &LabelledTransitionSystem,
                 // Candidate is a bottom state, so add all transitions.
                 debug_assert!(
                     !(lts.is_hidden_label(trans.label) && partition.block_number(trans.to) == block),
-                    "This state is not bottom {}", block
+                    "This state is not bottom {}",
+                    block
                 );
 
                 transitions.add_transition(
                     StateIndex::new(*block),
-                    trans.label, 
+                    trans.label,
                     StateIndex::new(*partition.block_number(trans.to)),
                 );
             }
         }
-        
+
         debug_assert!(
             !partition.block(block).is_empty(),
             "Blocks in the partition should not be empty"

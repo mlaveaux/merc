@@ -1,11 +1,11 @@
 //!
 //! # The streamable ldd format:
 //!
-//! Every LDD is traversed in order and assigned a unique number. Whenever traversal 
-//! encounters an LDD for which all children have been visited it is written to the stream 
-//! as `0:[value, down_index, right_index]`. Every output LDD is written as `1:index`, and 
+//! Every LDD is traversed in order and assigned a unique number. Whenever traversal
+//! encounters an LDD for which all children have been visited it is written to the stream
+//! as `0:[value, down_index, right_index]`. Every output LDD is written as `1:index`, and
 //! will be returned by `read_ldd()`.
-//! 
+//!
 
 use std::cell::RefCell;
 

@@ -6,9 +6,9 @@ use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
 use rustc_hash::FxHashSet;
 
-use crate::quotient_lts_naive;
 use crate::BlockIndex;
 use crate::Partition;
+use crate::quotient_lts_naive;
 
 use super::BlockPartition;
 use super::IndexedPartition;

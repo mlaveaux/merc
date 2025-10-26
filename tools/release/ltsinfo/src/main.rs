@@ -7,17 +7,12 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use clap::Subcommand;
-use clap::ValueEnum;
 
 use mcrl3_gui::verbosity::Verbosity;
 use mcrl3_ldd::Storage;
 use mcrl3_lts::read_aut;
 use mcrl3_lts::write_aut;
-use mcrl3_reduction::branching_bisim_sigref;
-use mcrl3_reduction::branching_bisim_sigref_naive;
 use mcrl3_reduction::reduce;
-use mcrl3_reduction::strong_bisim_sigref;
-use mcrl3_reduction::strong_bisim_sigref_naive;
 
 use mcrl3_reduction::Equivalence;
 use mcrl3_symbolic::read_symbolic_lts;
@@ -26,16 +21,15 @@ use mcrl3_utilities::MCRL3Error;
 use mcrl3_utilities::Timing;
 use mcrl3_version::Version;
 
-
 #[derive(clap::Parser, Debug)]
 #[command(name = "Maurice Laveaux", about = "A command line rewriting tool")]
-struct Cli {    
+struct Cli {
     #[arg(long, default_value_t = false, help = "Print the version of this tool")]
     version: bool,
 
     #[arg(short, long, default_value_t = Verbosity::Quiet, help = "Sets the verbosity of the logger")]
     verbosity: Verbosity,
-    
+
     #[command(subcommand)]
     commands: Option<Commands>,
 
@@ -65,13 +59,18 @@ struct ReduceArgs {
 
     output: Option<String>,
 
-    #[arg(short, long, help="List of actions that are considered tau actions", value_delimiter = ',')]
+    #[arg(
+        short,
+        long,
+        help = "List of actions that are considered tau actions",
+        value_delimiter = ','
+    )]
     tau: Option<Vec<String>>,
 }
 
 fn main() -> Result<ExitCode, MCRL3Error> {
     let cli = Cli::parse();
-    
+
     env_logger::Builder::new()
         .filter_level(cli.verbosity.log_level_filter())
         .parse_default_env()
@@ -86,26 +85,26 @@ fn main() -> Result<ExitCode, MCRL3Error> {
 
     if let Some(command) = cli.commands {
         match command {
-            Commands::Info(args) => {    
+            Commands::Info(args) => {
                 let path = Path::new(&args.filename);
                 let file = File::open(path)?;
 
                 if path.extension() == Some(OsStr::new("aut")) {
                     let lts = read_aut(&file, Vec::new())?;
                     println!("Number of states: {}", lts.num_of_states())
-                } else if path.extension() == Some(OsStr::new("sym"))  {
+                } else if path.extension() == Some(OsStr::new("sym")) {
                     let mut storage = Storage::new();
                     let lts = read_symbolic_lts(&file, &mut storage)?;
                     println!("Number of states: {}", mcrl3_ldd::len(&mut storage, lts.states()))
                 } else {
-                    return Err("Unsupported LTS file format.".into());                    
+                    return Err("Unsupported LTS file format.".into());
                 }
-            },
+            }
             Commands::Reduce(args) => {
                 let path = Path::new(&args.filename);
                 let file = File::open(path)?;
 
-                if  path.extension() == Some(OsStr::new("aut")) {
+                if path.extension() == Some(OsStr::new("aut")) {
                     let lts = read_aut(&file, args.tau.unwrap_or_default())?;
                     print_allocator_metrics();
 
@@ -117,15 +116,13 @@ fn main() -> Result<ExitCode, MCRL3Error> {
                     } else {
                         write_aut(&mut stdout(), &reduced_lts)?;
                     }
-
-                } else if path.extension() == Some(OsStr::new("sym"))  {
+                } else if path.extension() == Some(OsStr::new("sym")) {
                     let mut storage = Storage::new();
-                    let lts = read_symbolic_lts(&file, &mut storage)?;
-                    
+                    let _lts = read_symbolic_lts(&file, &mut storage)?;
                 } else {
-                    return Err("Unsupported file format for LTS reduce.".into());                    
+                    return Err("Unsupported file format for LTS reduce.".into());
                 }
-            },
+            }
         }
     }
 

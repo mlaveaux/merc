@@ -6,10 +6,10 @@ use mcrl3_lts::LabelIndex;
 use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
 
-use crate::quotient_lts_naive;
 use crate::BlockIndex;
 use crate::IndexedPartition;
 use crate::Partition;
+use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.

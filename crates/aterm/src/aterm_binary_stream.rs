@@ -9,9 +9,9 @@ use mcrl3_io::BitStreamReader;
 use mcrl3_io::BitStreamWrite;
 use mcrl3_io::BitStreamWriter;
 use mcrl3_number::bits_for_value;
-use mcrl3_utilities::debug_trace;
 use mcrl3_utilities::IndexedSet;
 use mcrl3_utilities::MCRL3Error;
+use mcrl3_utilities::debug_trace;
 
 use crate::ATerm;
 use crate::ATermInt;
@@ -323,7 +323,7 @@ pub struct BinaryATermReader<R: Read> {
     /// Stores the function symbols read so far, and the width needed to encode their indices.
     function_symbols: Vec<Symbol>,
     function_symbol_index_width: u8,
-    
+
     /// Stores the terms read so far, and the width needed to encode their indices.
     terms: Vec<ATerm>,
     term_index_width: u8,
@@ -404,7 +404,8 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
             return Err(Error::new(
                 ErrorKind::UnexpectedEof,
                 "Attempted to read_aterm() after end of stream",
-            ).into());
+            )
+            .into());
         }
 
         loop {
@@ -450,15 +451,12 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                         let mut arguments = Vec::with_capacity(symbol.arity());
                         for _ in 0..symbol.arity() {
                             let arg_index = self.stream.read_bits(self.term_index_width())? as usize;
-                            let arg = self.terms.get(arg_index)
-                                    .ok_or(format!(
-                                        "Read invalid aterm index {arg_index}, length {}",
-                                        self.terms.len()
-                                    ))?;
+                            let arg = self.terms.get(arg_index).ok_or(format!(
+                                "Read invalid aterm index {arg_index}, length {}",
+                                self.terms.len()
+                            ))?;
                             debug_trace!("Read arg: {arg}");
-                            arguments.push(
-                                arg.clone(),
-                            );
+                            arguments.push(arg.clone());
                         }
 
                         let term = ATerm::with_args(&symbol, &arguments);
@@ -482,10 +480,12 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
             return Err(Error::new(
                 ErrorKind::UnexpectedEof,
                 "Attempted to read_aterm_iter() after end of stream",
-            ).into());
+            )
+            .into());
         }
 
-        let number_of_elements: ATermInt = self.read_aterm()?
+        let number_of_elements: ATermInt = self
+            .read_aterm()?
             .ok_or("Missing number of elements for iterator")?
             .into();
         Ok(ATermReadIter {

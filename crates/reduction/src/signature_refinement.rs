@@ -14,8 +14,6 @@ use rustc_hash::FxHashSet;
 
 use mcrl3_utilities::Timing;
 
-use crate::quotient_lts_block;
-use crate::quotient_lts_naive;
 use crate::BlockIndex;
 use crate::BlockPartition;
 use crate::BlockPartitionBuilder;
@@ -28,6 +26,8 @@ use crate::branching_bisim_signature_inductive;
 use crate::branching_bisim_signature_sorted;
 use crate::is_tau_hat;
 use crate::preprocess_branching;
+use crate::quotient_lts_block;
+use crate::quotient_lts_naive;
 use crate::strong_bisim_signature;
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -39,16 +39,20 @@ pub enum Equivalence {
 }
 
 /// Reduces the given LTS modulo the given equivalence using signature refinement
-pub fn reduce(lts: LabelledTransitionSystem, equivalence: Equivalence, timing: &mut Timing) -> LabelledTransitionSystem {
+pub fn reduce(
+    lts: LabelledTransitionSystem,
+    equivalence: Equivalence,
+    timing: &mut Timing,
+) -> LabelledTransitionSystem {
     match equivalence {
         Equivalence::StrongBisim => {
             let (lts, partition) = strong_bisim_sigref(lts, timing);
             quotient_lts_block::<false>(&lts, &partition)
-        },
+        }
         Equivalence::StrongBisimNaive => {
             let (lts, partition) = strong_bisim_sigref_naive(lts, timing);
             quotient_lts_naive(&lts, &partition, false)
-        },
+        }
         Equivalence::BranchingBisim => {
             let (lts, partition) = branching_bisim_sigref(lts, timing);
             quotient_lts_block::<true>(&lts, &partition)
@@ -264,12 +268,10 @@ where
 
     // Used to keep track of dirty blocks.
     let mut worklist = vec![BlockIndex::new(0)];
-    
+
     let mut progress = TimeProgress::new(
         |(iteration, blocks)| {
-            debug!(
-                "Iteration {iteration}, found {blocks} blocks...",
-            );
+            debug!("Iteration {iteration}, found {blocks} blocks...",);
         },
         5,
     );
@@ -400,9 +402,7 @@ where
 
     let mut progress = TimeProgress::new(
         |(iteration, blocks)| {
-            debug!(
-                "Iteration {iteration}, found {blocks} blocks...",
-            );
+            debug!("Iteration {iteration}, found {blocks} blocks...",);
         },
         5,
     );

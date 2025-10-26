@@ -7,11 +7,11 @@ use mcrl3_aterm::ATermStreamable;
 use mcrl3_aterm::BinaryATermReader;
 use mcrl3_aterm::Symbol;
 use mcrl3_data::DataSpecification;
+use mcrl3_io::BitStreamRead;
 use mcrl3_ldd::BinaryLddReader;
 use mcrl3_ldd::Ldd;
 use mcrl3_ldd::Storage;
 use mcrl3_utilities::MCRL3Error;
-use mcrl3_io::BitStreamRead;
 
 /// Represents a symbolic LTS encoded by a disjunctive transition relation and a set of states.
 pub struct SymbolicLts {
@@ -41,11 +41,10 @@ impl SymbolicLts {
 struct SummandGroup {
     read_parameters: Vec<ATerm>,
     write_parameters: Vec<ATerm>,
-    
+
     /// The transition relation T -> U for this summand group, such that T are the original parameters projected on the read_parameters and U the ones projected on the write_parameters.
     relation: Ldd,
 }
-
 
 /// Reads a symbolic LTS from a binary stream.
 pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<SymbolicLts, MCRL3Error> {
@@ -56,7 +55,7 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
         return Err("Expected symbolic labelled transition system stream".into());
     }
 
-    let _data_spec =  DataSpecification::read(&mut stream)?;
+    let _data_spec = DataSpecification::read(&mut stream)?;
     let process_parameters: ATermList<ATerm> = stream.read_aterm()?.ok_or("Expected process parameters")?.into();
 
     let initial_state = stream.read_ldd(storage)?;
@@ -116,7 +115,7 @@ fn symbolic_labelled_transition_system_mark() -> ATerm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_wms_sym() {
         let input = include_bytes!("../../../examples/lts/WMS.sym");
