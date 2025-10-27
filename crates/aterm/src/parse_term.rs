@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use pest_consume::Error;
 use pest_consume::match_nodes;
 use pest_derive::Parser;

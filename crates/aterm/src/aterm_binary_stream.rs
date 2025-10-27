@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::collections::VecDeque;
 use std::io::Error;
 use std::io::ErrorKind;

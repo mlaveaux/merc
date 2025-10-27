@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;

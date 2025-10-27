@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::fmt;
 
 use mcrl3_utilities::MCRL3Error;
