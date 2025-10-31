@@ -11,6 +11,7 @@ use clap::Subcommand;
 use mcrl3_gui::verbosity::Verbosity;
 use mcrl3_ldd::Storage;
 use mcrl3_lts::read_aut;
+use mcrl3_lts::read_lts;
 use mcrl3_lts::write_aut;
 use mcrl3_reduction::reduce;
 
@@ -91,6 +92,9 @@ fn main() -> Result<ExitCode, MCRL3Error> {
 
                 if path.extension() == Some(OsStr::new("aut")) {
                     let lts = read_aut(&file, Vec::new())?;
+                    println!("Number of states: {}", lts.num_of_states())
+                } else if path.extension() == Some(OsStr::new("lts")) {
+                    let lts = read_lts(&file)?;
                     println!("Number of states: {}", lts.num_of_states())
                 } else if path.extension() == Some(OsStr::new("sym")) {
                     let mut storage = Storage::new();

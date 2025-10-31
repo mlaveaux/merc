@@ -73,6 +73,11 @@ impl LtsBuilder {
             .map(|((from, label), to)| (from, label, to))
             .dedup()
     }
+
+    /// Returns the number of transitions added to the builder.
+    pub fn num_of_transitions(&self) -> usize {
+        self.transition_from.len()
+    }
 }
 
 impl Default for LtsBuilder {
