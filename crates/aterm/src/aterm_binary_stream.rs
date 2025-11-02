@@ -366,7 +366,7 @@ impl<R: Read> BinaryATermReader<R> {
 
         // The term with function symbol index 0 indicates the end of the stream
         let mut function_symbols = Protected::new(Vec::new());
-        let end_of_stream_symbol = Symbol::new("end_of_stream".to_string(), 0);
+        let end_of_stream_symbol = Symbol::new(String::new(), 0);
         function_symbols.write().push(end_of_stream_symbol.copy());
 
         Ok(Self {
@@ -453,10 +453,10 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                         return Ok(None);
                     }
 
-                    let write_symbols = self.function_symbols.read();
-                    let symbol = write_symbols.get(symbol_index).ok_or(format!(
+                    let symbols = self.function_symbols.read();
+                    let symbol = symbols.get(symbol_index).ok_or(format!(
                         "Read invalid function symbol index {symbol_index}, length {}",
-                        write_symbols.len()
+                        symbols.len()
                     ))?;
 
                     if is_int_symbol(symbol) {
@@ -467,11 +467,12 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                         let mut write_terms = self.terms.write();
                         let t = write_terms.protect(&term);
                         write_terms.push(t);
-                        self.term_index_width = bits_for_value(write_symbols.len());
+                        self.term_index_width = bits_for_value(write_terms.len());
                     } else {
                         let mut arguments = Vec::with_capacity(symbol.arity());
 
-                        let num_of_bits = self.term_index_width();
+                        // When the arity is zero, no bits are read for the arguments.
+                        let num_of_bits = if symbol.arity() > 0 { self.term_index_width() } else { 0 };
                         let mut write_terms = self.terms.write();
                         for _ in 0..symbol.arity() {
                             let arg_index = self.stream.read_bits(num_of_bits)? as usize;
@@ -480,7 +481,7 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                                 write_terms.len()
                             ))?;
                             debug_trace!("Read arg: {arg}");
-                            arguments.push(arg.clone());
+                            arguments.push(arg);
                         }
 
                         let term = ATerm::with_args(symbol, &arguments);
