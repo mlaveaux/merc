@@ -17,6 +17,35 @@ pub type LabelIndex = TagIndex<usize, LabelTag>;
 /// The index for a state.
 pub type StateIndex = TagIndex<usize, StateTag>;
 
+pub trait LTS {
+    /// Returns the index of the initial state
+    fn initial_state_index(&self) -> StateIndex;
+    
+    /// Returns the set of outgoing transitions for the given state.
+    fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_;
+    
+    /// Iterate over all state_index in the labelled transition system
+    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<>;
+
+    /// Returns the number of states.
+    fn num_of_states(&self) -> usize;
+
+    /// Returns the number of labels.
+    fn num_of_labels(&self) -> usize;
+
+    /// Returns the number of transitions.
+    fn num_of_transitions(&self) -> usize;
+
+    /// Returns the list of labels.
+    fn labels(&self) -> &[String];
+
+    /// Returns the list of hidden labels.
+    fn hidden_labels(&self) -> &[String];
+
+    /// Returns true iff the given label index is a hidden label.
+    fn is_hidden_label(&self, label_index: LabelIndex) -> bool;
+}
+
 /// Represents a labelled transition system consisting of states with directed
 /// labelled edges.
 #[derive(PartialEq, Eq, Clone)]
@@ -162,14 +191,14 @@ impl LabelledTransitionSystem {
             transition_to: lts.transition_to,
         }
     }
+}
 
-    /// Returns the index of the initial state
-    pub fn initial_state_index(&self) -> StateIndex {
+impl LTS for LabelledTransitionSystem {
+    fn initial_state_index(&self) -> StateIndex {
         self.initial_state
     }
 
-    /// Returns the set of outgoing transitions for the given state.
-    pub fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_ {
+    fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_ {
         let state = &self.states.index(*state_index);
         let next_state = &self.states.index(*state_index + 1);
         let start = state.outgoing_start;
@@ -181,39 +210,32 @@ impl LabelledTransitionSystem {
         })
     }
 
-    /// Iterate over all state_index in the labelled transition system
-    pub fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<> {
+    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<> {
         (0..self.num_of_states()).map(StateIndex::new)
     }
 
-    /// Returns the number of states.
-    pub fn num_of_states(&self) -> usize {
+    fn num_of_states(&self) -> usize {
         // Remove the sentinel state.
         self.states.len() - 1
     }
 
-    /// Returns the number of labels.
-    pub fn num_of_labels(&self) -> usize {
+    fn num_of_labels(&self) -> usize {
         self.labels.len()
     }
 
-    /// Returns the number of transitions.
-    pub fn num_of_transitions(&self) -> usize {
+    fn num_of_transitions(&self) -> usize {
         self.transition_labels.len()
     }
 
-    /// Returns the list of labels.
-    pub fn labels(&self) -> &[String] {
+    fn labels(&self) -> &[String] {
         &self.labels[0..]
     }
 
-    /// Returns the list of hidden labels.
-    pub fn hidden_labels(&self) -> &[String] {
+    fn hidden_labels(&self) -> &[String] {
         &self.hidden_labels[0..]
     }
 
-    /// Returns true iff the given label index is a hidden label.
-    pub fn is_hidden_label(&self, label_index: LabelIndex) -> bool {
+    fn is_hidden_label(&self, label_index: LabelIndex) -> bool {
         label_index.value() == 0
     }
 }

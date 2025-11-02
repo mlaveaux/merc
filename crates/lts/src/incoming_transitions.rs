@@ -2,6 +2,7 @@ use mcrl3_utilities::ByteCompressedVec;
 use mcrl3_utilities::CompressedEntry;
 use mcrl3_utilities::bytevec;
 
+use crate::LTS;
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
@@ -29,7 +30,7 @@ impl TransitionIndex {
 }
 
 impl IncomingTransitions {
-    pub fn new(lts: &LabelledTransitionSystem) -> IncomingTransitions {
+    pub fn new(lts: &impl LTS) -> IncomingTransitions {
         let num_states = lts.num_of_states();
         let mut transition_labels = bytevec![LabelIndex::new(0); lts.num_of_transitions()];
         let mut transition_from = bytevec![StateIndex::new(0); lts.num_of_transitions()];

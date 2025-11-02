@@ -1,6 +1,7 @@
 use log::debug;
 use log::trace;
 
+use mcrl3_lts::LTS;
 use mcrl3_lts::LabelIndex;
 use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
@@ -13,7 +14,7 @@ use mcrl3_utilities::MCRL3Error;
 ///     - filter: Only transitions satisfying the filter are considered part of the graph.
 ///     - reverse: If true, the topological ordering is reversed, i.e. successors before the incoming state.
 pub fn sort_topological<F>(
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     filter: F,
     reverse: bool,
 ) -> Result<Vec<StateIndex>, MCRL3Error>
@@ -78,7 +79,7 @@ enum Mark {
 ///
 /// Returns false if a cycle is detected.
 fn sort_topological_visit<F>(
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     filter: &F,
     state_index: StateIndex,
     depth_stack: &mut Vec<StateIndex>,
@@ -123,7 +124,7 @@ where
 }
 
 /// Returns true if the given permutation is a topological ordering of the states of the given LTS.
-fn is_topologically_sorted<F, P>(lts: &LabelledTransitionSystem, filter: F, permutation: P, reverse: bool) -> bool
+fn is_topologically_sorted<F, P>(lts: &impl LTS, filter: F, permutation: P, reverse: bool) -> bool
 where
     F: Fn(LabelIndex, StateIndex) -> bool,
     P: Fn(StateIndex) -> StateIndex,

@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use mcrl3_lts::LTS;
 use mcrl3_lts::LabelIndex;
 use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
@@ -92,19 +93,19 @@ impl Debug for Signature {
 }
 
 /// Returns true if the label is the special tau_hat label for the given LTS.
-pub fn is_tau_hat(label: LabelIndex, lts: &LabelledTransitionSystem) -> bool {
+pub fn is_tau_hat(label: LabelIndex, lts: &impl LTS) -> bool {
     label == lts.num_of_labels()
 }
 
 /// Returns a special label that is not in the set of labels.
-fn tau_hat(lts: &LabelledTransitionSystem) -> LabelIndex {
+fn tau_hat(lts: &impl LTS) -> LabelIndex {
     LabelIndex::new(lts.num_of_labels())
 }
 
 /// Returns the signature for strong bisimulation sig(s, pi) = { (a, pi(t)) | s -a-> t in T }
 pub fn strong_bisim_signature(
     state_index: StateIndex,
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &impl Partition,
     builder: &mut SignatureBuilder,
 ) {
@@ -123,7 +124,7 @@ pub fn strong_bisim_signature(
 /// sig(s, pi) = { (a, pi(t)) | s -[tau]-> s1 -> ... s_n -[a]-> t in T && pi(s) = pi(s_i) && ((a != tau) || pi(s) != pi(t)) }
 pub fn branching_bisim_signature(
     state_index: StateIndex,
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &impl Partition,
     builder: &mut SignatureBuilder,
     visited: &mut FxHashSet<StateIndex>,
@@ -167,7 +168,7 @@ pub fn branching_bisim_signature(
 /// The input lts must contain no tau-cycles.
 pub fn branching_bisim_signature_sorted(
     state_index: StateIndex,
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &impl Partition,
     state_to_signature: &[Signature],
     builder: &mut SignatureBuilder,
@@ -198,7 +199,7 @@ pub fn branching_bisim_signature_sorted(
 /// The input lts must contain no tau-cycles.
 pub fn branching_bisim_signature_inductive(
     state_index: StateIndex,
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &BlockPartition,
     state_to_key: &[BlockIndex],
     builder: &mut SignatureBuilder,
@@ -228,7 +229,7 @@ pub fn branching_bisim_signature_inductive(
 
 /// Perform the preprocessing necessary for branching bisimulation with the
 /// sorted signature see `branching_bisim_signature_sorted`.
-pub fn preprocess_branching(lts: LabelledTransitionSystem) -> (LabelledTransitionSystem, IndexedPartition) {
+pub fn preprocess_branching(lts: impl LTS) -> (LabelledTransitionSystem, IndexedPartition) {
     let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = quotient_lts_naive(&lts, &scc_partition, true);
     drop(lts);

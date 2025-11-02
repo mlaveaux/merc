@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use log::debug;
+use mcrl3_lts::LTS;
 use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::LtsBuilder;
 use mcrl3_lts::StateIndex;
@@ -82,7 +83,7 @@ pub trait Partition {
 ///
 /// The naive version will add the transitions of all states in the block to the quotient LTS.
 pub fn quotient_lts_naive(
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &impl Partition,
     eliminate_tau_loops: bool,
 ) -> LabelledTransitionSystem {
@@ -133,7 +134,7 @@ pub fn quotient_lts_naive(
 ///
 /// Chooses a single state in the block as representative. If BRANCHING then the chosen state is a bottom state.
 pub fn quotient_lts_block<const BRANCHING: bool>(
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     partition: &BlockPartition,
 ) -> LabelledTransitionSystem {
     let start = Instant::now();

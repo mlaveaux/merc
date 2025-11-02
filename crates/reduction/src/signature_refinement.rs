@@ -6,8 +6,8 @@ use log::debug;
 use log::trace;
 use mcrl3_io::TimeProgress;
 use mcrl3_lts::IncomingTransitions;
+use mcrl3_lts::LTS;
 use mcrl3_lts::LabelIndex;
-use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
@@ -40,7 +40,7 @@ pub enum Equivalence {
 
 /// Reduces the given LTS modulo the given equivalence using signature refinement
 pub fn reduce(
-    lts: LabelledTransitionSystem,
+    lts: impl LTS,
     equivalence: Equivalence,
     timing: &mut Timing,
 ) -> LabelledTransitionSystem {
@@ -66,7 +66,7 @@ pub fn reduce(
 
 /// Computes a strong bisimulation partitioning using signature refinement
 pub fn strong_bisim_sigref(
-    lts: LabelledTransitionSystem,
+    lts: impl LTS + Clone,
     timing: &mut Timing,
 ) -> (LabelledTransitionSystem, BlockPartition) {
     let mut timepre = timing.start("preprocess");
@@ -95,7 +95,7 @@ pub fn strong_bisim_sigref(
 
 /// Computes a strong bisimulation partitioning using signature refinement
 pub fn strong_bisim_sigref_naive(
-    lts: LabelledTransitionSystem,
+    lts: impl LTS,
     timing: &mut Timing,
 ) -> (LabelledTransitionSystem, IndexedPartition) {
     let mut time = timing.start("reduction");
@@ -109,7 +109,7 @@ pub fn strong_bisim_sigref_naive(
 
 /// Computes a branching bisimulation partitioning using signature refinement
 pub fn branching_bisim_sigref(
-    lts: LabelledTransitionSystem,
+    lts: impl LTS,
     timing: &mut Timing,
 ) -> (LabelledTransitionSystem, BlockPartition) {
     let mut timepre = timing.start("preprocess");
@@ -188,7 +188,7 @@ pub fn branching_bisim_sigref(
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
 pub fn branching_bisim_sigref_naive(
-    lts: LabelledTransitionSystem,
+    lts: impl LTS,
     timing: &mut Timing,
 ) -> (LabelledTransitionSystem, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
@@ -237,7 +237,7 @@ pub fn branching_bisim_sigref_naive(
 /// signature builder with the signature of the state. It consists of the
 /// current partition, the signatures per state for the next partition.
 fn signature_refinement<F, G, const BRANCHING: bool>(
-    lts: &LabelledTransitionSystem,
+    lts: &impl LTS,
     incoming: &IncomingTransitions,
     mut signature: F,
     mut renumber: G,
@@ -377,7 +377,7 @@ where
 /// The signature function is called for each state and should fill the
 /// signature builder with the signature of the state. It consists of the
 /// current partition, the signatures per state for the next partition.
-fn signature_refinement_naive<F>(lts: &LabelledTransitionSystem, mut signature: F) -> IndexedPartition
+fn signature_refinement_naive<F>(lts: &impl LTS, mut signature: F) -> IndexedPartition
 where
     F: FnMut(StateIndex, &IndexedPartition, &Vec<Signature>, &mut SignatureBuilder),
 {
@@ -462,7 +462,7 @@ where
 }
 
 /// Returns true iff the given partition is a strong bisimulation partition
-pub fn is_valid_refinement<F, P>(lts: &LabelledTransitionSystem, partition: &P, mut compute_signature: F) -> bool
+pub fn is_valid_refinement<F, P>(lts: &impl LTS, partition: &P, mut compute_signature: F) -> bool
 where
     F: FnMut(StateIndex, &P, &mut SignatureBuilder),
     P: Partition,
@@ -533,6 +533,7 @@ mod tests {
         });
     }
 
+    /// Checks that the branching bisimulation partition is a refinement of the strong bisimulation partition.
     fn is_refinement(
         lts: &LabelledTransitionSystem,
         strong_partition: &impl Partition,
