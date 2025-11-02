@@ -127,6 +127,6 @@ impl Transmutable for bool {
     }
 
     fn transmute_lifetime_mut<'a>(&mut self) -> &'a mut Self::Target<'a> {
-        unsafe { transmute::<&Self, &'a mut bool>(self) }
+        unsafe { transmute::<&mut Self, &'a mut bool>(self) }
     }
 }

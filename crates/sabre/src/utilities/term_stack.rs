@@ -63,7 +63,15 @@ impl Markable for Config<'_> {
 
     fn contains_term(&self, term: &ATermRef<'_>) -> bool {
         if let Config::Construct(t, _, _) = self {
-            term == &<DataFunctionSymbolRef as Into<ATermRef>>::into(t.copy())
+            t.contains_term(term)
+        } else {
+            false
+        }
+    }
+
+    fn contains_symbol(&self, symbol: &mcrl3_aterm::SymbolRef<'_>) -> bool {
+        if let Config::Construct(t, _, _) = self {
+            t.contains_symbol(symbol)
         } else {
             false
         }
