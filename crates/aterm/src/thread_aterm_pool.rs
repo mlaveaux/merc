@@ -166,6 +166,35 @@ impl ThreadTermPool {
         result
     }
 
+    /// Create a term with the given arguments given by the iterator that is failable.
+    pub fn try_create_term_iter<'a, 'b, 'c, 'd, I, T>(&self, symbol: &'b impl Symb<'a, 'b>, args: I) -> Result<ATerm, MCRL3Error>
+    where
+        I: IntoIterator<Item = Result<T, MCRL3Error>>,
+        T: Term<'c, 'd>,
+    {
+        let mut arguments = self.tmp_arguments.borrow_mut();
+        arguments.clear();
+        for arg in args {
+            unsafe {
+                arguments.push(ATermRef::from_index(arg?.shared()));
+            }
+        }
+
+        let (result, inserted) = self
+            .term_pool
+            .read_recursive()
+            .expect("Lock poisoned!")
+            .create_term_array(symbol, &arguments, |index| {
+                self.protect(&unsafe { ATermRef::from_index(index) })
+            });
+
+        if inserted {
+            self.trigger_garbage_collection();
+        }
+
+        Ok(result)
+    }
+
     /// Create a term with the given arguments given by the iterator.
     pub fn create_term_iter_head<'a, 'b, 'c, 'd, 'e, 'f, I, T>(
         &self,

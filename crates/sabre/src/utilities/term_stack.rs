@@ -6,6 +6,7 @@ use mcrl3_aterm::ATermRef;
 use mcrl3_aterm::Markable;
 use mcrl3_aterm::Marker;
 use mcrl3_aterm::Protected;
+use mcrl3_aterm::SymbolRef;
 use mcrl3_aterm::Term;
 use mcrl3_aterm::Transmutable;
 use mcrl3_data::DataApplication;
@@ -69,7 +70,7 @@ impl Markable for Config<'_> {
         }
     }
 
-    fn contains_symbol(&self, symbol: &mcrl3_aterm::SymbolRef<'_>) -> bool {
+    fn contains_symbol(&self, symbol: &SymbolRef<'_>) -> bool {
         if let Config::Construct(t, _, _) = self {
             t.contains_symbol(symbol)
         } else {

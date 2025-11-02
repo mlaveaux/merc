@@ -6,6 +6,7 @@
 //!  Write state labels (state_label_lts) in their order such that writing the i-th state label belongs to state with index i.
 //!  Write the initial state.
 
+use std::io::BufReader;
 use std::io::Read;
 use std::time::Instant;
 
@@ -33,7 +34,7 @@ pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MCRL3Erro
     let start = Instant::now();
     debug!("Reading LTS in .lts format...");
 
-    let mut reader = BinaryATermReader::new(reader)?;
+    let mut reader = BinaryATermReader::new(BufReader::new(reader))?;
 
     if reader.read_aterm()? != Some(lts_marker()) {
         return Err("Stream does not contain a labelled transition system (LTS).".into());

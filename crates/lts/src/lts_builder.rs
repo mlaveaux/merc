@@ -100,7 +100,6 @@ mod tests {
     use super::*;
 
     use rand::Rng;
-    use rand::seq::SliceRandom;
 
     use mcrl3_utilities::random_test;
 

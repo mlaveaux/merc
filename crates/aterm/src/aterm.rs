@@ -220,6 +220,15 @@ impl ATerm {
         THREAD_TERM_POOL.with_borrow(|tp| tp.create_term_iter(symbol, iter))
     }
 
+    /// Creates a new term with the given symbol and an iterator over the arguments.
+    pub fn try_with_iter<'a, 'b, 'c, 'd, I, T>(symbol: &'b impl Symb<'a, 'b>, iter: I) -> Result<ATerm, MCRL3Error>
+    where
+        I: IntoIterator<Item = Result<T, MCRL3Error>>,
+        T: Term<'c, 'd>,
+    {
+        THREAD_TERM_POOL.with_borrow(|tp| tp.try_create_term_iter(symbol, iter))
+    }
+
     /// Creates a new term with the given symbol and a head term, along with a list of arguments.
     pub fn with_iter_head<'a, 'b, 'c, 'd, 'e, 'f, I, T>(
         symbol: &'b impl Symb<'a, 'b>,

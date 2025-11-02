@@ -469,22 +469,21 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                         write_terms.push(t);
                         self.term_index_width = bits_for_value(write_terms.len());
                     } else {
-                        let mut arguments = Vec::with_capacity(symbol.arity());
-
                         // When the arity is zero, no bits are read for the arguments.
                         let num_of_bits = if symbol.arity() > 0 { self.term_index_width() } else { 0 };
                         let mut write_terms = self.terms.write();
                         for _ in 0..symbol.arity() {
+                        }
+
+                        let term = ATerm::try_with_iter(symbol, (0..symbol.arity()).map(|_| {                            
                             let arg_index = self.stream.read_bits(num_of_bits)? as usize;
                             let arg = write_terms.get(arg_index).ok_or(format!(
                                 "Read invalid aterm index {arg_index}, length {}",
                                 write_terms.len()
                             ))?;
                             debug_trace!("Read arg: {arg}");
-                            arguments.push(arg);
-                        }
-
-                        let term = ATerm::with_args(symbol, &arguments);
+                            Ok(arg)
+                        }))?;
 
                         if packet == PacketType::ATermOutput {
                             debug_trace!("Output term: {term}");
