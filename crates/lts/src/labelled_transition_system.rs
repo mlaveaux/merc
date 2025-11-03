@@ -25,7 +25,7 @@ pub trait LTS {
     fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_;
     
     /// Iterate over all state_index in the labelled transition system
-    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<>;
+    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<Self>;
 
     /// Returns the number of states.
     fn num_of_states(&self) -> usize;

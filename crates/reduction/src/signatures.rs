@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -229,7 +230,9 @@ pub fn branching_bisim_signature_inductive(
 
 /// Perform the preprocessing necessary for branching bisimulation with the
 /// sorted signature see `branching_bisim_signature_sorted`.
-pub fn preprocess_branching(lts: impl LTS) -> (LabelledTransitionSystem, IndexedPartition) {
+pub fn preprocess_branching<L>(lts: L) -> (LabelledTransitionSystem, IndexedPartition) 
+    where L: LTS + fmt::Debug,
+{
     let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = quotient_lts_naive(&lts, &scc_partition, true);
     drop(lts);

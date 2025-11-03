@@ -1,10 +1,10 @@
+use std::fmt;
 use std::time::Instant;
 
 use log::debug;
 use log::trace;
 use mcrl3_lts::LTS;
 use mcrl3_lts::LabelIndex;
-use mcrl3_lts::LabelledTransitionSystem;
 use mcrl3_lts::StateIndex;
 
 use crate::BlockIndex;
@@ -14,7 +14,9 @@ use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.
-pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition {
+pub fn tau_scc_decomposition<L>(lts: &L) -> IndexedPartition 
+    where L: LTS + fmt::Debug,
+{
     let partition = scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index));
     if cfg!(debug_assertions) {
         let quotient_lts = quotient_lts_naive(lts, &partition, true);
@@ -24,9 +26,10 @@ pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition {
 }
 
 /// Computes the strongly connected component partitioning of the given LTS.
-pub fn scc_decomposition<F>(lts: &impl LTS, filter: &F) -> IndexedPartition
+pub fn scc_decomposition<F, L>(lts: &L, filter: &F) -> IndexedPartition
 where
     F: Fn(StateIndex, LabelIndex, StateIndex) -> bool,
+    L: LTS + fmt::Debug,
 {
     let start = Instant::now();
     trace!("{lts:?}");
@@ -175,13 +178,16 @@ fn strongly_connect<F>(
 }
 
 /// Returns true iff the labelled transition system has tau-loops.
-pub fn has_tau_loop(lts: &impl LTS) -> bool {
+pub fn has_tau_loop<L>(lts: &L) -> bool 
+    where L: LTS + fmt::Debug,
+{
     sort_topological(lts, |label_index, _| lts.is_hidden_label(label_index), false).is_err()
 }
 
 #[cfg(test)]
 mod tests {
     use mcrl3_lts::LabelIndex;
+    use mcrl3_lts::LabelledTransitionSystem;
     use mcrl3_lts::StateIndex;
     use mcrl3_lts::random_lts;
     use mcrl3_utilities::random_test;

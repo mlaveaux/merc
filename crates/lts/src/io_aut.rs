@@ -13,6 +13,7 @@ use mcrl3_io::LineIterator;
 use mcrl3_io::Progress;
 use mcrl3_utilities::MCRL3Error;
 
+use crate::LTS;
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
@@ -142,7 +143,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
 }
 
 /// Write a labelled transition system in plain text in Aldebaran format to the given writer.
-pub fn write_aut(writer: &mut impl Write, lts: &LabelledTransitionSystem) -> Result<(), MCRL3Error> {
+pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MCRL3Error> {
     writeln!(
         writer,
         "des ({}, {}, {})",
