@@ -88,7 +88,7 @@ tagged-pointer = "0.2"
 tikv-jemallocator = "0.6"
 
 # Used for GUI tools
-cosmic-text = "0.14"
+cosmic-text = "0.15"
 femtovg = { version = "0.19", features = ["wgpu"] }
 glam = "0.30"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
