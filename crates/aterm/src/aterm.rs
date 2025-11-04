@@ -11,12 +11,14 @@ use std::sync::Arc;
 
 use delegate::delegate;
 
+use mcrl3_sharedmutex::RecursiveLockReadGuard;
 use mcrl3_unsafety::StablePointer;
 use mcrl3_utilities::MCRL3Error;
 use mcrl3_utilities::PhantomUnsend;
 use mcrl3_utilities::ProtectionIndex;
 
 use crate::ATermIntRef;
+use crate::GlobalTermPool;
 use crate::Markable;
 use crate::Marker;
 use crate::SharedTerm;
@@ -207,7 +209,7 @@ pub struct ATerm {
 
 impl ATerm {
     /// Creates a new term with the given symbol and arguments.
-    pub fn with_args<'a, 'b>(symbol: &'b impl Symb<'a, 'b>, args: &'b [impl Term<'a, 'b>]) -> ATerm {
+    pub fn with_args<'a, 'b>(symbol: &'b impl Symb<'a, 'b>, args: &'b [impl Term<'a, 'b>]) -> Return<ATermRef<'static>> {
         THREAD_TERM_POOL.with_borrow(|tp| tp.create_term(symbol, args))
     }
 
@@ -260,6 +262,16 @@ impl ATerm {
     /// Returns the root of the term
     pub fn root(&self) -> ProtectionIndex {
         self.root
+    }
+
+    /// Replace this term by the given term in place.
+    pub fn replace<'a, 'b, T>(&mut self, value: Return<T>) 
+        where T: Term<'a, 'b>,
+             'b: 'a
+    {
+        // Replace the current term in the protection set by the value.
+        let index = value.shared().copy();
+        THREAD_TERM_POOL.with_borrow(|tp| tp.replace(value.guard, self.root, index));
     }
 
     /// Creates a new term from the given reference and protection set root
@@ -434,16 +446,56 @@ where
     }
 }
 
-struct Return<'a, T> {
+/// This is a wrapper around a term that indicates it is being returned from a function.
+/// 
+/// The resulting term can have a lifetime tied to the thread-local term pool.
+pub struct Return<T>
+{
     term: T,
-    _marker: PhantomData<&'a ()>,
+    guard: RecursiveLockReadGuard<'static, GlobalTermPool>,
 }
 
-impl<'a, T> Deref for Return<'a, T> {
+impl<T> Return<T>
+{
+    /// Creates a new return value wrapping the given term.
+    pub fn new(guard: RecursiveLockReadGuard<'static, GlobalTermPool>, term: T) -> Self {
+        Return {
+            term,
+            guard,
+        }
+    }
+
+    /// Consumes the return value and returns the inner term.
+    pub fn into(self) -> T {
+        self.term
+    }
+}
+
+impl<'a, 'b, T> Deref for Return<T> 
+    where T: Term<'a, 'b>
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.term
+    }
+}
+
+impl<'a, 'b , T: Term<'a, 'b>> Term<'a, 'b> for &'b Return<T> 
+    where 'b: 'a
+{
+    delegate! {
+        to self.term {
+            fn protect(&self) -> ATerm;
+            fn arg(&self, index: usize) -> ATermRef<'a>;
+            fn arguments(&self) -> ATermArgs<'a>;
+            fn copy(&self) -> ATermRef<'a>;
+            fn get_head_symbol(&self) -> SymbolRef<'a>;
+            fn iter(&self) -> TermIterator<'a>;
+            fn index(&self) -> usize;
+            fn shared(&self) -> &ATermIndex;
+            fn annotation(&self) -> Option<usize>;
+        }
     }
 }
 

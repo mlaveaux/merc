@@ -66,11 +66,11 @@ fn create_nested_function<const ARITY: usize>(function_name: &str, leaf_name: &s
     let c_term = ATerm::constant(&c_symbol);
 
     // Initialize with f(c, ..., c)
-    let mut f_term = ATerm::with_args(&f_symbol, &from_fn::<_, ARITY, _>(|_| c_term.copy()));
+    let mut f_term = ATerm::with_args(&f_symbol, &from_fn::<_, ARITY, _>(|_| c_term.copy())).protect();
 
     // Build nested structure: f(f_term, ..., f_term) for each level
     for _ in 0..depth {
-        f_term = ATerm::with_args(&f_symbol, &from_fn::<_, ARITY, _>(|_| f_term.copy()));
+        f_term.replace(ATerm::with_args(&f_symbol, &from_fn::<_, ARITY, _>(|_| f_term.copy())));
     }
 
     debug_assert_eq!(f_term.get_head_symbol().name(), function_name);

@@ -169,6 +169,18 @@ impl<T> ProtectionSet<T> {
             "Failed to unprotect object"
         );
     }
+
+    /// Replaces the object at the given index with the new object.
+    pub fn replace(&mut self, index: ProtectionIndex, object: T) {
+        let index = self.generation_counter.get_index(index.0);
+
+        debug_assert!(
+            matches!(self.roots[index], Entry::Filled(_)),
+            "Index {index} is does not point to a filled entry"
+        );
+
+        self.roots[index] = Entry::Filled(object);
+    }
 }
 
 impl<T> Index<ProtectionIndex> for ProtectionSet<T> {

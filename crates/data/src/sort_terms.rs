@@ -44,7 +44,7 @@ mod inner {
         /// Creates a sort expression with the unknown value.
         pub fn unknown_sort() -> SortExpression {
             DATA_SYMBOLS.with_borrow(|ds| SortExpression {
-                term: ATerm::with_args(ds.sort_id_symbol.deref(), &[ATermString::new("@no_value@")]),
+                term: ATerm::with_args(ds.sort_id_symbol.deref(), &[ATermString::new("@no_value@")]).protect(),
             })
         }
     }

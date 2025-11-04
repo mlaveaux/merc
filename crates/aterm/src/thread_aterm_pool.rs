@@ -7,12 +7,15 @@ use std::sync::Arc;
 
 use log::info;
 use mcrl3_sharedmutex::RecursiveLockReadGuard;
+use mcrl3_unsafety::StablePointer;
 use pest_consume::Parser;
 
 use crate::AGRESSIVE_GC;
 use crate::GlobalTermPool;
 use crate::Markable;
+use crate::Return;
 use crate::Rule;
+use crate::SharedTerm;
 use crate::SharedTermProtection;
 use crate::Symb;
 use crate::Symbol;
@@ -84,23 +87,23 @@ impl ThreadTermPool {
         assert!(symbol.arity() == 0, "A constant should not have arity > 0");
 
         let empty_args: [ATermRef<'_>; 0] = [];
-        let (result, inserted) = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!")
-            .create_term_array(symbol, &empty_args, |index| {
-                self.protect(&unsafe { ATermRef::from_index(index) })
-            });
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+
+        let (index, inserted) = guard.create_term_array(symbol, &empty_args);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        result
+        self.protect_guard(guard, &unsafe { ATermRef::from_index(&index) })
     }
 
     /// Create a term with the given arguments
-    pub fn create_term<'a, 'b>(&self, symbol: &'b impl Symb<'a, 'b>, args: &'b [impl Term<'a, 'b>]) -> ATerm {
+    pub fn create_term<'a, 'b>(
+        &self,
+        symbol: &'b impl Symb<'a, 'b>,
+        args: &'b [impl Term<'a, 'b>],
+    ) -> Return<ATermRef<'static>> {
         let mut arguments = self.tmp_arguments.borrow_mut();
         arguments.clear();
         for arg in args {
@@ -109,34 +112,35 @@ impl ThreadTermPool {
             }
         }
 
-        let (result, inserted) = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!")
-            .create_term_array(symbol, &arguments, |index| {
-                self.protect(&unsafe { ATermRef::from_index(index) })
-            });
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+
+        let (index, inserted) = guard.create_term_array(symbol, &arguments);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        result
+        unsafe {
+            // SAFETY: The guard is guaranteed to live as long as the returned term, since it is thread local
+            Return::new(std::mem::transmute(guard), ATermRef::from_index(&index))
+        }
     }
 
     /// Create a term with the given index.
     pub fn create_int(&self, value: usize) -> ATerm {
-        let (result, inserted) = self
+        let guard = self
             .term_pool
             .read_recursive()
-            .expect("Lock poisoned!")
-            .create_int(value, |index| self.protect(&unsafe { ATermRef::from_index(index) }));
+            .expect("Lock poisoned!");
+
+        let (index, inserted) = 
+            guard.create_int(value);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        result
+        self.protect_guard(guard, &unsafe { ATermRef::from_index(&index) })
     }
 
     /// Create a term with the given arguments given by the iterator.
@@ -153,19 +157,15 @@ impl ThreadTermPool {
             }
         }
 
-        let (result, inserted) = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!")
-            .create_term_array(symbol, &arguments, |index| {
-                self.protect(&unsafe { ATermRef::from_index(index) })
-            });
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+
+        let (index, inserted) = guard.create_term_array(symbol, &arguments);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        result
+        self.protect_guard(guard, &unsafe { ATermRef::from_index(&index) })
     }
 
     /// Create a term with the given arguments given by the iterator that is failable.
@@ -188,15 +188,13 @@ impl ThreadTermPool {
 
         let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
 
-        let (result, inserted) = guard.create_term_array(symbol, &arguments, |index| {
-            self.protect(&unsafe { ATermRef::from_index(index) })
-        });
+        let (index, inserted) = guard.create_term_array(symbol, &arguments);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        Ok(result)
+        Ok(self.protect_guard(guard, &unsafe { ATermRef::from_index(&index) }))
     }
 
     /// Create a term with the given arguments given by the iterator.
@@ -221,19 +219,15 @@ impl ThreadTermPool {
             }
         }
 
-        let (result, inserted) = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!")
-            .create_term_array(symbol, &arguments, |index| {
-                self.protect(&unsafe { ATermRef::from_index(index) })
-            });
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+
+        let (index, inserted) = guard.create_term_array(symbol, &arguments);
 
         if inserted {
             self.trigger_garbage_collection();
         }
 
-        result
+        self.protect_guard(guard, &unsafe { ATermRef::from_index(&index) })
     }
 
     /// Create a function symbol
@@ -246,10 +240,31 @@ impl ThreadTermPool {
             })
     }
 
+        
     /// Protect the term by adding its index to the protection set
     pub fn protect(&self, term: &ATermRef<'_>) -> ATerm {
         // Protect the term by adding its index to the protection set
-        // SAFETY: If the global term pool is read() locked, we can safely access the protection set.
+        let root = self.lock_protection_set()
+            .protection_set
+            .protect(term.shared().copy());
+
+        // Return the protected term
+        let result = ATerm::from_index(term.shared(), root);
+
+        debug_trace!(
+            "Protected term {:?}, root {}, protection set {}",
+            term,
+            root,
+            self.index()
+        );
+
+        result
+    }
+
+    /// Protect the term by adding its index to the protection set
+    pub fn protect_guard(&self, _guard: RecursiveLockReadGuard<'_, GlobalTermPool>, term: &ATermRef<'_>) -> ATerm {
+        // Protect the term by adding its index to the protection set
+        // SAFETY: If the global term pool is locked, so we can safely access the protection set.
         let root = unsafe { &mut *self.protection_set.get() }
             .protection_set
             .protect(term.shared().copy());
@@ -269,9 +284,7 @@ impl ThreadTermPool {
 
     /// Unprotects a term from this thread's protection set.
     pub fn drop(&self, term: &ATerm) {
-        self.lock_protection_set()
-            .protection_set
-            .unprotect(term.root());
+        self.lock_protection_set().protection_set.unprotect(term.root());
 
         debug_trace!(
             "Unprotected term {:?}, root {}, protection set {}",
@@ -283,9 +296,7 @@ impl ThreadTermPool {
 
     /// Protects a container in this thread's container protection set.
     pub fn protect_container(&self, container: Arc<dyn Markable + Send + Sync>) -> ProtectionIndex {
-        let root = self.lock_protection_set()
-            .container_protection_set
-            .protect(container);
+        let root = self.lock_protection_set().container_protection_set.protect(container);
 
         debug_trace!("Protected container index {}, protection set {}", root, self.index());
 
@@ -293,10 +304,8 @@ impl ThreadTermPool {
     }
 
     /// Unprotects a container from this thread's container protection set.
-    pub fn drop_container(&self, root: ProtectionIndex) {        
-        self.lock_protection_set()
-            .container_protection_set
-            .unprotect(root);
+    pub fn drop_container(&self, root: ProtectionIndex) {
+        self.lock_protection_set().container_protection_set.unprotect(root);
 
         debug_trace!("Unprotected container index {}, protection set {}", root, self.index());
     }
@@ -314,7 +323,7 @@ impl ThreadTermPool {
         let result = unsafe {
             Symbol::from_index(
                 symbol.shared(),
-                    self.lock_protection_set()
+                self.lock_protection_set()
                     .symbol_protection_set
                     .protect(symbol.shared().copy()),
             )
@@ -368,6 +377,16 @@ impl ThreadTermPool {
         &self.term_pool
     }
 
+    /// Replace the entry in the protection set with the given term.
+    pub(crate) fn replace(&self, _guard: RecursiveLockReadGuard<'_, GlobalTermPool>, root: ProtectionIndex, term: StablePointer<SharedTerm>)
+    {
+        // Protect the term by adding its index to the protection set
+        // SAFETY: If the global term pool is locked, so we can safely access the protection set.
+        unsafe { &mut *self.protection_set.get() }
+            .protection_set
+            .replace(root, term);
+    }
+
     /// This triggers the global garbage collection based on heuristics.
     fn trigger_garbage_collection(&self) {
         // If the term was newly inserted, decrease the garbage collection counter and trigger garbage collection if necessary
@@ -385,7 +404,6 @@ impl ThreadTermPool {
 
         self.garbage_collection_counter.set(value);
     }
-
 
     /// Returns the index of the protection set.
     fn index(&self) -> usize {
@@ -460,11 +478,7 @@ mod tests {
 
                     // Verify protection
                     THREAD_TERM_POOL.with_borrow(|tp| {
-                        assert!(
-                            tp.lock_protection_set()
-                                .protection_set
-                                .contains_root(protected.root())
-                        );
+                        assert!(tp.lock_protection_set().protection_set.contains_root(protected.root()));
                     });
 
                     // Unprotect
@@ -472,11 +486,7 @@ mod tests {
                     drop(protected);
 
                     THREAD_TERM_POOL.with_borrow(|tp| {
-                        assert!(                            
-                            tp.lock_protection_set()
-                                .protection_set
-                                .contains_root(root)
-                        );
+                        assert!(!tp.lock_protection_set().protection_set.contains_root(root));
                     });
                 });
             }
@@ -505,10 +515,10 @@ mod tests {
             tp.create_term(
                 &f,
                 &[
-                    tp.create_term(&g, &[tp.create_constant(&Symbol::new("a", 0))]),
+                    tp.create_term(&g, &[tp.create_constant(&Symbol::new("a", 0))]).protect(),
                     tp.create_constant(&Symbol::new("b", 0)),
                 ],
-            )
+            ).protect()
         });
 
         assert!(t.get_head_symbol().name() == "f");

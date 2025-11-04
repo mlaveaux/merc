@@ -76,7 +76,7 @@ fn substitute_rec(
 
         // TODO: When write is dropped we check whether all terms where inserted, but this clear violates that assumption.
         args.write().clear();
-        result.into()
+        result.protect().into()
     }
 }
 

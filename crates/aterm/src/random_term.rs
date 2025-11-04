@@ -6,6 +6,7 @@ use rand::Rng;
 use crate::ATerm;
 use crate::Symbol;
 use crate::THREAD_TERM_POOL;
+use crate::Term;
 
 /// Create a random term consisting of the given symbol and constants. Performs
 /// iterations number of constructions, and uses chance_duplicates to choose the
@@ -19,7 +20,7 @@ pub fn random_term(rng: &mut impl Rng, symbols: &[(String, usize)], constants: &
         AHashSet::<ATerm>::from_iter(constants.iter().map(|name| {
             let symbol = tp.create_symbol(name, 0);
             let a: &[ATerm] = &[];
-            tp.create_term(&symbol, a)
+            tp.create_term(&symbol, a).protect()
         }))
     });
 
@@ -33,7 +34,7 @@ pub fn random_term(rng: &mut impl Rng, symbols: &[(String, usize)], constants: &
         }
 
         let symbol = Symbol::new(symbol, *arity);
-        let term = ATerm::with_args(&symbol, &arguments);
+        let term = ATerm::with_args(&symbol, &arguments).protect();
 
         // Make this term available as another subterm that can be used.
         subterms.insert(term.clone());

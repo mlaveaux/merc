@@ -8,6 +8,7 @@ use std::sync::atomic::AtomicUsize;
 use log::info;
 use mcrl3_sharedmutex::GlobalBfSharedMutex;
 use mcrl3_sharedmutex::RecursiveLockReadGuard;
+use mcrl3_unsafety::StablePointer;
 use mcrl3_utilities::LargeFormatter;
 use rustc_hash::FxBuildHasher;
 
@@ -16,7 +17,6 @@ use mcrl3_utilities::ProtectionSet;
 use mcrl3_utilities::SimpleTimer;
 use mcrl3_utilities::debug_trace;
 
-use crate::ATerm;
 use crate::ATermIndex;
 use crate::ATermRef;
 use crate::Markable;
@@ -130,10 +130,7 @@ impl GlobalTermPool {
     }
 
     /// Creates a term storing a single integer value.
-    pub fn create_int<P>(&self, value: usize, protect: P) -> (ATerm, bool)
-    where
-        P: FnOnce(&ATermIndex) -> ATerm,
-    {
+    pub fn create_int(&self, value: usize) -> (StablePointer<SharedTerm>, bool) {
         let shared_term = SharedTermLookup {
             symbol: unsafe { SymbolRef::from_index(self.int_symbol.shared()) },
             arguments: &[],
@@ -147,19 +144,15 @@ impl GlobalTermPool {
                 })
         };
 
-        (protect(&index), inserted)
+        (index, inserted)
     }
 
     /// Create a term from a head symbol and an iterator over its arguments
-    pub fn create_term_array<'a, 'b, 'c, P>(
+    pub fn create_term_array<'a, 'b, 'c>(
         &'c self,
         symbol: &'b impl Symb<'a, 'b>,
-        args: &'c [ATermRef<'c>],
-        protect: P,
-    ) -> (ATerm, bool)
-    where
-        P: FnOnce(&ATermIndex) -> ATerm,
-    {
+        args: &'c [ATermRef<'c>]
+    ) -> (StablePointer<SharedTerm>, bool) {
         let shared_term = SharedTermLookup {
             symbol: SymbolRef::from_symbol(symbol),
             arguments: args,
@@ -178,7 +171,8 @@ impl GlobalTermPool {
                     SharedTerm::construct(ptr, key)
                 })
         };
-        (protect(&index), inserted)
+        
+        (index, inserted)
     }
 
     /// Create a function symbol

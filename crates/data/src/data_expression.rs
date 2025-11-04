@@ -169,7 +169,7 @@ mod inner {
                         Into::<ATerm>::into(ATermString::new(name)),
                         SortExpression::unknown_sort().into(),
                     ],
-                ),
+                ).protect(),
             })
         }
 
@@ -210,7 +210,7 @@ mod inner {
                 let args: &[ATerm] = &[t.into(), SortExpression::unknown_sort().into()];
 
                 DataVariable {
-                    term: ATerm::with_args(ds.data_variable.deref(), args),
+                    term: ATerm::with_args(ds.data_variable.deref(), args).protect(),
                 }
             })
         }
@@ -223,7 +223,7 @@ mod inner {
                 let args: &[ATerm] = &[t.into(), ATermInt::new(sort).into()];
 
                 DataVariable {
-                    term: ATerm::with_args(ds.data_variable.deref(), args),
+                    term: ATerm::with_args(ds.data_variable.deref(), args).protect(),
                 }
             })
         }
