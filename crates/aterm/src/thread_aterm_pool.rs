@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::cell::UnsafeCell;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::sync::Arc;
 
 use log::info;
@@ -267,8 +269,7 @@ impl ThreadTermPool {
 
     /// Unprotects a term from this thread's protection set.
     pub fn drop(&self, term: &ATerm) {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-        unsafe { &mut *self.protection_set.get() }
+        self.lock_protection_set()
             .protection_set
             .unprotect(term.root());
 
@@ -282,8 +283,7 @@ impl ThreadTermPool {
 
     /// Protects a container in this thread's container protection set.
     pub fn protect_container(&self, container: Arc<dyn Markable + Send + Sync>) -> ProtectionIndex {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-        let root = unsafe { &mut *self.protection_set.get() }
+        let root = self.lock_protection_set()
             .container_protection_set
             .protect(container);
 
@@ -293,9 +293,8 @@ impl ThreadTermPool {
     }
 
     /// Unprotects a container from this thread's container protection set.
-    pub fn drop_container(&self, root: ProtectionIndex) {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-        unsafe { &mut *self.protection_set.get() }
+    pub fn drop_container(&self, root: ProtectionIndex) {        
+        self.lock_protection_set()
             .container_protection_set
             .unprotect(root);
 
@@ -312,12 +311,10 @@ impl ThreadTermPool {
 
     /// Protects a symbol from garbage collection.
     pub fn protect_symbol(&self, symbol: &SymbolRef<'_>) -> Symbol {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-
         let result = unsafe {
             Symbol::from_index(
                 symbol.shared(),
-                    (&mut *self.protection_set.get())
+                    self.lock_protection_set()
                     .symbol_protection_set
                     .protect(symbol.shared().copy()),
             )
@@ -335,8 +332,7 @@ impl ThreadTermPool {
 
     /// Unprotects a symbol, allowing it to be garbage collected.
     pub fn drop_symbol(&self, symbol: &mut Symbol) {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-        unsafe { &mut *self.protection_set.get() }
+        self.lock_protection_set()
             .symbol_protection_set
             .unprotect(symbol.root());
     }
@@ -393,8 +389,18 @@ impl ThreadTermPool {
 
     /// Returns the index of the protection set.
     fn index(&self) -> usize {
-        let _guard = self.term_pool.read_recursive().expect("Lock poisoned!");
-        unsafe { &mut *self.protection_set.get() }.index
+        self.lock_protection_set().index
+    }
+
+    /// The protection set is locked by the global read-write lock
+    fn lock_protection_set(&self) -> ProtectionSetGuard<'_> {
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+        let protection_set = unsafe { &mut *self.protection_set.get() };
+
+        ProtectionSetGuard {
+            guard,
+            object: protection_set,
+        }
     }
 }
 
@@ -411,6 +417,25 @@ impl Drop for ThreadTermPool {
             self.term_pool.read_recursive_call_count(),
             self.term_pool.write_call_count()
         )
+    }
+}
+
+struct ProtectionSetGuard<'a> {
+    guard: RecursiveLockReadGuard<'a, GlobalTermPool>,
+    object: &'a mut SharedTermProtection,
+}
+
+impl Deref for ProtectionSetGuard<'_> {
+    type Target = SharedTermProtection;
+
+    fn deref(&self) -> &Self::Target {
+        self.object
+    }
+}
+
+impl DerefMut for ProtectionSetGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.object
     }
 }
 
@@ -435,9 +460,8 @@ mod tests {
 
                     // Verify protection
                     THREAD_TERM_POOL.with_borrow(|tp| {
-                        let _guard = tp.term_pool.read_recursive().expect("Lock poisoned!");
                         assert!(
-                            unsafe { &mut *tp.protection_set.get() }
+                            tp.lock_protection_set()
                                 .protection_set
                                 .contains_root(protected.root())
                         );
@@ -448,9 +472,8 @@ mod tests {
                     drop(protected);
 
                     THREAD_TERM_POOL.with_borrow(|tp| {
-                        let _guard = tp.term_pool.read_recursive().expect("Lock poisoned!");
-                        assert!(
-                            !unsafe { &mut *tp.protection_set.get() }
+                        assert!(                            
+                            tp.lock_protection_set()
                                 .protection_set
                                 .contains_root(root)
                         );
