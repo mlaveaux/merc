@@ -32,8 +32,6 @@ where
     L: LTS + fmt::Debug,
 {
     let start = Instant::now();
-    trace!("{lts:?}");
-
     let mut partition = IndexedPartition::new(lts.num_of_states());
 
     // The stack for the depth first search.

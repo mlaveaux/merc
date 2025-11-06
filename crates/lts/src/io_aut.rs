@@ -4,6 +4,7 @@ use std::io::Write;
 use std::time::Instant;
 
 use log::debug;
+use log::info;
 use log::trace;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
@@ -91,7 +92,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
 
     let mut transitions = LtsBuilder::with_capacity(num_of_states, 16, num_of_transitions);
     let mut progress = Progress::new(
-        |value, increment| debug!("Reading transitions {}%...", value / increment),
+        |value, increment| info!("Reading transitions {}%...", value / increment),
         num_of_transitions,
     );
 
@@ -129,7 +130,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     // Remove duplicated transitions, it is not clear if they are allowed in the .aut format.
     transitions.remove_duplicates();
 
-    debug!("Finished reading LTS");
+    info!("Finished reading LTS");
 
     hidden_labels.push("tau".to_string());
     debug!("Time read_aut: {:.3}s", start.elapsed().as_secs_f64());

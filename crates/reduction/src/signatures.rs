@@ -228,10 +228,70 @@ pub fn branching_bisim_signature_inductive(
     builder.dedup();
 }
 
+/// Computes the weak bisimulation signature.
+///
+/// The input lts must contain no tau-cycles.
+pub fn weak_bisim_signature_sorted(
+    state_index: StateIndex,
+    lts: &impl LTS,
+    partition: &impl Partition,
+    state_to_signature: &[Signature],
+    builder: &mut SignatureBuilder,
+) {
+    builder.clear();
+    builder.push((LabelIndex::new(0), partition.block_number(state_index))); // Add the inert tau transition to itself.
+    for transition in lts.outgoing_transitions(state_index) {
+        let to_block = partition.block_number(transition.to);
+
+        if lts.is_hidden_label(transition.label) {
+            // Inert tau transition, take signature from the outgoing tau-transition.
+            builder.extend(state_to_signature[transition.to].as_slice());
+        } else {
+            builder.push((transition.label, to_block));
+            for (label_after, color) in state_to_signature[transition.to].as_slice() {
+                if lts.is_hidden_label(*label_after) {
+                    builder.push((transition.label, *color));
+                }
+            }
+        }
+    }
+
+    // Compute the flat signature, which has Hash and is more compact.
+    builder.sort_unstable();
+    builder.dedup();
+}
+
+/// This computes only tau signatures.
+///
+/// The input lts must contain no tau-cycles.
+pub fn weak_bisim_signature_sorted_taus(
+    state_index: StateIndex,
+    lts: &impl LTS,
+    partition: &impl Partition,
+    state_to_signature: &[Signature],
+    builder: &mut SignatureBuilder,
+) {
+    builder.clear();
+    builder.push((LabelIndex::new(0), partition.block_number(state_index))); // Add the inert tau transition to itself.
+    for transition in lts.outgoing_transitions(state_index) {
+        if lts.is_hidden_label(transition.label) {
+            let to_block = partition.block_number(transition.to);
+
+            // Inert tau transition, take signature from the outgoing tau-transition.
+            builder.extend(state_to_signature[transition.to].as_slice());
+            builder.push((transition.label, to_block));
+        }
+    }
+    // Compute the flat signature, which has Hash and is more compact.
+    builder.sort_unstable();
+    builder.dedup();
+}
+
 /// Perform the preprocessing necessary for branching bisimulation with the
 /// sorted signature see `branching_bisim_signature_sorted`.
-pub fn preprocess_branching<L>(lts: L) -> (LabelledTransitionSystem, IndexedPartition) 
-    where L: LTS + fmt::Debug,
+pub fn preprocess_branching<L>(lts: L) -> (LabelledTransitionSystem, IndexedPartition)
+where
+    L: LTS + fmt::Debug,
 {
     let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = quotient_lts_naive(&lts, &scc_partition, true);
