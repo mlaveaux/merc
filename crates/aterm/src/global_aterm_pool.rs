@@ -103,7 +103,7 @@ impl GlobalTermPool {
     fn new() -> GlobalTermPool {
         // Insert the default symbols.
         let symbol_pool = SymbolPool::new();
-        let int_symbol =  unsafe { SymbolRef::from_index(&symbol_pool.create("<aterm_int>", 0)) };
+        let int_symbol = unsafe { SymbolRef::from_index(&symbol_pool.create("<aterm_int>", 0)) };
         let list_symbol = unsafe { SymbolRef::from_index(&symbol_pool.create("<list_constructor>", 2)) };
         let empty_list_symbol = unsafe { SymbolRef::from_index(&symbol_pool.create("<empty_list>", 0)) };
 
@@ -149,7 +149,7 @@ impl GlobalTermPool {
     pub fn create_term_array<'a, 'b, 'c>(
         &'c self,
         symbol: &'b impl Symb<'a, 'b>,
-        args: &'c [ATermRef<'c>]
+        args: &'c [ATermRef<'c>],
     ) -> (StablePointer<SharedTerm>, bool) {
         let shared_term = SharedTermLookup {
             symbol: SymbolRef::from_symbol(symbol),
@@ -169,7 +169,7 @@ impl GlobalTermPool {
                     SharedTerm::construct(ptr, key)
                 })
         };
-        
+
         (index, inserted)
     }
 
@@ -232,7 +232,7 @@ impl GlobalTermPool {
     {
         self.deletion_hooks.push((symbol.protect(), Box::new(hook)));
     }
-    
+
     /// Enables or disables automatic garbage collection.
     pub fn automatic_garbage_collection(&mut self, enabled: bool) {
         self.garbage_collection = enabled;

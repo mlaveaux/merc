@@ -169,7 +169,8 @@ mod inner {
                         Into::<ATerm>::into(ATermString::new(name)),
                         SortExpression::unknown_sort().into(),
                     ],
-                ).protect(),
+                )
+                .protect(),
             })
         }
 

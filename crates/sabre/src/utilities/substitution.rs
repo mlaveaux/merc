@@ -1,4 +1,3 @@
-
 #![forbid(unsafe_code)]
 
 use mcrl3_aterm::ATerm;

@@ -98,7 +98,8 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
 
     while let Some(line) = lines.next() {
         trace!("{line}");
-        let (from_txt, label_txt, to_txt) = read_transition(line).ok_or_else(|| IOError::InvalidTransition(line.clone()))?;
+        let (from_txt, label_txt, to_txt) =
+            read_transition(line).ok_or_else(|| IOError::InvalidTransition(line.clone()))?;
 
         // Parse the from and to states, with the given label.
         let from = StateIndex::new(from_txt.parse()?);

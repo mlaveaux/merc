@@ -3,8 +3,8 @@ use std::mem::transmute;
 
 use mcrl3_utilities::IndexedSet;
 
-use crate::aterm::ATermRef;
 use crate::SymbolRef;
+use crate::aterm::ATermRef;
 
 pub trait Transmutable {
     type Target<'a>

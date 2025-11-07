@@ -6,19 +6,15 @@ use log::trace;
 use mcrl3_lts::LTS;
 use mcrl3_lts::LabelIndex;
 use mcrl3_lts::StateIndex;
-use mcrl3_utilities::is_valid_permutation;
 use mcrl3_utilities::MCRL3Error;
+use mcrl3_utilities::is_valid_permutation;
 
 /// Returns a topological ordering of the states of the given LTS.
 ///
 /// An error is returned if the LTS contains a cycle.
 ///     - filter: Only transitions satisfying the filter are considered part of the graph.
 ///     - reverse: If true, the topological ordering is reversed, i.e. successors before the incoming state.
-pub fn sort_topological<F, L>(
-    lts: &L,
-    filter: F,
-    reverse: bool,
-) -> Result<Vec<StateIndex>, MCRL3Error>
+pub fn sort_topological<F, L>(lts: &L, filter: F, reverse: bool) -> Result<Vec<StateIndex>, MCRL3Error>
 where
     F: Fn(LabelIndex, StateIndex) -> bool,
     L: LTS + fmt::Debug,
@@ -159,7 +155,8 @@ where
 #[cfg(test)]
 mod tests {
 
-    use mcrl3_lts::{LabelledTransitionSystem, random_lts};
+    use mcrl3_lts::LabelledTransitionSystem;
+    use mcrl3_lts::random_lts;
     use mcrl3_utilities::random_test;
     use rand::seq::SliceRandom;
     use test_log::test;

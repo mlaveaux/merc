@@ -128,13 +128,9 @@ impl ThreadTermPool {
 
     /// Create a term with the given index.
     pub fn create_int(&self, value: usize) -> ATerm {
-        let guard = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!");
+        let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
 
-        let (index, inserted) = 
-            guard.create_int(value);
+        let (index, inserted) = guard.create_int(value);
 
         if inserted {
             self.trigger_garbage_collection();
@@ -240,13 +236,10 @@ impl ThreadTermPool {
             })
     }
 
-        
     /// Protect the term by adding its index to the protection set
     pub fn protect(&self, term: &ATermRef<'_>) -> ATerm {
         // Protect the term by adding its index to the protection set
-        let root = self.lock_protection_set()
-            .protection_set
-            .protect(term.shared().copy());
+        let root = self.lock_protection_set().protection_set.protect(term.shared().copy());
 
         // Return the protected term
         let result = ATerm::from_index(term.shared(), root);
@@ -378,8 +371,12 @@ impl ThreadTermPool {
     }
 
     /// Replace the entry in the protection set with the given term.
-    pub(crate) fn replace(&self, _guard: RecursiveLockReadGuard<'_, GlobalTermPool>, root: ProtectionIndex, term: StablePointer<SharedTerm>)
-    {
+    pub(crate) fn replace(
+        &self,
+        _guard: RecursiveLockReadGuard<'_, GlobalTermPool>,
+        root: ProtectionIndex,
+        term: StablePointer<SharedTerm>,
+    ) {
         // Protect the term by adding its index to the protection set
         // SAFETY: If the global term pool is locked, so we can safely access the protection set.
         unsafe { &mut *self.protection_set.get() }
@@ -521,10 +518,12 @@ mod tests {
             tp.create_term(
                 &f,
                 &[
-                    tp.create_term(&g, &[tp.create_constant(&Symbol::new("a", 0))]).protect(),
+                    tp.create_term(&g, &[tp.create_constant(&Symbol::new("a", 0))])
+                        .protect(),
                     tp.create_constant(&Symbol::new("b", 0)),
                 ],
-            ).protect()
+            )
+            .protect()
         });
 
         assert!(t.get_head_symbol().name() == "f");

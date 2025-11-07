@@ -1,4 +1,3 @@
-
 #![forbid(unsafe_code)]
 
 use std::hint::black_box;

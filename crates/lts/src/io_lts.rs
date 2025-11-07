@@ -12,13 +12,13 @@ use std::time::Instant;
 
 use log::debug;
 use log::info;
-use mcrl3_aterm::is_list_term;
 use mcrl3_aterm::ATerm;
 use mcrl3_aterm::ATermInt;
 use mcrl3_aterm::ATermRead;
 use mcrl3_aterm::ATermStreamable;
 use mcrl3_aterm::BinaryATermReader;
 use mcrl3_aterm::Symbol;
+use mcrl3_aterm::is_list_term;
 use mcrl3_data::DataSpecification;
 use mcrl3_io::TimeProgress;
 use mcrl3_utilities::IndexedSet;
@@ -56,9 +56,12 @@ pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MCRL3Erro
 
     let mut builder = LtsBuilder::new();
 
-    let mut progress = TimeProgress::new(|num_of_transitions| {
-        info!("Read {num_of_transitions} transitions...");
-    }, 1);
+    let mut progress = TimeProgress::new(
+        |num_of_transitions| {
+            info!("Read {num_of_transitions} transitions...");
+        },
+        1,
+    );
 
     loop {
         let term = reader.read_aterm()?;

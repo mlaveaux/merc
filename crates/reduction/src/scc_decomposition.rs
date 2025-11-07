@@ -14,8 +14,9 @@ use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.
-pub fn tau_scc_decomposition<L>(lts: &L) -> IndexedPartition 
-    where L: LTS + fmt::Debug,
+pub fn tau_scc_decomposition<L>(lts: &L) -> IndexedPartition
+where
+    L: LTS + fmt::Debug,
 {
     let partition = scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index));
     if cfg!(debug_assertions) {
@@ -176,8 +177,9 @@ fn strongly_connect<F>(
 }
 
 /// Returns true iff the labelled transition system has tau-loops.
-pub fn has_tau_loop<L>(lts: &L) -> bool 
-    where L: LTS + fmt::Debug,
+pub fn has_tau_loop<L>(lts: &L) -> bool
+where
+    L: LTS + fmt::Debug,
 {
     sort_topological(lts, |label_index, _| lts.is_hidden_label(label_index), false).is_err()
 }

@@ -82,7 +82,7 @@ fn create_nested_function<const ARITY: usize>(function_name: &str, leaf_name: &s
 // In these three benchmarks all threads operate on a shared term.
 fn benchmark_shared_creation(c: &mut Criterion) {
     const SIZE: usize = 400000;
-    
+
     THREAD_TERM_POOL.with_borrow(|tp| tp.automatic_garbage_collection(false));
 
     for num_threads in THREADS {
@@ -99,7 +99,7 @@ fn benchmark_shared_creation(c: &mut Criterion) {
 fn benchmark_shared_inspect(c: &mut Criterion) {
     const SIZE: usize = 20;
     const ITERATIONS: usize = 1000;
-    
+
     THREAD_TERM_POOL.with_borrow(|tp| tp.automatic_garbage_collection(false));
 
     let shared_term = Arc::new(ATermSend::from(create_nested_function::<2>("f", "c", SIZE)));
@@ -167,7 +167,11 @@ fn benchmark_unique_creation(c: &mut Criterion) {
         c.bench_function(&format!("unique_creation_{}", num_threads), |b| {
             b.iter(|| {
                 benchmark_threads(num_threads, move |id| {
-                    black_box(create_nested_function::<2>("f", &format!("c{}", id), SIZE / num_threads));
+                    black_box(create_nested_function::<2>(
+                        "f",
+                        &format!("c{}", id),
+                        SIZE / num_threads,
+                    ));
                 });
             });
         });
@@ -218,7 +222,7 @@ fn benchmark_unique_lookup(c: &mut Criterion) {
 
     const SIZE: usize = 400000;
     const ITERATIONS: usize = 1000;
-    
+
     THREAD_TERM_POOL.with_borrow(|tp| tp.automatic_garbage_collection(false));
 
     // Keep one protected instance

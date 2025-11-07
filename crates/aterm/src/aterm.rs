@@ -209,7 +209,10 @@ pub struct ATerm {
 
 impl ATerm {
     /// Creates a new term with the given symbol and arguments.
-    pub fn with_args<'a, 'b>(symbol: &'b impl Symb<'a, 'b>, args: &'b [impl Term<'a, 'b>]) -> Return<ATermRef<'static>> {
+    pub fn with_args<'a, 'b>(
+        symbol: &'b impl Symb<'a, 'b>,
+        args: &'b [impl Term<'a, 'b>],
+    ) -> Return<ATermRef<'static>> {
         THREAD_TERM_POOL.with_borrow(|tp| tp.create_term(symbol, args))
     }
 
@@ -265,9 +268,10 @@ impl ATerm {
     }
 
     /// Replace this term by the given term in place.
-    pub fn replace<'a, 'b, T>(&mut self, value: Return<T>) 
-        where T: Term<'a, 'b>,
-             'b: 'a
+    pub fn replace<'a, 'b, T>(&mut self, value: Return<T>)
+    where
+        T: Term<'a, 'b>,
+        'b: 'a,
     {
         // Replace the current term in the protection set by the value.
         let index = value.shared().copy();
@@ -422,8 +426,8 @@ impl Drop for ATermSend {
 
             unsafe { &mut *self.protection_set.get() }
                 .protection_set
-                .unprotect(self.root);        
-    });
+                .unprotect(self.root);
+        });
     }
 }
 
@@ -447,22 +451,17 @@ where
 }
 
 /// This is a wrapper around a term that indicates it is being returned from a function.
-/// 
+///
 /// The resulting term can have a lifetime tied to the thread-local term pool.
-pub struct Return<T>
-{
+pub struct Return<T> {
     term: T,
     guard: RecursiveLockReadGuard<'static, GlobalTermPool>,
 }
 
-impl<T> Return<T>
-{
+impl<T> Return<T> {
     /// Creates a new return value wrapping the given term.
     pub fn new(guard: RecursiveLockReadGuard<'static, GlobalTermPool>, term: T) -> Self {
-        Return {
-            term,
-            guard,
-        }
+        Return { term, guard }
     }
 
     /// Consumes the return value and returns the inner term.
@@ -471,8 +470,9 @@ impl<T> Return<T>
     }
 }
 
-impl<'a, 'b, T> Deref for Return<T> 
-    where T: Term<'a, 'b>
+impl<'a, 'b, T> Deref for Return<T>
+where
+    T: Term<'a, 'b>,
 {
     type Target = T;
 
@@ -481,8 +481,9 @@ impl<'a, 'b, T> Deref for Return<T>
     }
 }
 
-impl<'a, 'b , T: Term<'a, 'b>> Term<'a, 'b> for &'b Return<T> 
-    where 'b: 'a
+impl<'a, 'b, T: Term<'a, 'b>> Term<'a, 'b> for &'b Return<T>
+where
+    'b: 'a,
 {
     delegate! {
         to self.term {

@@ -57,8 +57,9 @@ impl<T> ATermList<T> {
         T: Into<ATerm>,
     {
         ATermList {
-            term: THREAD_TERM_POOL
-                .with_borrow(|tp| ATerm::with_args(tp.list_symbol(), &[item.into().copy(), self.term.copy()]).protect()),
+            term: THREAD_TERM_POOL.with_borrow(|tp| {
+                ATerm::with_args(tp.list_symbol(), &[item.into().copy(), self.term.copy()]).protect()
+            }),
             _marker: PhantomData,
         }
     }

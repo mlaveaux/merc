@@ -1,4 +1,3 @@
-
 #![forbid(unsafe_code)]
 
 use ahash::AHashSet;

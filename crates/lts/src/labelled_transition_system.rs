@@ -20,10 +20,10 @@ pub type StateIndex = TagIndex<usize, StateTag>;
 pub trait LTS {
     /// Returns the index of the initial state
     fn initial_state_index(&self) -> StateIndex;
-    
+
     /// Returns the set of outgoing transitions for the given state.
     fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_;
-    
+
     /// Iterate over all state_index in the labelled transition system
     fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<Self>;
 

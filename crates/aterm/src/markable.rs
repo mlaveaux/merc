@@ -4,12 +4,13 @@ use std::collections::VecDeque;
 
 use mcrl3_utilities::IndexedSet;
 
-use crate::{Marker, SymbolRef};
+use crate::Marker;
+use crate::SymbolRef;
 use crate::aterm::ATermRef;
 use crate::gc_mutex::GcMutex;
 
 /// This trait should be used on all objects and containers related to storing unprotected terms, or unprotected symmbols.
-/// 
+///
 /// The implementation should mark all contained aterms and symbols that must be kept alive using the provided `Marker`.
 pub trait Markable {
     /// Marks all the ATermRefs to prevent them from being garbage collected.
@@ -60,7 +61,7 @@ impl<T: Markable> Markable for VecDeque<T> {
     fn contains_term(&self, term: &ATermRef<'_>) -> bool {
         self.iter().any(|v| v.contains_term(term))
     }
-    
+
     fn contains_symbol(&self, symbol: &SymbolRef<'_>) -> bool {
         self.iter().any(|v| v.contains_symbol(symbol))
     }
@@ -78,7 +79,7 @@ impl<T: Markable> Markable for GcMutex<T> {
     fn contains_term(&self, term: &ATermRef<'_>) -> bool {
         self.read().contains_term(term)
     }
-    
+
     fn contains_symbol(&self, symbol: &SymbolRef<'_>) -> bool {
         self.read().contains_symbol(symbol)
     }
@@ -88,7 +89,7 @@ impl<T: Markable> Markable for GcMutex<T> {
     }
 }
 
-impl<T: Markable> Markable for IndexedSet<T>{ 
+impl<T: Markable> Markable for IndexedSet<T> {
     fn mark(&self, marker: &mut Marker) {
         for (_, value) in self.iter() {
             value.mark(marker);
@@ -98,7 +99,7 @@ impl<T: Markable> Markable for IndexedSet<T>{
     fn contains_term(&self, term: &ATermRef<'_>) -> bool {
         self.iter().any(|(_, v)| v.contains_term(term))
     }
-    
+
     fn contains_symbol(&self, symbol: &SymbolRef<'_>) -> bool {
         self.iter().any(|(_, v)| v.contains_symbol(symbol))
     }

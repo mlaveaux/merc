@@ -154,7 +154,7 @@ impl<'a, C: Markable> ProtectedWriteGuard<'a, C> {
     }
 
     /// Yields a symbol to insert into the container.
-    /// 
+    ///
     /// The invariant to uphold is that the resulting symbol MUST be inserted into the container.
     pub fn protect_symbol<'b>(&self, symbol: &'b impl Symb<'a, 'b>) -> SymbolRef<'static> {
         unsafe {
@@ -166,7 +166,7 @@ impl<'a, C: Markable> ProtectedWriteGuard<'a, C> {
                 .push(transmute::<SymbolRef<'_>, SymbolRef<'static>>(symbol.copy()));
 
             transmute::<SymbolRef<'_>, SymbolRef<'static>>(symbol.copy())
-        }   
+        }
     }
 }
 
