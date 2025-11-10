@@ -12,3 +12,4 @@ import = []
 mcrl3_aterm.workspace = true
 mcrl3_data.workspace = true
 mcrl3_utilities.workspace = true
+mcrl3_unsafety.workspace = true
