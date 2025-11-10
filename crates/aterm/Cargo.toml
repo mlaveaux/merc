@@ -6,9 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-# The `mcrl3_miri` feature is used to run miri tests.
-mcrl3_miri = []
-
 # The `mcrl3_debug` feature is used to enable additional run-time checks.
 mcrl3_debug = ["parking_lot/deadlock_detection"]
 

@@ -3560,6 +3560,7 @@ version = "1.0.0"
 dependencies = [
  "mcrl3_aterm",
  "mcrl3_data",
+ "mcrl3_unsafety",
  "mcrl3_utilities",
 ]
 
