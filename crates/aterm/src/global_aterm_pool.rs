@@ -29,34 +29,6 @@ use crate::SymbolPool;
 use crate::SymbolRef;
 use crate::Term;
 
-#[cfg(not(feature = "mcrl3_miri"))]
-mod mutex {
-    pub use parking_lot::Mutex;
-    pub use parking_lot::MutexGuard;
-    pub use parking_lot::ReentrantMutex;
-    pub use parking_lot::ReentrantMutexGuard;
-
-    /// Helper function used to unwrap the mutex guard
-    pub fn mutex_unwrap<T>(guard: MutexGuard<'_, T>) -> MutexGuard<'_, T> {
-        guard
-    }
-}
-
-#[cfg(feature = "mcrl3_miri")]
-mod mutex {
-    pub use std::sync::Mutex;
-    pub use std::sync::MutexGuard;
-    pub use std::sync::ReentrantLock as ReentrantMutex;
-    pub use std::sync::ReentrantLockGuard as ReentrantMutexGuard;
-
-    pub fn mutex_unwrap<'a, T, E: std::fmt::Debug>(guard: Result<MutexGuard<'a, T>, E>) -> MutexGuard<'a, T> {
-        guard.expect("Mutex lock has been poisoned")
-    }
-}
-
-// Depends on the selection of the feature, the mutex type is either a parking_lot or std mutex.
-pub use mutex::*;
-
 /// This is the global set of protection sets that are managed by the ThreadTermPool
 pub static GLOBAL_TERM_POOL: LazyLock<GlobalBfSharedMutex<GlobalTermPool>> =
     LazyLock::new(|| GlobalBfSharedMutex::new(GlobalTermPool::new()));

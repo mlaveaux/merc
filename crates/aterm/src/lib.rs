@@ -13,9 +13,7 @@
 //!
 //! This crate does use `unsafe` for some of the more intricrate parts of the ATerm library, but every module that only uses safe Rust is marked with `#![forbid(unsafe_code)]`.
 
-#![cfg_attr(feature = "mcrl3_miri", feature(reentrant_lock))]
 
-mod aterm;
 mod aterm_binary_stream;
 mod aterm_builder;
 mod aterm_int;
