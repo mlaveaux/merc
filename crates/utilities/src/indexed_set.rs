@@ -178,8 +178,6 @@ impl<T: Hash + Eq, S: BuildHasher> IndexedSet<T, S> {
     ///
     /// Returns the corresponding index and a boolean indicating if the element was inserted.
     pub fn insert(&mut self, value: T) -> (SetIndex, bool)
-    where
-        T: Clone,
     {
         let equivalent = IndexValueEquivalent::new(&value, &self.hasher, &self.table);
 

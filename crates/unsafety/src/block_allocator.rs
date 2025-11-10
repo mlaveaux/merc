@@ -1,9 +1,9 @@
 use std::alloc::Layout;
 use std::array;
+use std::cell::RefCell;
 use std::fmt;
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
-use std::sync::Mutex;
 
 use allocator_api2::alloc::AllocError;
 use allocator_api2::alloc::Allocator;
@@ -16,7 +16,7 @@ use itertools::Itertools;
 /// # Details
 ///
 /// Internally stores blocks of `N` elements
-struct BlockAllocator<T, const N: usize> {
+pub struct BlockAllocator<T, const N: usize> {
     /// This is the block that contains unoccupied entries.
     head_block: Option<Box<Block<T, N>>>,
 
@@ -42,6 +42,7 @@ impl<T, const N: usize> BlockAllocator<T, N> {
             return Ok(free.cast::<T>());
         }
 
+        // After this the block definitely has space for at least one element
         let block = match &mut self.head_block {
             Some(block) => {
                 if block.is_full() {
@@ -59,7 +60,6 @@ impl<T, const N: usize> BlockAllocator<T, N> {
             }
         };
 
-        // After this the first block definitely has space
         let length = block.length;
         block.length += 1;
         unsafe {
@@ -71,7 +71,13 @@ impl<T, const N: usize> BlockAllocator<T, N> {
     }
 
     /// Deallocate the given pointer.
-    pub fn deallocate_object(&mut self, _ptr: NonNull<T>) {}
+    pub fn deallocate_object(&mut self, ptr: NonNull<T>) {
+        if let Some(free) = self.free {
+            unsafe { (ptr.cast::<Entry<_>>()).as_mut().next = free }
+        }
+
+        self.free = Some(ptr.cast());
+    }
 
     /// Returns an iterator over the free list entries.
     fn iter_free(&self) -> FreeListIterator<T> {
@@ -80,8 +86,17 @@ impl<T, const N: usize> BlockAllocator<T, N> {
 }
 
 /// A type that can implement `Allocator` using the underlying `BlockAllocator`.
-struct AllocBlock<T, const N: usize> {
-    block_allocator: Mutex<BlockAllocator<T, N>>,
+pub struct AllocBlock<T, const N: usize> {
+    block_allocator: RefCell<BlockAllocator<T, N>>,
+}
+
+impl<T, const N: usize> AllocBlock<T, N> {
+    /// Creates a new `AllocBlock`.
+    pub fn new() -> Self {
+        Self {
+            block_allocator: RefCell::new(BlockAllocator::new()),
+        }
+    }
 }
 
 unsafe impl<T, const N: usize> Allocator for AllocBlock<T, N> {
@@ -92,11 +107,7 @@ unsafe impl<T, const N: usize> Allocator for AllocBlock<T, N> {
             "The requested layout should match the type T"
         );
 
-        let ptr = self
-            .block_allocator
-            .lock()
-            .expect("Mutex should not be poisened")
-            .allocate_object()?;
+        let ptr = self.block_allocator.borrow_mut().allocate_object()?;
 
         // Convert NonNull<T> to NonNull<[u8]> with the correct size
         let byte_ptr = ptr.cast::<u8>();
@@ -111,21 +122,26 @@ unsafe impl<T, const N: usize> Allocator for AllocBlock<T, N> {
             Layout::new::<T>(),
             "The requested layout should match the type T"
         );
-        self.block_allocator
-            .lock()
-            .expect("Mutex should not be poisened")
-            .deallocate_object(ptr.cast::<T>());
+        self.block_allocator.borrow_mut().deallocate_object(ptr.cast::<T>());
     }
 }
 
 union Entry<T> {
+    /// Stores the actual element.
     data: ManuallyDrop<T>,
+
+    /// If the element is free, this points to the next entry in the freelist.
     next: NonNull<Entry<T>>,
 }
 
+/// We maintain a list of a blocks that store N elements each.
 struct Block<T, const N: usize> {
     data: [Entry<T>; N],
+
+    /// Keeps track of the number of elements in the block that are used.
     length: usize,
+
+    /// Pointer to the next block.
     next: Option<Box<Block<T, N>>>,
 }
 
@@ -137,16 +153,6 @@ impl<T, const N: usize> Block<T, N> {
             }),
             length: 0,
             next: None,
-        }
-    }
-
-    fn with_next(next: Box<Block<T, N>>) -> Self {
-        Self {
-            data: array::from_fn(|_i| Entry {
-                next: NonNull::dangling(),
-            }),
-            length: 0,
-            next: Some(next),
         }
     }
 
@@ -187,10 +193,25 @@ impl<T, const N: usize> fmt::Debug for BlockAllocator<T, N> {
 mod tests {
     use super::*;
 
+    use rand::Rng;
+
+    use mcrl3_utilities::random_test;
+
     #[test]
     fn test_block_allocator() {
-        let mut allocator: BlockAllocator<usize, 256> = BlockAllocator::new();
+        random_test(100, |rng| {
+            let mut allocator: BlockAllocator<u64, 256> = BlockAllocator::new();
 
-        let object = allocator.allocate_object();
+            let mut allocated = Vec::new();
+            for _ in 0..1000 {
+                let ptr = allocator.allocate_object().unwrap();
+                unsafe {
+                    ptr.as_ptr().write(rng.random());
+                }
+                allocated.push(ptr);
+            }
+
+            // Remove various elements and check whether all the remaining elements are valid
+        })
     }
 }

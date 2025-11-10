@@ -65,6 +65,11 @@ impl<T: ?Sized> StablePointer<T> {
             reference_counter: AtomicRefCounter::new(()),
         }
     }
+
+    /// Returns public access to the underlying pointer.
+    pub fn ptr(&self) ->  NonNull<T> {
+        self.ptr
+    }
 }
 
 impl<T: ?Sized> PartialEq for StablePointer<T> {
