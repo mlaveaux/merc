@@ -275,7 +275,10 @@ impl ATerm {
     {
         // Replace the current term in the protection set by the value.
         let index = value.shared().copy();
-        THREAD_TERM_POOL.with_borrow(|tp| tp.replace(value.guard, self.root, index));
+        THREAD_TERM_POOL.with_borrow(|tp| tp.replace(value.guard, self.root, index.copy()));
+
+        // Set the term itself.
+        self.term = unsafe { ATermRef::from_index(&index) };
     }
 
     /// Creates a new term from the given reference and protection set root

@@ -144,6 +144,7 @@ impl SharedTerm {
         self as *const Self as *const u8 as usize
     }
 
+    /// Returns the length for a [SharedTermLookup]
     pub(crate) fn length_for(object: &SharedTermLookup) -> usize {
         object.arguments.len() + if object.annotation.is_some() { 1 } else { 0 }
     }
