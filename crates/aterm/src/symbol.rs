@@ -64,9 +64,9 @@ impl<'a> SymbolRef<'a> {
     }
 
     /// Internal constructor to create a `SymbolRef` from a `SymbolIndex`.
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// We must ensure that the lifetime `'a` is valid for the returned `SymbolRef`.
     pub unsafe fn from_index(index: &SymbolIndex) -> SymbolRef<'a> {
         SymbolRef {

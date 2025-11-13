@@ -20,16 +20,16 @@ use femtovg::renderer::WGPURenderer;
 use log::debug;
 use log::info;
 use slint::Image;
-use slint::invoke_from_event_loop;
-use slint::quit_event_loop;
 use slint::Rgba8Pixel;
 use slint::SharedPixelBuffer;
+use slint::invoke_from_event_loop;
+use slint::quit_event_loop;
 use wgpu::TextureDescriptor;
 use wgpu::TextureFormat;
 use wgpu::TextureUsages;
 
-use ltsgraph::init_wgpu;
 use ltsgraph::PauseableThread;
+use ltsgraph::init_wgpu;
 use ltsgraph::show_error_dialog;
 use mcrl3_gui::console;
 use mcrl3_gui::verbosity::VerbosityFlag;
@@ -58,9 +58,14 @@ enum ViewerType {
 #[derive(Parser, Debug)]
 #[command(name = "Maurice Laveaux", about = "A lts viewing tool")]
 pub struct Cli {
-    #[arg(long, global = true, default_value_t = false, help = "Print the version of this tool")]
+    #[arg(
+        long,
+        global = true,
+        default_value_t = false,
+        help = "Print the version of this tool"
+    )]
     version: bool,
-    
+
     #[command(flatten)]
     verbosity: VerbosityFlag,
 
@@ -119,7 +124,7 @@ async fn main() -> Result<ExitCode, MCRL3Error> {
     let _console = console::init()?;
 
     let cli = Cli::parse();
-    
+
     env_logger::Builder::new()
         .filter_level(cli.verbosity.log_level_filter())
         .parse_default_env()

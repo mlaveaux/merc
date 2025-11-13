@@ -105,7 +105,7 @@ impl ThreadTermPool {
         args: &'b [impl Term<'a, 'b>],
     ) -> Return<ATermRef<'static>> {
         let mut arguments = self.tmp_arguments.borrow_mut();
-        
+
         arguments.clear();
         for arg in args {
             unsafe {

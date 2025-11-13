@@ -26,7 +26,12 @@ use mcrl3_version::Version;
 #[derive(clap::Parser, Debug)]
 #[command(name = "Maurice Laveaux", about = "A command line rewriting tool")]
 struct Cli {
-    #[arg(long, global = true, default_value_t = false, help = "Print the version of this tool")]
+    #[arg(
+        long,
+        global = true,
+        default_value_t = false,
+        help = "Print the version of this tool"
+    )]
     version: bool,
 
     #[command(flatten)]

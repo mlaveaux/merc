@@ -177,8 +177,7 @@ impl<T: Hash + Eq, S: BuildHasher> IndexedSet<T, S> {
     /// Inserts the given element into the set
     ///
     /// Returns the corresponding index and a boolean indicating if the element was inserted.
-    pub fn insert(&mut self, value: T) -> (SetIndex, bool)
-    {
+    pub fn insert(&mut self, value: T) -> (SetIndex, bool) {
         let equivalent = IndexValueEquivalent::new(&value, &self.hasher, &self.table);
 
         if let Some(entry) = self.index.get(&equivalent) {
