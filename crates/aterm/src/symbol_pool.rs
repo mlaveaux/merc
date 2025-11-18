@@ -99,15 +99,19 @@ impl SymbolPool {
             .prefix_to_register_function_map
             .pin();
 
-        // TODO: Can there be a reace between the get and insert?
+        // TODO: Can there be a race between the get and insert?
         let result = match guard.get(prefix) {
-            Some(result) => result,
-            None => guard.insert(prefix.to_string(), Arc::new(AtomicUsize::new(0))).expect("This key does not yet exist"),
+            Some(result) => result.clone(),
+            None => {
+                let result = Arc::new(AtomicUsize::new(0));
+                assert!(guard.insert(prefix.to_string(), result.clone()).is_none(), "This key should not yet exist");
+                result
+            },
         };
 
         // Ensure the counter starts at a sufficiently large index
         self.get_sufficiently_large_postfix_index(prefix, &result);
-        result.clone()
+        result
     }
 
     /// Removes a prefix counter from the pool.
