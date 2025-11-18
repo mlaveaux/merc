@@ -1,22 +1,18 @@
 # Overview
 
-This is a re-implementation of the core functionality of the [mCRL2](https://mcrl2.org) toolset in Rust. The main goal is demonstrate a correct implementation using mostly safe Rust, with a secondary goal to achieve similar performance to the C++ toolset. This goal is achieved by a combination of improved static analysis of the Rust compiler in combination with safe defaults. Furthermore, utilising features of the language to achieve safe apis.
+This repository contains a re-implementation of the core functionality of the [mCRL2](https://mcrl2.org) toolset in the Rust programming language. Its name is an acronym for "**m**CRL2 **e**xcept **R**eliable & **C**oncurrent", which should not be taken literal. The main goal is demonstrate a correct implementation using (mostly) safe Rust, with a secondary goal to achieve similar performance to the C++ toolset.
 
 ## Tools
 
-The tools directory contains prototypes to show the viability of this approach. The `mcrl3rewrite` tool can for example be executed using `cargo run --release --bin mcrl3rewrite`. Compiling the GUI tools, which requires feature `mcrl3-gui`, on Ubuntu requires `libfreetype-dev` and `libfontconfig1-dev` to be installed.
+The tools directory contains prototypes to show the viability of this approach. The `merc-rewrite` tool can for example be executed using `cargo run --release --bin merc-rewrite`. Compiling the GUI tools on Ubuntu requires both `libfreetype-dev` and `libfontconfig1-dev` to be installed.
 
 # Contributing
 
-Compilation requires at least rustc version 1.85.0 and we use 2024 edition rust. By default this will build in `dev` or debug mode, and a release build can be obtained by passing `--release`. Note that it is necessary to run `git submodule update` after switching branches or pulling from the remote whenever any of the modules have been changed. Source code documentation can be found at Github [pages](https://mlaveaux.github.io/mCRL3/mcrl3/index.html).
+Compilation requires at least rustc version 1.85.0 and we use 2024 edition rust. By default this will build in `dev` or debug mode, and a release build can be obtained by passing `--release`. Note that it is necessary to run `git submodule update` after switching branches or pulling from the remote whenever any of the modules have been changed. Source code documentation can be found at Github [pages](https://mlaveaux.github.io/merc/merc/index.html).
 
 # Testing
 
-Tests can be performed using `cargo test`, only tests of the Sabre crate can be executed with `cargo test -p mcrl3_sabre --lib` and `cargo test -- --no-capture` can be used to show the output of tests. Alternatively, an improved test runner called [nextest](https://nexte.st/) can be used with `cargo nextest run`. This can be installed using `cargo install cargo-nextest`. This test runner offers many improvements such as always showing output of failing tests, running more tests in parallel, and offer better error messages for segfaults. Some tests that are ignored by default require a larger stack size, which can be set using the environment variable `RUST_MIN_STACK`.
-
-## Fuzzing
-
-We use `libfuzzer` to also perform fuzzing in addition to using random tests and integration tests. This requires a nightly Rust compiler to be installed. Furthermore, it is necessary to acquire the `cargo fuzz` command using `cargo install cargo-fuzz`. Then, in the directory of a crate that has a `fuzz` directory, for example `crates/utilities`, we can run the fuzzing targets using `cargo +nightly fuzz run`. On Windows with MSVC it is important that `clang_rt.asan_dynamic-XXX.dll` can be found on the `PATH` since it used by the fuzzing targets.
+Tests can be performed using `cargo test`, only tests of the Sabre crate can be executed with `cargo test -p merc_sabre --lib` and `cargo test -- --no-capture` can be used to show the output of tests. Alternatively, an improved test runner called [nextest](https://nexte.st/) can be used with `cargo nextest run`. This can be installed using `cargo install cargo-nextest`. This test runner offers many improvements such as always showing output of failing tests, running more tests in parallel, and offer better error messages for segfaults. Some tests that are ignored by default require a larger stack size, which can be set using the environment variable `RUST_MIN_STACK`.
 
 ## LLVM Sanitizer
 
@@ -24,7 +20,7 @@ For Linux targets it is  possible to run the [LLVM address sanitizer](https://cl
 
 ## Additional checks and miri
 
-To check for additional undefined behaviour at runtime we can also employ the `cargo careful` [project](https://github.com/RalfJung/cargo-careful). It compiles the standard library in nightly with many additional checks for undefined behaviour. It can also be installed with `cargo install cargo-careful` and requires the nightly toolchain. Then it can be executed with `cargo +nightly careful nextest run --target=x86_64-unknown-linux-gnu` (or `test` when `nextest` has not been installed). There is also a feature `mcrl3_debug` that enables additional runtime checks. Furthermore, we test with `cargo miri` for unsafe code violations, this requires the `mcrl3_miri` feature to be enabled using `--features=mcrl3_miri`.
+To check for additional undefined behaviour at runtime we can also employ the `cargo careful` [project](https://github.com/RalfJung/cargo-careful). It compiles the standard library in nightly with many additional checks for undefined behaviour. It can also be installed with `cargo install cargo-careful` and requires the nightly toolchain. Then it can be executed with `cargo +nightly careful nextest run --target=x86_64-unknown-linux-gnu` (or `test` when `nextest` has not been installed). There is also a feature `merc_debug` that enables additional runtime checks. Furthermore, we test with `cargo miri` for unsafe code violations, this requires the `merc_miri` feature to be enabled using `--features=merc_miri`.
 
 ## Code Coverage
 
@@ -36,7 +32,7 @@ Micro-benchmarks can be executed using `cargo bench`. Additionally, we can also 
 
 ## Profiling
 
-The `mcrl3rewrite` tool can be build using the `release` compilation profile using `cargo build --release --bin mcrl3rewrite` after which the resulting executable `target/release/mcrl3rewrite` can be profiled using any standard executable profiler, such as `Intel VTune` or `perf`. This compilation profile contains debugging information to show where time is being spent, but the code is optimised the same as in a release configuration.
+The `merc-rewrite` tool can be build using the `release` compilation profile using `cargo build --release --bin merc-rewrite` after which the resulting executable `target/release/merc-rewrite` can be profiled using any standard executable profiler, such as `Intel VTune` or `perf`. This compilation profile contains debugging information to show where time is being spent, but the code is optimised the same as in a release configuration.
 
 Another useful technique for profiling is to generate a so-called `flamegraph`, which essentially takes the output of `perf` and produces a callgraph of time spent over time. These can be generated using the [flamegraph-rs](https://github.com/flamegraph-rs/flamegraph) tool, which can be acquired using `cargo install flamegraph`. Note that it relies on either `perf` or `dtrace` and as such is only supported on Linux and MacOS.
 
