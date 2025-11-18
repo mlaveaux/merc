@@ -1,6 +1,6 @@
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::Symbol;
-use mcrl3_aterm::Term;
+use merc_aterm::ATerm;
+use merc_aterm::Symbol;
+use merc_aterm::Term;
 
 fn main() {
     let term = {

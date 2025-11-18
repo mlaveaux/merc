@@ -1,8 +1,8 @@
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::Symbol;
-use mcrl3_aterm::Term;
+use merc_aterm::Protected;
+use merc_aterm::ATermRef;
+use merc_aterm::ATerm;
+use merc_aterm::Symbol;
+use merc_aterm::Term;
 
 fn main() {
     let mut container: Protected<Vec<ATermRef<'static>>> = Protected::new(Vec::new());
