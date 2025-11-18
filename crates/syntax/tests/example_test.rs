@@ -5,11 +5,11 @@ use std::path::Path;
 
 use test_case::test_case;
 
-use mcrl3_syntax::UntypedDataSpecification;
-use mcrl3_syntax::UntypedProcessSpecification;
-use mcrl3_syntax::UntypedStateFrmSpec;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::test_logger;
+use merc_syntax::UntypedDataSpecification;
+use merc_syntax::UntypedProcessSpecification;
+use merc_syntax::UntypedStateFrmSpec;
+use merc_utilities::MCRL3Error;
+use merc_utilities::test_logger;
 
 /// Creates a snapshot of the given object, in JSON format, in the snapshot directory. If the snapshot already exists then
 /// the JSON representation of the object is compared to the stored snapshot.

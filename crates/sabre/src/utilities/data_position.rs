@@ -3,8 +3,8 @@
 use std::collections::VecDeque;
 use std::fmt;
 
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
 
 use super::ExplicitPosition;
 

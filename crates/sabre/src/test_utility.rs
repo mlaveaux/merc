@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
 use ahash::AHashSet;
-use mcrl3_aterm::ATerm;
-use mcrl3_data::to_untyped_data_expression;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_data::to_untyped_data_expression;
+use merc_utilities::MCRL3Error;
 
 use crate::Rule;
 

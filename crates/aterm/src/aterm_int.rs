@@ -8,8 +8,8 @@ use std::ops::Deref;
 
 use delegate::delegate;
 
-use mcrl3_macros::mcrl3_derive_terms;
-use mcrl3_macros::mcrl3_term;
+use merc_macros::merc_derive_terms;
+use merc_macros::merc_term;
 
 use crate::ATerm;
 use crate::ATermArgs;
@@ -34,20 +34,20 @@ pub fn is_int_symbol<'a, 'b>(f: &'b impl Symb<'a, 'b>) -> bool {
     THREAD_TERM_POOL.with_borrow(|tp| *tp.int_symbol() == f.copy())
 }
 
-#[mcrl3_derive_terms]
+#[merc_derive_terms]
 mod inner {
-    use mcrl3_macros::mcrl3_ignore;
+    use merc_macros::merc_ignore;
 
     use super::*;
 
     /// This is a wrapper around the ATerm type that stores a single integer as annotation.
-    #[mcrl3_term(is_int_term)]
+    #[merc_term(is_int_term)]
     pub struct ATermInt {
         term: ATerm,
     }
 
     impl ATermInt {
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn new(value: usize) -> ATermInt {
             THREAD_TERM_POOL.with_borrow(|tp| ATermInt {
                 term: tp.create_int(value),
@@ -77,7 +77,7 @@ pub use inner::*;
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_utilities::test_logger;
+    use merc_utilities::test_logger;
 
     use super::*;
 

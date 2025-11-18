@@ -6,8 +6,8 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use log::info;
-use mcrl3_sharedmutex::RecursiveLockReadGuard;
-use mcrl3_unsafety::StablePointer;
+use merc_sharedmutex::RecursiveLockReadGuard;
+use merc_unsafety::StablePointer;
 use pest_consume::Parser;
 
 use crate::AGRESSIVE_GC;
@@ -26,10 +26,10 @@ use crate::aterm::ATerm;
 use crate::aterm::ATermRef;
 use crate::global_aterm_pool::GLOBAL_TERM_POOL;
 
-use mcrl3_sharedmutex::RecursiveLock;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::ProtectionIndex;
-use mcrl3_utilities::debug_trace;
+use merc_sharedmutex::RecursiveLock;
+use merc_utilities::MCRL3Error;
+use merc_utilities::ProtectionIndex;
+use merc_utilities::debug_trace;
 
 thread_local! {
     /// Thread-specific term pool that manages protection sets.
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_thread_local_protection() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         thread::scope(|scope| {
             for _ in 0..3 {
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_parsing() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let t = ATerm::from_string("f(g(a),b)").unwrap();
 
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_create_term() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let f = Symbol::new("f", 2);
         let g = Symbol::new("g", 1);

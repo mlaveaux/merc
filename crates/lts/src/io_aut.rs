@@ -10,9 +10,9 @@ use regex::Regex;
 use streaming_iterator::StreamingIterator;
 use thiserror::Error;
 
-use mcrl3_io::LineIterator;
-use mcrl3_io::Progress;
-use mcrl3_utilities::MCRL3Error;
+use merc_io::LineIterator;
+use merc_io::Progress;
+use merc_utilities::MCRL3Error;
 
 use crate::LTS;
 use crate::LabelIndex;

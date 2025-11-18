@@ -15,14 +15,14 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 
-use mcrl3_io::BitStreamRead;
-use mcrl3_io::BitStreamReader;
-use mcrl3_io::BitStreamWrite;
-use mcrl3_io::BitStreamWriter;
-use mcrl3_number::bits_for_value;
-use mcrl3_utilities::IndexedSet;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::debug_trace;
+use merc_io::BitStreamRead;
+use merc_io::BitStreamReader;
+use merc_io::BitStreamWrite;
+use merc_io::BitStreamWriter;
+use merc_number::bits_for_value;
+use merc_utilities::IndexedSet;
+use merc_utilities::MCRL3Error;
+use merc_utilities::debug_trace;
 
 use crate::ATerm;
 use crate::ATermInt;
@@ -571,7 +571,7 @@ impl<'a, R: Read> ExactSizeIterator for ATermReadIter<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     use crate::random_term;
 

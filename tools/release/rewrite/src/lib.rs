@@ -3,14 +3,18 @@ use std::time::Instant;
 
 use clap::ValueEnum;
 
-use mcrl3_data::to_untyped_data_expression;
-use mcrl3_rec_tests::load_rec_from_file;
-use mcrl3_sabre::InnermostRewriter;
-use mcrl3_sabre::NaiveRewriter;
-use mcrl3_sabre::RewriteEngine;
-use mcrl3_sabre::SabreRewriter;
-use mcrl3_sabre_compiling::SabreCompilingRewriter;
-use mcrl3_utilities::MCRL3Error;
+use merc_data::to_untyped_data_expression;
+use merc_rec_tests::load_rec_from_file;
+use merc_sabre::InnermostRewriter;
+use merc_sabre::NaiveRewriter;
+use merc_sabre::RewriteEngine;
+use merc_sabre::SabreRewriter;
+use merc_sabre_compiling::SabreCompilingRewriter;
+use merc_utilities::MCRL3Error;
+
+mod trs_format;
+
+pub use trs_format::*;
 
 /// Selects the rewriter to use.
 #[derive(ValueEnum, Debug, Clone)]

@@ -8,20 +8,20 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
-use mcrl3_gui::verbosity::VerbosityFlag;
-use mcrl3_ldd::Storage;
-use mcrl3_lts::LTS;
-use mcrl3_lts::read_aut;
-use mcrl3_lts::read_lts;
-use mcrl3_lts::write_aut;
-use mcrl3_reduction::reduce;
+use merc_gui::verbosity::VerbosityFlag;
+use merc_ldd::Storage;
+use merc_lts::LTS;
+use merc_lts::read_aut;
+use merc_lts::read_lts;
+use merc_lts::write_aut;
+use merc_reduction::reduce;
 
-use mcrl3_reduction::Equivalence;
-use mcrl3_symbolic::read_symbolic_lts;
-use mcrl3_unsafety::print_allocator_metrics;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::Timing;
-use mcrl3_version::Version;
+use merc_reduction::Equivalence;
+use merc_symbolic::read_symbolic_lts;
+use merc_unsafety::print_allocator_metrics;
+use merc_utilities::MCRL3Error;
+use merc_utilities::Timing;
+use merc_version::Version;
 
 #[derive(clap::Parser, Debug)]
 #[command(name = "Maurice Laveaux", about = "A command line rewriting tool")]
@@ -105,7 +105,7 @@ fn main() -> Result<ExitCode, MCRL3Error> {
                 } else if path.extension() == Some(OsStr::new("sym")) {
                     let mut storage = Storage::new();
                     let lts = read_symbolic_lts(&file, &mut storage)?;
-                    println!("Number of states: {}", mcrl3_ldd::len(&mut storage, lts.states()))
+                    println!("Number of states: {}", merc_ldd::len(&mut storage, lts.states()))
                 } else {
                     return Err("Unsupported LTS file format.".into());
                 }

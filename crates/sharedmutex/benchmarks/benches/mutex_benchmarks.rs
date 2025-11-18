@@ -1,6 +1,6 @@
 use criterion::Criterion;
 
-use mcrl3_sharedmutex::BfSharedMutex;
+use merc_sharedmutex::BfSharedMutex;
 
 use benchmarks_sharedmutex::NUM_ITERATIONS;
 use benchmarks_sharedmutex::READ_RATIOS;

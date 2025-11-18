@@ -3,9 +3,9 @@
 use std::fmt;
 
 use itertools::Itertools;
-use mcrl3_data::DataVariable;
-use mcrl3_data::DataVariableRef;
-use mcrl3_data::is_data_variable;
+use merc_data::DataVariable;
+use merc_data::DataVariableRef;
+use merc_data::is_data_variable;
 
 use crate::Rule;
 use crate::utilities::DataPosition;
@@ -90,8 +90,8 @@ impl fmt::Display for EquivalenceClass {
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_data::DataExpression;
-    use mcrl3_data::DataVariable;
+    use merc_data::DataExpression;
+    use merc_data::DataVariable;
 
     use crate::test_utility::create_rewrite_rule;
 

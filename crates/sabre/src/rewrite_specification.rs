@@ -3,7 +3,7 @@
 use std::fmt;
 
 use itertools::Itertools;
-use mcrl3_data::DataExpression;
+use merc_data::DataExpression;
 
 /// A rewrite specification contains the rewrite rules.
 #[derive(Debug, Default, Clone)]

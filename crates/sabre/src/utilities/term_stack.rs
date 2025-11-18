@@ -2,22 +2,22 @@ use std::fmt;
 
 use ahash::HashMap;
 use ahash::HashMapExt;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::Markable;
-use mcrl3_aterm::Marker;
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::SymbolRef;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::Transmutable;
-use mcrl3_data::DataApplication;
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
-use mcrl3_data::DataFunctionSymbolRef;
-use mcrl3_data::DataVariable;
-use mcrl3_data::DataVariableRef;
-use mcrl3_data::is_data_machine_number;
-use mcrl3_data::is_data_variable;
-use mcrl3_utilities::debug_trace;
+use merc_aterm::ATermRef;
+use merc_aterm::Markable;
+use merc_aterm::Marker;
+use merc_aterm::Protected;
+use merc_aterm::SymbolRef;
+use merc_aterm::Term;
+use merc_aterm::Transmutable;
+use merc_data::DataApplication;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
+use merc_data::DataFunctionSymbolRef;
+use merc_data::DataVariable;
+use merc_data::DataVariableRef;
+use merc_data::is_data_machine_number;
+use merc_data::is_data_variable;
+use merc_utilities::debug_trace;
 
 use crate::Rule;
 use crate::utilities::InnermostStack;
@@ -309,8 +309,8 @@ mod tests {
     use super::*;
 
     use ahash::AHashSet;
-    use mcrl3_data::DataFunctionSymbol;
-    use mcrl3_utilities::test_logger;
+    use merc_data::DataFunctionSymbol;
+    use merc_utilities::test_logger;
 
     use crate::test_utility::create_rewrite_rule;
 

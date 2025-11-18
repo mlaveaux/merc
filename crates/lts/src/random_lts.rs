@@ -53,7 +53,7 @@ mod tests {
 
     use test_log::test;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     #[test]
     fn random_lts_test() {

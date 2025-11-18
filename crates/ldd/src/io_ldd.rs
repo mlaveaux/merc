@@ -9,13 +9,13 @@
 
 use std::cell::RefCell;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermRead;
-use mcrl3_io::BitStreamRead;
-use mcrl3_io::BitStreamWrite;
-use mcrl3_number::bits_for_value;
-use mcrl3_utilities::IndexedSet;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_aterm::ATermRead;
+use merc_io::BitStreamRead;
+use merc_io::BitStreamWrite;
+use merc_number::bits_for_value;
+use merc_utilities::IndexedSet;
+use merc_utilities::MCRL3Error;
 
 use crate::Data;
 use crate::Ldd;
@@ -180,9 +180,9 @@ impl<R: BitStreamRead> BitStreamRead for BinaryLddReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_io::BitStreamReader;
-    use mcrl3_io::BitStreamWriter;
-    use mcrl3_utilities::random_test;
+    use merc_io::BitStreamReader;
+    use merc_io::BitStreamWriter;
+    use merc_utilities::random_test;
 
     use crate::test_utility::from_iter;
     use crate::test_utility::random_vector_set;

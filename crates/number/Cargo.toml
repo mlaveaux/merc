@@ -1,12 +1,12 @@
 [package]
-name = "mcrl3_number"
+name = "merc_number"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-mcrl3_utilities.workspace = true
+merc_utilities.workspace = true
 
 rand.workspace = true
 bitstream-io.workspace = true

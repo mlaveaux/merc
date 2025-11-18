@@ -7,25 +7,25 @@ use std::ops::Deref;
 use ahash::AHashSet;
 use delegate::delegate;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermArgs;
-use mcrl3_aterm::ATermIndex;
-use mcrl3_aterm::ATermInt;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::ATermString;
-use mcrl3_aterm::Markable;
-use mcrl3_aterm::Marker;
-use mcrl3_aterm::Symb;
-use mcrl3_aterm::SymbolRef;
-use mcrl3_aterm::THREAD_TERM_POOL;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::TermBuilder;
-use mcrl3_aterm::TermIterator;
-use mcrl3_aterm::Transmutable;
-use mcrl3_aterm::Yield;
-use mcrl3_macros::mcrl3_derive_terms;
-use mcrl3_macros::mcrl3_ignore;
-use mcrl3_macros::mcrl3_term;
+use merc_aterm::ATerm;
+use merc_aterm::ATermArgs;
+use merc_aterm::ATermIndex;
+use merc_aterm::ATermInt;
+use merc_aterm::ATermRef;
+use merc_aterm::ATermString;
+use merc_aterm::Markable;
+use merc_aterm::Marker;
+use merc_aterm::Symb;
+use merc_aterm::SymbolRef;
+use merc_aterm::THREAD_TERM_POOL;
+use merc_aterm::Term;
+use merc_aterm::TermBuilder;
+use merc_aterm::TermIterator;
+use merc_aterm::Transmutable;
+use merc_aterm::Yield;
+use merc_macros::merc_derive_terms;
+use merc_macros::merc_ignore;
+use merc_macros::merc_term;
 
 use crate::DATA_SYMBOLS;
 use crate::SortExpression;
@@ -37,13 +37,13 @@ use crate::is_data_machine_number;
 use crate::is_data_variable;
 
 // This module is only used internally to run the proc macro.
-#[mcrl3_derive_terms]
+#[merc_derive_terms]
 mod inner {
 
     use std::iter;
 
-    use mcrl3_aterm::ATermStringRef;
-    use mcrl3_utilities::MCRL3Error;
+    use merc_aterm::ATermStringRef;
+    use merc_utilities::MCRL3Error;
 
     use super::*;
 
@@ -59,7 +59,7 @@ mod inner {
     ///     - set enumeration
     ///     - bag enumeration
     ///
-    #[mcrl3_term(is_data_expression)]
+    #[merc_term(is_data_expression)]
     pub struct DataExpression {
         term: ATerm,
     }
@@ -81,7 +81,7 @@ mod inner {
         /// Returns the arguments of a data expression
         ///     - function symbol                  f -> []
         ///     - application       f(t_0, ..., t_n) -> [t_0, ..., t_n]
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn data_arguments(&self) -> impl ExactSizeIterator<Item = DataExpressionRef<'_>> + use<'_> {
             let mut result = self.term.arguments();
             if is_data_application(&self.term) {
@@ -97,7 +97,7 @@ mod inner {
         }
 
         /// Creates a closed [DataExpression] from a string, i.e., has no free variables.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn from_string(text: &str) -> Result<DataExpression, MCRL3Error> {
             let term = ATerm::from_string(text)?;
 
@@ -105,7 +105,7 @@ mod inner {
         }
 
         /// Creates a [DataExpression] from a string with free untyped variables indicated by the set of names.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn from_string_untyped(text: &str, variables: &AHashSet<String>) -> Result<DataExpression, MCRL3Error> {
             let term = ATerm::from_string(text)?;
 
@@ -113,7 +113,7 @@ mod inner {
         }
 
         /// Returns the ith argument of a data application.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn data_arg(&self, index: usize) -> DataExpressionRef<'_> {
             debug_assert!(is_data_application(self), "Term {self:?} is not a data application");
             debug_assert!(
@@ -154,13 +154,13 @@ mod inner {
         }
     }
 
-    #[mcrl3_term(is_data_function_symbol)]
+    #[merc_term(is_data_function_symbol)]
     pub struct DataFunctionSymbol {
         term: ATerm,
     }
 
     impl DataFunctionSymbol {
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn new(name: impl Into<String> + AsRef<str>) -> DataFunctionSymbol {
             DATA_SYMBOLS.with_borrow(|ds| DataFunctionSymbol {
                 term: ATerm::with_args(
@@ -196,14 +196,14 @@ mod inner {
         }
     }
 
-    #[mcrl3_term(is_data_variable)]
+    #[merc_term(is_data_variable)]
     pub struct DataVariable {
         term: ATerm,
     }
 
     impl DataVariable {
         /// Create a new untyped variable with the given name.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn new(name: impl Into<ATermString>) -> DataVariable {
             DATA_SYMBOLS.with_borrow(|ds| {
                 // TODO: Storing terms temporarily is not optimal.
@@ -247,14 +247,14 @@ mod inner {
         }
     }
 
-    #[mcrl3_term(is_data_application)]
+    #[merc_term(is_data_application)]
     pub struct DataApplication {
         term: ATerm,
     }
 
     impl DataApplication {
         /// Create a new data application with the given head and arguments.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn with_args<'a, 'b>(head: &'b impl Term<'a, 'b>, arguments: &'b [impl Term<'a, 'b>]) -> DataApplication {
             DATA_SYMBOLS.with_borrow_mut(|ds| {
                 let symbol = ds.get_data_application_symbol(arguments.len() + 1).copy();
@@ -269,7 +269,7 @@ mod inner {
         /// Create a new data application with the given head and arguments.
         ///
         /// arity must be equal to the number of arguments + 1.
-        #[mcrl3_ignore]
+        #[merc_ignore]
         pub fn with_iter<'a, 'b, 'c, 'd, T, I>(
             head: &'b impl Term<'a, 'b>,
             arity: usize,
@@ -341,7 +341,7 @@ mod inner {
         }
     }
 
-    #[mcrl3_term(is_data_machine_number)]
+    #[merc_term(is_data_machine_number)]
     struct MachineNumber {
         pub term: ATerm,
     }
@@ -360,42 +360,42 @@ mod inner {
     }
 
     /// Conversions to `DataExpression`
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl From<DataFunctionSymbol> for DataExpression {
         fn from(value: DataFunctionSymbol) -> Self {
             value.term.into()
         }
     }
 
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl From<DataApplication> for DataExpression {
         fn from(value: DataApplication) -> Self {
             value.term.into()
         }
     }
 
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl From<DataVariable> for DataExpression {
         fn from(value: DataVariable) -> Self {
             value.term.into()
         }
     }
 
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl From<DataExpression> for DataFunctionSymbol {
         fn from(value: DataExpression) -> Self {
             value.term.into()
         }
     }
 
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl From<DataExpression> for DataVariable {
         fn from(value: DataExpression) -> Self {
             value.term.into()
         }
     }
 
-    #[mcrl3_ignore]
+    #[merc_ignore]
     impl<'a> From<DataExpressionRef<'a>> for DataVariableRef<'a> {
         fn from(value: DataExpressionRef<'a>) -> Self {
             value.term.into()
@@ -471,11 +471,11 @@ pub fn to_untyped_data_expression(t: &ATerm, variables: Option<&AHashSet<String>
 mod tests {
     use super::*;
 
-    use mcrl3_aterm::ATerm;
+    use merc_aterm::ATerm;
 
     #[test]
     fn test_print() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let a = DataFunctionSymbol::new("a");
         assert_eq!("a", format!("{}", a));

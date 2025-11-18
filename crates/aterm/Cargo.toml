@@ -1,21 +1,21 @@
 [package]
-name = "mcrl3_aterm"
+name = "merc_aterm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [features]
-# The `mcrl3_debug` feature is used to enable additional run-time checks.
-mcrl3_debug = ["parking_lot/deadlock_detection"]
+# The `merc_debug` feature is used to enable additional run-time checks.
+merc_debug = ["parking_lot/deadlock_detection"]
 
 [dependencies]
-mcrl3_io.workspace = true
-mcrl3_macros.workspace = true
-mcrl3_number.workspace = true
-mcrl3_sharedmutex.workspace = true
-mcrl3_unsafety.workspace = true
-mcrl3_utilities.workspace = true
+merc_io.workspace = true
+merc_macros.workspace = true
+merc_number.workspace = true
+merc_sharedmutex.workspace = true
+merc_unsafety.workspace = true
+merc_utilities.workspace = true
 
 ahash.workspace = true
 allocator-api2.workspace = true

@@ -3,7 +3,7 @@ use std::hash::RandomState;
 use std::hash::Hash;
 
 use dashmap::Equivalent;
-use mcrl3_unsafety::{AllocBlock, BlockAllocator, StablePointer, StablePointerSet};
+use merc_unsafety::{AllocBlock, BlockAllocator, StablePointer, StablePointerSet};
 use rustc_hash::FxBuildHasher;
 
 use crate::{ATerm, ATermIndex, SharedTerm, SymbolRef};

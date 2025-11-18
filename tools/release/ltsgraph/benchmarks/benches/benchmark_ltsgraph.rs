@@ -3,10 +3,10 @@ use std::sync::Arc;
 use criterion::Criterion;
 use criterion::criterion_group;
 use criterion::criterion_main;
-use mcrl3_lts::read_aut;
-use mcrl3_ltsgraph_lib::GraphLayout;
-use mcrl3_ltsgraph_lib::SkiaRenderer;
-use mcrl3_ltsgraph_lib::Viewer;
+use merc_lts::read_aut;
+use merc_ltsgraph_lib::GraphLayout;
+use merc_ltsgraph_lib::SkiaRenderer;
+use merc_ltsgraph_lib::Viewer;
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 

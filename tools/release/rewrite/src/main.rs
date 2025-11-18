@@ -3,16 +3,17 @@ use std::io::Write;
 use std::process::ExitCode;
 
 use clap::Parser;
-
 use clap::Subcommand;
-use mcrl3_gui::verbosity::VerbosityFlag;
-use mcrl3_rec_tests::load_rec_from_file;
-use mcrl3_unsafety::print_allocator_metrics;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_version::Version;
-use mcrl3rewrite::Rewriter;
-use mcrl3rewrite::rewrite_rec;
-use trs_format::TrsFormatter;
+
+use merc_gui::verbosity::VerbosityFlag;
+use merc_rec_tests::load_rec_from_file;
+use merc_unsafety::print_allocator_metrics;
+use merc_utilities::MCRL3Error;
+use merc_version::Version;
+
+use merc_rewrite::TrsFormatter;
+use merc_rewrite::Rewriter;
+use merc_rewrite::rewrite_rec;
 
 mod trs_format;
 

@@ -6,12 +6,12 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use indoc::indoc;
-use mcrl3_sabre::AnnouncementInnermost;
-use mcrl3_sabre::RewriteSpecification;
-use mcrl3_sabre::SetAutomaton;
-use mcrl3_sabre::utilities::DataPosition;
-use mcrl3_sabre::utilities::TermStack;
-use mcrl3_utilities::MCRL3Error;
+use merc_sabre::AnnouncementInnermost;
+use merc_sabre::RewriteSpecification;
+use merc_sabre::SetAutomaton;
+use merc_sabre::utilities::DataPosition;
+use merc_sabre::utilities::TermStack;
+use merc_utilities::MCRL3Error;
 
 use crate::indenter::IndentFormatter;
 
@@ -34,8 +34,8 @@ pub fn generate(spec: &RewriteSpecification, source_dir: &Path) -> Result<(), MC
     // Write imports and the main rewrite function
     writeln!(
         &mut formatter,
-        indoc! {"use mcrl3_sabre_ffi::DataExpressionFFI;
-        use mcrl3_sabre_ffi::DataExpressionRefFFI;
+        indoc! {"use merc_sabre_ffi::DataExpressionFFI;
+        use merc_sabre_ffi::DataExpressionRefFFI;
 
         /// Generic rewrite function
         #[unsafe(no_mangle)]

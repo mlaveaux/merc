@@ -7,14 +7,14 @@ use criterion::criterion_main;
 use rand::Rng;
 use rand::prelude::IteratorRandom;
 
-use mcrl3_ldd::Ldd;
-use mcrl3_ldd::Storage;
-use mcrl3_ldd::Value;
-use mcrl3_ldd::compute_meta;
-use mcrl3_ldd::minus;
-use mcrl3_ldd::relational_product;
-use mcrl3_ldd::singleton;
-use mcrl3_ldd::union;
+use merc_ldd::Ldd;
+use merc_ldd::Storage;
+use merc_ldd::Value;
+use merc_ldd::compute_meta;
+use merc_ldd::minus;
+use merc_ldd::relational_product;
+use merc_ldd::singleton;
+use merc_ldd::union;
 
 /// Returns a vector of the given length with random u64 values (from 0..max_value).
 pub fn random_vector(rng: &mut impl Rng, length: usize, max_value: Value) -> Vec<Value> {

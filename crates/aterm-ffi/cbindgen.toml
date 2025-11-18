@@ -9,7 +9,7 @@
 language = "C++"
 
 # The namespace to use
-namespaces = ["mcrl3", "ffi"]
+namespaces = ["merc", "ffi"]
 
 # Use include guards.
 include_guard = "MCRL3_FFI_H"

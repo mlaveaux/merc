@@ -1,8 +1,8 @@
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermRead;
-use mcrl3_aterm::ATermStreamable;
-use mcrl3_aterm::ATermWrite;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_aterm::ATermRead;
+use merc_aterm::ATermStreamable;
+use merc_aterm::ATermWrite;
+use merc_utilities::MCRL3Error;
 
 /// TODO: Not yet useful, but can be used to read the data specification from a binary stream.
 pub struct DataSpecification {}

@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 
-use mcrl3_utilities::MCRL3Error;
+use merc_utilities::MCRL3Error;
 
 /// A thread that can be paused and stopped.
 pub struct PauseableThread {

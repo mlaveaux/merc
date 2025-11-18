@@ -1,6 +1,6 @@
 use log::trace;
-use mcrl3_utilities::DisplayPair;
-use mcrl3_utilities::MCRL3Error;
+use merc_utilities::DisplayPair;
+use merc_utilities::MCRL3Error;
 use pest::Parser;
 use pest_consume::Error;
 use pest_derive::Parser;

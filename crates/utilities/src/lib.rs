@@ -1,6 +1,6 @@
 //! Utility types and functions for the mCRL3 toolset.
 //!
-//! Forbid unsafe code in this crate. If unsafe code is needed it should be in the `mcrl3_unsafety` crate.
+//! Forbid unsafe code in this crate. If unsafe code is needed it should be in the `merc_unsafety` crate.
 #![forbid(unsafe_code)]
 
 #[macro_use]

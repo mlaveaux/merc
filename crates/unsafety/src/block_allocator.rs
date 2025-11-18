@@ -195,7 +195,7 @@ mod tests {
 
     use rand::Rng;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     #[test]
     fn test_block_allocator() {

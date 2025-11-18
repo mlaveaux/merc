@@ -1,17 +1,17 @@
 use std::io::Read;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermList;
-use mcrl3_aterm::ATermRead;
-use mcrl3_aterm::ATermStreamable;
-use mcrl3_aterm::BinaryATermReader;
-use mcrl3_aterm::Symbol;
-use mcrl3_data::DataSpecification;
-use mcrl3_io::BitStreamRead;
-use mcrl3_ldd::BinaryLddReader;
-use mcrl3_ldd::Ldd;
-use mcrl3_ldd::Storage;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_aterm::ATermList;
+use merc_aterm::ATermRead;
+use merc_aterm::ATermStreamable;
+use merc_aterm::BinaryATermReader;
+use merc_aterm::Symbol;
+use merc_data::DataSpecification;
+use merc_io::BitStreamRead;
+use merc_ldd::BinaryLddReader;
+use merc_ldd::Ldd;
+use merc_ldd::Storage;
+use merc_utilities::MCRL3Error;
 
 /// Represents a symbolic LTS encoded by a disjunctive transition relation and a set of states.
 pub struct SymbolicLts {

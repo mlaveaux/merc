@@ -316,8 +316,8 @@ mod tests {
     use rand::prelude::*;
     use std::hint::black_box;
 
-    use mcrl3_utilities::random_test_threads;
-    use mcrl3_utilities::test_threads;
+    use merc_utilities::random_test_threads;
+    use merc_utilities::test_threads;
 
     // These are just simple tests.
     #[test]

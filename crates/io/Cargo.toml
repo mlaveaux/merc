@@ -1,13 +1,13 @@
 [package]
-name = "mcrl3_io"
+name = "merc_io"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-mcrl3_number.workspace = true
-mcrl3_utilities.workspace = true
+merc_number.workspace = true
+merc_utilities.workspace = true
 
 arbitrary.workspace = true
 arbtest.workspace = true

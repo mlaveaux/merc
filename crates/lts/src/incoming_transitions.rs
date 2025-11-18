@@ -1,6 +1,6 @@
-use mcrl3_utilities::ByteCompressedVec;
-use mcrl3_utilities::CompressedEntry;
-use mcrl3_utilities::bytevec;
+use merc_utilities::ByteCompressedVec;
+use merc_utilities::CompressedEntry;
+use merc_utilities::bytevec;
 
 use crate::LTS;
 use crate::LabelIndex;
@@ -138,7 +138,7 @@ mod tests {
     use super::*;
 
     use log::trace;
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     use crate::random_lts;
 

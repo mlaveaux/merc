@@ -8,10 +8,10 @@ use std::ptr::NonNull;
 use std::ptr::slice_from_raw_parts_mut;
 
 use equivalent::Equivalent;
-use mcrl3_unsafety::Erasable;
-use mcrl3_unsafety::ErasedPtr;
-use mcrl3_unsafety::SliceDst;
-use mcrl3_unsafety::repr_c;
+use merc_unsafety::Erasable;
+use merc_unsafety::ErasedPtr;
+use merc_unsafety::SliceDst;
+use merc_unsafety::repr_c;
 
 use crate::ATermRef;
 use crate::Symb;
@@ -224,7 +224,7 @@ impl Hash for SharedTermLookup<'_> {
 #[cfg(test)]
 mod tests {
     use allocator_api2::alloc::Global;
-    use mcrl3_unsafety::AllocatorDst;
+    use merc_unsafety::AllocatorDst;
 
     use crate::ATerm;
     use crate::Symbol;

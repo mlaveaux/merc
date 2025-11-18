@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::ThreadTermPool;
+use merc_aterm::ATerm;
+use merc_aterm::ATermRef;
+use merc_aterm::Protected;
+use merc_aterm::Term;
+use merc_aterm::ThreadTermPool;
 
 pub type SubstitutionBuilder = Protected<Vec<ATermRef<'static>>>;
 
@@ -81,7 +81,7 @@ fn substitute_rec<'a, 'b>(
 mod tests {
     use super::*;
 
-    use mcrl3_aterm::THREAD_TERM_POOL;
+    use merc_aterm::THREAD_TERM_POOL;
 
     use crate::utilities::ExplicitPosition;
     use crate::utilities::PositionIndexed;

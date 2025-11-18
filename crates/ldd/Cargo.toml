@@ -1,5 +1,5 @@
 [package]
-name = "mcrl3_ldd"
+name = "merc_ldd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,10 +8,10 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mcrl3_aterm.workspace = true
-mcrl3_io.workspace = true
-mcrl3_number.workspace = true
-mcrl3_utilities.workspace = true
+merc_aterm.workspace = true
+merc_io.workspace = true
+merc_number.workspace = true
+merc_utilities.workspace = true
 
 ahash.workspace = true
 delegate.workspace = true

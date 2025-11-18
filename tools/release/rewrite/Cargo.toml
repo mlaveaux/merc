@@ -1,20 +1,22 @@
 [package]
-name = "merc-ltsinfo"
+name = "merc-rewrite"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+merc_aterm.workspace = true
+merc_data.workspace = true
 merc_gui.workspace = true
-merc_ldd.workspace = true
-merc_lts.workspace = true
-merc_reduction.workspace = true
-merc_symbolic.workspace = true
+merc_rec-tests.workspace = true
+merc_sabre-compiling.workspace = true
+merc_sabre.workspace = true
 merc_unsafety.workspace = true
 merc_utilities.workspace = true
 merc_version.workspace = true
 
+ahash.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true

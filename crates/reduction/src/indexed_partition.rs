@@ -1,6 +1,6 @@
 use std::fmt;
 
-use mcrl3_lts::StateIndex;
+use merc_lts::StateIndex;
 
 use crate::BlockIndex;
 use crate::Partition;

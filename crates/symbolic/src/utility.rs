@@ -1,5 +1,5 @@
-use mcrl3_ldd::Ldd;
-use mcrl3_ldd::Storage;
+use merc_ldd::Ldd;
+use merc_ldd::Storage;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 

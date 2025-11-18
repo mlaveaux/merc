@@ -12,17 +12,17 @@ use std::time::Instant;
 
 use log::debug;
 use log::info;
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermInt;
-use mcrl3_aterm::ATermRead;
-use mcrl3_aterm::ATermStreamable;
-use mcrl3_aterm::BinaryATermReader;
-use mcrl3_aterm::Symbol;
-use mcrl3_aterm::is_list_term;
-use mcrl3_data::DataSpecification;
-use mcrl3_io::TimeProgress;
-use mcrl3_utilities::IndexedSet;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_aterm::ATermInt;
+use merc_aterm::ATermRead;
+use merc_aterm::ATermStreamable;
+use merc_aterm::BinaryATermReader;
+use merc_aterm::Symbol;
+use merc_aterm::is_list_term;
+use merc_data::DataSpecification;
+use merc_io::TimeProgress;
+use merc_utilities::IndexedSet;
+use merc_utilities::MCRL3Error;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;

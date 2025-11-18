@@ -1,7 +1,7 @@
 use std::fmt;
 
-use mcrl3_lts::IncomingTransitions;
-use mcrl3_lts::StateIndex;
+use merc_lts::IncomingTransitions;
+use merc_lts::StateIndex;
 
 use crate::BlockIndex;
 

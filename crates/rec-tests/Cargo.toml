@@ -1,5 +1,5 @@
 [package]
-name = "mcrl3_rec-tests"
+name = "merc_rec-tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,10 +13,10 @@ pest_derive.workspace = true
 pest.workspace = true
 ahash.workspace = true
 
-mcrl3_aterm.workspace = true
-mcrl3_data.workspace = true
-mcrl3_sabre.workspace = true
-mcrl3_utilities.workspace = true
+merc_aterm.workspace = true
+merc_data.workspace = true
+merc_sabre.workspace = true
+merc_utilities.workspace = true
 
 
 [dev-dependencies]

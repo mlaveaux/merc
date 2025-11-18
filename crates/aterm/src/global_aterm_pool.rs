@@ -6,16 +6,16 @@ use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
 
 use log::info;
-use mcrl3_sharedmutex::GlobalBfSharedMutex;
-use mcrl3_sharedmutex::RecursiveLockReadGuard;
-use mcrl3_unsafety::StablePointer;
-use mcrl3_utilities::LargeFormatter;
+use merc_sharedmutex::GlobalBfSharedMutex;
+use merc_sharedmutex::RecursiveLockReadGuard;
+use merc_unsafety::StablePointer;
+use merc_utilities::LargeFormatter;
 use rustc_hash::FxBuildHasher;
 
-use mcrl3_unsafety::StablePointerSet;
-use mcrl3_utilities::ProtectionSet;
-use mcrl3_utilities::SimpleTimer;
-use mcrl3_utilities::debug_trace;
+use merc_unsafety::StablePointerSet;
+use merc_utilities::ProtectionSet;
+use merc_utilities::SimpleTimer;
+use merc_utilities::debug_trace;
 
 use crate::ATermIndex;
 use crate::ATermRef;
@@ -452,7 +452,7 @@ impl Marker<'_> {
 mod tests {
     use std::collections::HashMap;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
 

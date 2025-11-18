@@ -13,7 +13,7 @@ use std::fs::create_dir_all;
 /// This function performs the following operations:
 /// 1. Runs `cargo build --release` to build optimized binaries
 /// 2. Creates a 'package' directory in the workspace root
-/// 3. Copies the binaries ltsgraph, ltsinfo, and mcrl3rewrite to the package directory
+/// 3. Copies the binaries ltsgraph, ltsinfo, and mercrewrite to the package directory
 ///
 /// The design choice to use a dedicated package directory ensures clean separation
 /// of packaged artifacts from build artifacts, making distribution easier.
@@ -42,7 +42,7 @@ pub fn package() -> Result<(), Box<dyn Error>> {
     println!("=== Copying binaries to package directory ===");
 
     // Binary names to package - these are the core tools for distribution
-    let binary_names = ["ltsgraph", "ltsinfo", "mcrl3rewrite"];
+    let binary_names = ["ltsgraph", "ltsinfo", "mercrewrite"];
     let target_release_dir = workspace_root.join("target").join("release");
 
     // Copy each binary with appropriate extension for Windows

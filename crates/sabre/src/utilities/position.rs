@@ -4,9 +4,9 @@
 use core::fmt;
 use std::collections::VecDeque;
 
-use mcrl3_aterm::ATermRef;
+use merc_aterm::ATermRef;
 
-use mcrl3_aterm::Term;
+use merc_aterm::Term;
 use smallvec::SmallVec;
 use smallvec::smallvec;
 
@@ -150,7 +150,7 @@ impl<'a> Iterator for PositionIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_aterm::ATerm;
+    use merc_aterm::ATerm;
 
     use super::*;
 

@@ -2,9 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::THREAD_TERM_POOL;
-use mcrl3_utilities::MCRL3Error;
+use merc_aterm::ATerm;
+use merc_aterm::THREAD_TERM_POOL;
+use merc_utilities::MCRL3Error;
 use pest::Parser;
 use pest_consume::Error;
 use pest_consume::Node;

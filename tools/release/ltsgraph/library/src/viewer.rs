@@ -3,9 +3,9 @@ use std::sync::Arc;
 use glam::Mat3;
 use glam::Vec3;
 
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelledTransitionSystem;
-use mcrl3_lts::StateIndex;
+use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::StateIndex;
 
 use crate::graph_layout::GraphLayout;
 

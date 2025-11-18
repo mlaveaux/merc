@@ -1,15 +1,15 @@
-use mcrl3_utilities::test_logger;
+use merc_utilities::test_logger;
 use test_case::test_case;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_data::DataExpression;
-use mcrl3_data::to_untyped_data_expression;
-use mcrl3_rec_tests::load_rec_from_strings;
-use mcrl3_sabre::InnermostRewriter;
-use mcrl3_sabre::NaiveRewriter;
-use mcrl3_sabre::RewriteEngine;
-use mcrl3_sabre::RewriteSpecification;
-use mcrl3_sabre::SabreRewriter;
+use merc_aterm::ATerm;
+use merc_data::DataExpression;
+use merc_data::to_untyped_data_expression;
+use merc_rec_tests::load_rec_from_strings;
+use merc_sabre::InnermostRewriter;
+use merc_sabre::NaiveRewriter;
+use merc_sabre::RewriteEngine;
+use merc_sabre::RewriteSpecification;
+use merc_sabre::SabreRewriter;
 
 /// A local function to share the rec_test functionality.
 fn rec_test(rec_files: Vec<&str>, expected_result: &str) {

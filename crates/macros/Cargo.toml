@@ -1,5 +1,5 @@
 [package]
-name = "mcrl3_macros"
+name = "merc_macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

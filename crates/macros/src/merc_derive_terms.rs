@@ -7,9 +7,9 @@ use syn::Item;
 use syn::ItemMod;
 use syn::parse_quote;
 
-pub(crate) fn mcrl3_derive_terms_impl(_attributes: TokenStream, input: TokenStream) -> TokenStream {
+pub(crate) fn merc_derive_terms_impl(_attributes: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
-    let mut ast: ItemMod = syn::parse2(input.clone()).expect("mcrl3_term can only be applied to a module");
+    let mut ast: ItemMod = syn::parse2(input.clone()).expect("merc_term can only be applied to a module");
 
     if let Some((_, content)) = &mut ast.content {
         // Generated code blocks are added to this list.
@@ -19,7 +19,7 @@ pub(crate) fn mcrl3_derive_terms_impl(_attributes: TokenStream, input: TokenStre
             match item {
                 Item::Struct(object) => {
                     // If the struct is annotated with term we process it as a term.
-                    if let Some(attr) = object.attrs.iter().find(|attr| attr.meta.path().is_ident("mcrl3_term")) {
+                    if let Some(attr) = object.attrs.iter().find(|attr| attr.meta.path().is_ident("merc_term")) {
                         // The #term(assertion) annotation must contain an assertion
                         let assertion = match attr.parse_args::<syn::Ident>() {
                             Ok(assertion) => {
@@ -258,7 +258,7 @@ pub(crate) fn mcrl3_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                     if !implementation
                         .attrs
                         .iter()
-                        .any(|attr| attr.meta.path().is_ident("mcrl3_ignore"))
+                        .any(|attr| attr.meta.path().is_ident("merc_ignore"))
                     {
                         // Duplicate the implementation for the Ref struct that is generated above.
                         let mut ref_implementation = implementation.clone();
@@ -266,7 +266,7 @@ pub(crate) fn mcrl3_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                         // Remove ignored functions
                         ref_implementation.items.retain(|item| match item {
                             syn::ImplItem::Fn(func) => {
-                                !func.attrs.iter().any(|attr| attr.meta.path().is_ident("mcrl3_ignore"))
+                                !func.attrs.iter().any(|attr| attr.meta.path().is_ident("merc_ignore"))
                             }
                             _ => true,
                         });
@@ -321,7 +321,7 @@ mod tests {
         let input = "
             mod anything {
 
-                #[mcrl3_term(test)]
+                #[merc_term(test)]
                 #[derive(Debug)]
                 struct Test {
                     term: ATerm,
@@ -336,7 +336,7 @@ mod tests {
         ";
 
         let tokens = TokenStream::from_str(input).unwrap();
-        let result = mcrl3_derive_terms_impl(TokenStream::default(), tokens);
+        let result = merc_derive_terms_impl(TokenStream::default(), tokens);
 
         println!("{result}");
     }

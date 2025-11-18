@@ -3,8 +3,8 @@ use std::sync::Arc;
 use cosmic_text::Metrics;
 use glam::Vec2;
 use glam::Vec3Swizzles;
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelledTransitionSystem;
+use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
 use tiny_skia::PixmapMut;
 use tiny_skia::Shader;
 use tiny_skia::Stroke;
@@ -222,7 +222,7 @@ impl SkiaRenderer {
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_lts::read_aut;
+    use merc_lts::read_aut;
     use std::sync::Arc;
     use tiny_skia::Pixmap;
     use tiny_skia::PixmapMut;

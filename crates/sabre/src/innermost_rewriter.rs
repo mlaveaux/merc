@@ -2,11 +2,11 @@
 
 use log::info;
 
-use mcrl3_aterm::THREAD_TERM_POOL;
-use mcrl3_aterm::ThreadTermPool;
-use mcrl3_data::DataApplication;
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
+use merc_aterm::THREAD_TERM_POOL;
+use merc_aterm::ThreadTermPool;
+use merc_data::DataApplication;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
 
 use crate::RewriteEngine;
 use crate::RewriteSpecification;
@@ -24,7 +24,7 @@ use crate::utilities::DataPositionIndexed;
 use crate::utilities::InnermostStack;
 use crate::utilities::TermStack;
 use crate::utilities::TermStackBuilder;
-use mcrl3_utilities::debug_trace;
+use merc_utilities::debug_trace;
 
 impl RewriteEngine for InnermostRewriter {
     fn rewrite(&mut self, t: &DataExpression) -> DataExpression {
@@ -303,9 +303,9 @@ impl AnnouncementInnermost {
 mod tests {
     use test_log::test;
 
-    use mcrl3_aterm::random_term;
-    use mcrl3_data::to_untyped_data_expression;
-    use mcrl3_utilities::random_test;
+    use merc_aterm::random_term;
+    use merc_data::to_untyped_data_expression;
+    use merc_utilities::random_test;
 
     use crate::InnermostRewriter;
     use crate::RewriteEngine;

@@ -1,16 +1,16 @@
 [package]
-name = "ltsgraph"
+name = "merc-ltsgraph"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-mcrl3_gui.workspace = true
-mcrl3_lts.workspace = true
-mcrl3_utilities.workspace = true
-mcrl3_ltsgraph-lib = { path = "./library" }
-mcrl3_version.workspace = true
+merc_gui.workspace = true
+merc_lts.workspace = true
+merc_utilities.workspace = true
+merc_ltsgraph-lib = { path = "./library" }
+merc_version.workspace = true
 
 clap.workspace = true
 env_logger.workspace = true

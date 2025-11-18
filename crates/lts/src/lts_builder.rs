@@ -1,8 +1,8 @@
 use std::fmt;
 
 use itertools::Itertools;
-use mcrl3_utilities::ByteCompressedVec;
-use mcrl3_utilities::CompressedEntry;
+use merc_utilities::ByteCompressedVec;
+use merc_utilities::CompressedEntry;
 
 use crate::LabelIndex;
 use crate::StateIndex;
@@ -101,7 +101,7 @@ mod tests {
 
     use rand::Rng;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     #[test]
     fn test_random_remove_duplicates() {

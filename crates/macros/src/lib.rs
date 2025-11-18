@@ -5,9 +5,9 @@
 
 #![forbid(unsafe_code)]
 
-mod mcrl3_derive_terms;
+mod merc_derive_terms;
 
-use mcrl3_derive_terms::mcrl3_derive_terms_impl;
+use merc_derive_terms::merc_derive_terms_impl;
 
 /// This proc macro can be used to generate implementations for the types stored
 /// in an ATerm, for example DataExpression, DataApplication, DataVariable. This
@@ -22,9 +22,9 @@ use mcrl3_derive_terms::mcrl3_derive_terms_impl;
 /// # Example
 ///
 /// ```
-/// use mcrl3_macros::mcrl3_derive_terms;
+/// use merc_macros::merc_derive_terms;
 ///
-/// #[mcrl3_derive_terms]
+/// #[merc_derive_terms]
 /// mod inner {
 ///
 /// }
@@ -37,13 +37,13 @@ use mcrl3_derive_terms::mcrl3_derive_terms_impl;
 /// There are a few procedural macros used to replace the code generation performed in the mCRL2 toolset.
 /// Working on procedural macros is typically difficult, but there are unit and integration tests to showcase
 /// common patterns. Alternatively, install `cargo install cargo-expand` and run the command `cargo expand`
-/// in for example `mcrl3-macros` to print the Rust code with the macros expanded.
+/// in for example `merc-macros` to print the Rust code with the macros expanded.
 #[proc_macro_attribute]
-pub fn mcrl3_derive_terms(
+pub fn merc_derive_terms(
     _attributes: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    mcrl3_derive_terms_impl(
+    merc_derive_terms_impl(
         proc_macro2::TokenStream::from(_attributes),
         proc_macro2::TokenStream::from(input),
     )
@@ -52,12 +52,12 @@ pub fn mcrl3_derive_terms(
 
 /// Marks a struct as a term.
 #[proc_macro_attribute]
-pub fn mcrl3_term(_attributes: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn merc_term(_attributes: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     input
 }
 
 /// Marks a function to be ignored, meaning the Ref term will not have this function
 #[proc_macro_attribute]
-pub fn mcrl3_ignore(_attributes: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn merc_ignore(_attributes: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     input
 }

@@ -1,6 +1,6 @@
 [package]
-name = "mcrl3_aterm-ffi"
-description = "Foreign function interface for mcrl3_aterm"
+name = "merc_aterm-ffi"
+description = "Foreign function interface for merc_aterm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,4 +10,4 @@ rust-version.workspace = true
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-mcrl3_aterm.workspace = true
+merc_aterm.workspace = true

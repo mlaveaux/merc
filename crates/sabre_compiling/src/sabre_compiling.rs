@@ -4,17 +4,17 @@ use std::path::PathBuf;
 use libloading::Library;
 use libloading::Symbol;
 use log::info;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::Term;
-use mcrl3_utilities::MCRL3Error;
 use tempfile::tempdir;
 use toml::Table;
 
-use mcrl3_data::DataExpression;
-use mcrl3_sabre::RewriteEngine;
-use mcrl3_sabre::RewriteSpecification;
-use mcrl3_sabre_ffi::DataExpressionFFI;
-use mcrl3_sabre_ffi::DataExpressionRefFFI;
+use merc_aterm::ATermRef;
+use merc_aterm::Term;
+use merc_utilities::MCRL3Error;
+use merc_data::DataExpression;
+use merc_sabre::RewriteEngine;
+use merc_sabre::RewriteSpecification;
+use merc_sabre_ffi::DataExpressionFFI;
+use merc_sabre_ffi::DataExpressionRefFFI;
 
 use crate::generate;
 use crate::library::RuntimeLibrary;
@@ -70,14 +70,14 @@ impl SabreCompilingRewriter {
 
             info!("Using local dependency {path}");
             dependencies.push(format!(
-                "mcrl3_sabre-ffi = {{ path = '{}' }}",
+                "merc_sabre-ffi = {{ path = '{}' }}",
                 PathBuf::from(path)
                     .join("../../crates/sabre_compiling/sabre_ffi")
                     .to_string_lossy()
             ));
         } else {
             info!("Using git dependency https://github.com/mlaveaux/mCRL3.git");
-            dependencies.push("mcrl3_sabre-ffi = { git = 'https://github.com/mlaveaux/mCRL3.git' }".to_string());
+            dependencies.push("merc_sabre-ffi = { git = 'https://github.com/mlaveaux/mCRL3.git' }".to_string());
         }
 
         let mut compilation_crate = RuntimeLibrary::new(temp_dir, dependencies)?;
@@ -94,9 +94,9 @@ impl SabreCompilingRewriter {
 // mod tests {
 //     use test_log::test;
 
-//     use mcrl3_data::to_untyped_data_expression;
-//     use mcrl3_rec_tests::load_rec_from_strings;
-//     use mcrl3_sabre::RewriteEngine;
+//     use merc_data::to_untyped_data_expression;
+//     use merc_rec_tests::load_rec_from_strings;
+//     use merc_sabre::RewriteEngine;
 
 //     use super::SabreCompilingRewriter;
 

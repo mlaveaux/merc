@@ -153,7 +153,7 @@ mod tests {
 
     use super::*;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     use crate::test_utility::from_iter;
     use crate::test_utility::random_vector_set;

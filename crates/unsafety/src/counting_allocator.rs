@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 
 use allocator_api2::alloc::AllocError;
 use allocator_api2::alloc::Allocator;
-use mcrl3_utilities::BytesFormatter;
+use merc_utilities::BytesFormatter;
 
 /// An allocator that can be used to count performance metrics
 /// on the allocations performed.

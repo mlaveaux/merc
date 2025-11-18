@@ -4,16 +4,16 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
+use duct::cmd;
+use duct::Expression;
+use indoc::indoc;
 use libloading::Library;
-use mcrl3_utilities::MCRL3Error;
+use log::info;
+use toml::map::Map;
 use toml::Table;
 use toml::Value;
-use toml::map::Map;
 
-use duct::Expression;
-use duct::cmd;
-use indoc::indoc;
-use log::info;
+use merc_utilities::MCRL3Error;
 
 /// Apply the value from compilation_toml for every given variable as an environment variable.
 fn apply_env(

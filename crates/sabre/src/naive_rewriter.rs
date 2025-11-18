@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
 use log::info;
-use mcrl3_data::DataApplication;
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
-use mcrl3_utilities::debug_trace;
+use merc_data::DataApplication;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
+use merc_utilities::debug_trace;
 
 use crate::AnnouncementInnermost;
 use crate::MatchAnnouncement;

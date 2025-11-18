@@ -8,8 +8,8 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mcrl3_lts.workspace = true
-mcrl3_ltsgraph-lib = { path = "../library" }
+merc_lts.workspace = true
+merc_ltsgraph-lib = { path = "../library" }
 
 criterion.workspace = true
 tiny-skia.workspace = true

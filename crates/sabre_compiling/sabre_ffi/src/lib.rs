@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use mcrl3_aterm::ATermIndex;
-use mcrl3_utilities::ProtectionIndex;
+use merc_aterm::ATermIndex;
+use merc_utilities::ProtectionIndex;
 
 #[cfg(feature = "import")]
 mod import;

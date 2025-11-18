@@ -47,7 +47,7 @@ members = [
     "tools/release/ltsgraph/library",
     "tools/release/ltsgraph/benchmarks",
     "tools/release/ltsinfo",
-    "tools/release/mcrl3rewrite",
+    "tools/release/rewrite",
 ]
 
 [workspace.dependencies]
@@ -127,24 +127,24 @@ libfuzzer-sys = "0.4"
 criterion = "0.7"
 
 # The workspace libraries.
-mcrl3_aterm = { path = "crates/aterm" }
-mcrl3_data = { path = "crates/data" }
-mcrl3_gui = { path = "crates/gui" }
-mcrl3_io = { path = "crates/io" }
-mcrl3_ldd = { path = "crates/ldd" }
-mcrl3_lts = { path = "crates/lts" }
-mcrl3_macros = { path = "crates/macros" }
-mcrl3_number = { path = "crates/number" }
-mcrl3_rec-tests = { path = "crates/rec-tests" }
-mcrl3_reduction = { path = "crates/reduction" }
-mcrl3_sabre = { path = "crates/sabre" }
-mcrl3_sabre-compiling = { path = "crates/sabre_compiling" }
-mcrl3_sabre-ffi = { path = "crates/sabre_compiling/sabre_ffi" }
-mcrl3_sharedmutex = { path = "crates/sharedmutex" }
-mcrl3_symbolic = { path = "crates/symbolic" }
-mcrl3_syntax = { path = "crates/syntax" }
-mcrl3_unsafety = { path = "crates/unsafety" }
-mcrl3_utilities = { path = "crates/utilities" }
-mcrl3_version = { path = "crates/version" }
+merc_aterm = { path = "crates/aterm" }
+merc_data = { path = "crates/data" }
+merc_gui = { path = "crates/gui" }
+merc_io = { path = "crates/io" }
+merc_ldd = { path = "crates/ldd" }
+merc_lts = { path = "crates/lts" }
+merc_macros = { path = "crates/macros" }
+merc_number = { path = "crates/number" }
+merc_rec-tests = { path = "crates/rec-tests" }
+merc_reduction = { path = "crates/reduction" }
+merc_sabre = { path = "crates/sabre" }
+merc_sabre-compiling = { path = "crates/sabre_compiling" }
+merc_sabre-ffi = { path = "crates/sabre_compiling/sabre_ffi" }
+merc_sharedmutex = { path = "crates/sharedmutex" }
+merc_symbolic = { path = "crates/symbolic" }
+merc_syntax = { path = "crates/syntax" }
+merc_unsafety = { path = "crates/unsafety" }
+merc_utilities = { path = "crates/utilities" }
+merc_version = { path = "crates/version" }
 pest_consume  = { path = "3rd-party/pest_consume" }
 pest_consume_macros  = { path = "3rd-party/pest_consume_macros" }

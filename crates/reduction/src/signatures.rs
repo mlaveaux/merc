@@ -2,10 +2,10 @@ use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelIndex;
-use mcrl3_lts::LabelledTransitionSystem;
-use mcrl3_lts::StateIndex;
+use merc_lts::LTS;
+use merc_lts::LabelIndex;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::StateIndex;
 use rustc_hash::FxHashSet;
 
 use crate::BlockIndex;

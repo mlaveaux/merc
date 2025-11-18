@@ -28,19 +28,20 @@ use wgpu::TextureDescriptor;
 use wgpu::TextureFormat;
 use wgpu::TextureUsages;
 
-use ltsgraph::PauseableThread;
-use ltsgraph::init_wgpu;
-use ltsgraph::show_error_dialog;
-use mcrl3_gui::console;
-use mcrl3_gui::verbosity::VerbosityFlag;
-use mcrl3_lts::LabelledTransitionSystem;
-use mcrl3_lts::read_aut;
-use mcrl3_ltsgraph_lib::FemtovgRenderer;
-use mcrl3_ltsgraph_lib::GraphLayout;
-use mcrl3_ltsgraph_lib::SkiaRenderer;
-use mcrl3_ltsgraph_lib::Viewer;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_version::Version;
+use merc_gui::console;
+use merc_gui::verbosity::VerbosityFlag;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::read_aut;
+use merc_ltsgraph_lib::FemtovgRenderer;
+use merc_ltsgraph_lib::GraphLayout;
+use merc_ltsgraph_lib::SkiaRenderer;
+use merc_ltsgraph_lib::Viewer;
+use merc_utilities::MCRL3Error;
+use merc_version::Version;
+
+use merc_ltsgraph::PauseableThread;
+use merc_ltsgraph::init_wgpu;
+use merc_ltsgraph::show_error_dialog;
 
 /// Aligns a number up to the next multiple of the given alignment.
 pub const fn align_up(num: u32, align: u32) -> u32 {

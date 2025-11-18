@@ -55,12 +55,12 @@ pub fn benchmark(output_path: impl AsRef<Path>, rewriter: Rewriter) -> Result<()
 
     let mcrl2_rewrite_path = if rewriter == Rewriter::Innermost || rewriter == Rewriter::Sabre {
         // Build the tool with the correct settings
-        cmd!("cargo", "build", "--profile", "bench", "--bin", "mcrl3rewrite").run()?;
+        cmd!("cargo", "build", "--profile", "bench", "--bin", "mercrewrite").run()?;
 
         // Using which is a bit unnecessary, but it deals nicely with .exe on Windows and can also be used to do other searching.
-        which::which_in("mcrl3rewrite", Some("target/release/"), cwd)?
+        which::which_in("mercrewrite", Some("target/release/"), cwd)?
     } else {
-        which::which("mcrl3rewrite")?
+        which::which("mercrewrite")?
     };
 
     let mcrl2_rewrite_timing = match rewriter {

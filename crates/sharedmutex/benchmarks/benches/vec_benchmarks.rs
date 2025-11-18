@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::Criterion;
-use mcrl3_sharedmutex::BfVec;
+use merc_sharedmutex::BfVec;
 
 use benchmarks_sharedmutex::NUM_ITERATIONS;
 use benchmarks_sharedmutex::READ_RATIOS;

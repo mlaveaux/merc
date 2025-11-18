@@ -1,12 +1,12 @@
 use indoc::indoc;
 use pest::Parser;
 
-use mcrl3_syntax::Mcrl2Parser;
-use mcrl3_syntax::Rule;
-use mcrl3_syntax::UntypedProcessSpecification;
-use mcrl3_syntax::UntypedStateFrmSpec;
-use mcrl3_syntax::parse_sortexpr;
-use mcrl3_utilities::test_logger;
+use merc_syntax::Mcrl2Parser;
+use merc_syntax::Rule;
+use merc_syntax::UntypedProcessSpecification;
+use merc_syntax::UntypedStateFrmSpec;
+use merc_syntax::parse_sortexpr;
+use merc_utilities::test_logger;
 
 #[test]
 fn test_parse_ifthen() {

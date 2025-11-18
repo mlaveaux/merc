@@ -1,11 +1,11 @@
 use std::time::Instant;
 
 use log::debug;
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelledTransitionSystem;
-use mcrl3_lts::LtsBuilder;
-use mcrl3_lts::StateIndex;
-use mcrl3_utilities::TagIndex;
+use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::LtsBuilder;
+use merc_lts::StateIndex;
+use merc_utilities::TagIndex;
 
 use crate::BlockPartition;
 

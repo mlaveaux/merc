@@ -619,7 +619,7 @@ version = "1.0.0"
 dependencies = [
  "criterion",
  "env_logger",
- "mcrl3_aterm",
+ "merc_aterm",
 ]
 
 [[package]]
@@ -627,7 +627,7 @@ name = "benchmarks_ldd"
 version = "1.0.0"
 dependencies = [
  "criterion",
- "mcrl3_ldd",
+ "merc_ldd",
  "rand 0.9.2",
 ]
 
@@ -636,8 +636,8 @@ name = "benchmarks_ltsgraph"
 version = "1.0.0"
 dependencies = [
  "criterion",
- "mcrl3_lts",
- "mcrl3_ltsgraph-lib",
+ "merc_lts",
+ "merc_ltsgraph-lib",
  "rand 0.9.2",
  "tiny-skia",
 ]
@@ -649,11 +649,11 @@ dependencies = [
  "ahash",
  "criterion",
  "env_logger",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_rec-tests",
- "mcrl3_sabre",
- "mcrl3_utilities",
+ "merc_aterm",
+ "merc_data",
+ "merc_rec-tests",
+ "merc_sabre",
+ "merc_utilities",
 ]
 
 [[package]]
@@ -661,7 +661,7 @@ name = "benchmarks_sharedmutex"
 version = "1.0.0"
 dependencies = [
  "criterion",
- "mcrl3_sharedmutex",
+ "merc_sharedmutex",
  "rand 0.9.2",
 ]
 
@@ -3266,44 +3266,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96051b46fc183dc9cd4a223960ef37b9af631b55191852a8274bfef064cda20f"
 
 [[package]]
-name = "ltsgraph"
-version = "1.0.0"
-dependencies = [
- "clap",
- "env_logger",
- "femtovg",
- "log",
- "mcrl3_gui",
- "mcrl3_lts",
- "mcrl3_ltsgraph-lib",
- "mcrl3_utilities",
- "mcrl3_version",
- "rfd",
- "slint",
- "slint-build",
- "tiny-skia",
- "tokio",
- "wgpu",
-]
-
-[[package]]
-name = "ltsinfo"
-version = "1.0.0"
-dependencies = [
- "clap",
- "env_logger",
- "log",
- "mcrl3_gui",
- "mcrl3_ldd",
- "mcrl3_lts",
- "mcrl3_reduction",
- "mcrl3_symbolic",
- "mcrl3_unsafety",
- "mcrl3_utilities",
- "mcrl3_version",
-]
-
-[[package]]
 name = "lyon_algorithms"
 version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3373,326 +3335,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcrl3_aterm"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "allocator-api2 0.3.1",
- "arbitrary",
- "arbtest",
- "dashmap",
- "delegate",
- "equivalent",
- "itertools 0.14.0",
- "log",
- "mcrl3_io",
- "mcrl3_macros",
- "mcrl3_number",
- "mcrl3_sharedmutex",
- "mcrl3_unsafety",
- "mcrl3_utilities",
- "parking_lot",
- "pest",
- "pest_consume",
- "pest_derive",
- "rand 0.9.2",
- "rayon",
- "rustc-hash 2.1.1",
- "thiserror 2.0.17",
- "trybuild",
-]
-
-[[package]]
-name = "mcrl3_aterm-ffi"
-version = "1.0.0"
-dependencies = [
- "mcrl3_aterm",
-]
-
-[[package]]
-name = "mcrl3_data"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "delegate",
- "indoc",
- "mcrl3_aterm",
- "mcrl3_macros",
- "mcrl3_syntax",
- "mcrl3_utilities",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "mcrl3_gui"
-version = "1.0.0"
-dependencies = [
- "clap",
- "log",
- "mcrl3_utilities",
- "streaming-iterator",
- "winapi",
-]
-
-[[package]]
-name = "mcrl3_io"
-version = "1.0.0"
-dependencies = [
- "arbitrary",
- "arbtest",
- "bitstream-io 4.9.0",
- "log",
- "mcrl3_number",
- "mcrl3_utilities",
- "regex",
- "streaming-iterator",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "mcrl3_ldd"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "delegate",
- "log",
- "mcrl3_aterm",
- "mcrl3_io",
- "mcrl3_number",
- "mcrl3_utilities",
- "rand 0.9.2",
- "rustc-hash 2.1.1",
-]
-
-[[package]]
-name = "mcrl3_lts"
-version = "1.0.0"
-dependencies = [
- "bumpalo",
- "itertools 0.14.0",
- "log",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_io",
- "mcrl3_utilities",
- "rand 0.9.2",
- "regex",
- "rustc-hash 2.1.1",
- "streaming-iterator",
- "test-log",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "mcrl3_ltsgraph-lib"
-version = "1.0.0"
-dependencies = [
- "cosmic-text",
- "femtovg",
- "glam",
- "log",
- "mcrl3_lts",
- "mcrl3_unsafety",
- "rand 0.9.2",
- "tiny-skia",
-]
-
-[[package]]
-name = "mcrl3_macros"
-version = "1.0.0"
-dependencies = [
- "delegate",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "mcrl3_number"
-version = "1.0.0"
-dependencies = [
- "bitstream-io 4.9.0",
- "mcrl3_utilities",
- "num",
- "rand 0.9.2",
-]
-
-[[package]]
-name = "mcrl3_rec-tests"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "env_logger",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_sabre",
- "mcrl3_utilities",
- "pest",
- "pest_consume",
- "pest_derive",
- "test-case",
-]
-
-[[package]]
-name = "mcrl3_reduction"
-version = "1.0.0"
-dependencies = [
- "bumpalo",
- "clap",
- "log",
- "mcrl3_io",
- "mcrl3_lts",
- "mcrl3_utilities",
- "rand 0.9.2",
- "rustc-hash 2.1.1",
- "test-log",
-]
-
-[[package]]
-name = "mcrl3_sabre"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "env_logger",
- "html-escape",
- "itertools 0.14.0",
- "log",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_utilities",
- "rand 0.9.2",
- "rustc-hash 2.1.1",
- "smallvec",
- "test-case",
- "test-log",
-]
-
-[[package]]
-name = "mcrl3_sabre-compiling"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "duct",
- "env_logger",
- "indoc",
- "libloading 0.9.0",
- "log",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_rec-tests",
- "mcrl3_sabre",
- "mcrl3_sabre-ffi",
- "mcrl3_utilities",
- "tempfile",
- "test-log",
- "toml 0.9.8",
-]
-
-[[package]]
-name = "mcrl3_sabre-ffi"
-version = "1.0.0"
-dependencies = [
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_unsafety",
- "mcrl3_utilities",
-]
-
-[[package]]
-name = "mcrl3_sharedmutex"
-version = "1.0.0"
-dependencies = [
- "crossbeam-utils",
- "delegate",
- "mcrl3_utilities",
- "rand 0.9.2",
-]
-
-[[package]]
-name = "mcrl3_symbolic"
-version = "1.0.0"
-dependencies = [
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_io",
- "mcrl3_ldd",
- "mcrl3_utilities",
- "oxidd",
-]
-
-[[package]]
-name = "mcrl3_syntax"
-version = "1.0.0"
-dependencies = [
- "arbitrary",
- "env_logger",
- "indoc",
- "itertools 0.14.0",
- "log",
- "mcrl3_utilities",
- "pest",
- "pest_consume",
- "pest_derive",
- "test-case",
-]
-
-[[package]]
-name = "mcrl3_unsafety"
-version = "1.0.0"
-dependencies = [
- "allocator-api2 0.3.1",
- "equivalent",
- "itertools 0.14.0",
- "log",
- "mcrl3_utilities",
- "mimalloc",
- "papaya",
- "rand 0.9.2",
- "rustc-hash 2.1.1",
- "tikv-jemallocator",
-]
-
-[[package]]
-name = "mcrl3_utilities"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "arbitrary",
- "backtrace",
- "delegate",
- "env_logger",
- "hashbrown 0.16.0",
- "log",
- "pest",
- "rand 0.9.2",
- "rustc-hash 2.1.1",
- "toml 0.9.8",
-]
-
-[[package]]
-name = "mcrl3_version"
-version = "1.0.0"
-
-[[package]]
-name = "mcrl3rewrite"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "clap",
- "env_logger",
- "log",
- "mcrl3_aterm",
- "mcrl3_data",
- "mcrl3_gui",
- "mcrl3_rec-tests",
- "mcrl3_sabre",
- "mcrl3_sabre-compiling",
- "mcrl3_unsafety",
- "mcrl3_utilities",
- "mcrl3_version",
-]
-
-[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3715,6 +3357,364 @@ checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "merc-ltsgraph"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "femtovg",
+ "log",
+ "merc_gui",
+ "merc_lts",
+ "merc_ltsgraph-lib",
+ "merc_utilities",
+ "merc_version",
+ "rfd",
+ "slint",
+ "slint-build",
+ "tiny-skia",
+ "tokio",
+ "wgpu",
+]
+
+[[package]]
+name = "merc-ltsinfo"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "log",
+ "merc_gui",
+ "merc_ldd",
+ "merc_lts",
+ "merc_reduction",
+ "merc_symbolic",
+ "merc_unsafety",
+ "merc_utilities",
+ "merc_version",
+]
+
+[[package]]
+name = "merc-rewrite"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "clap",
+ "env_logger",
+ "log",
+ "merc_aterm",
+ "merc_data",
+ "merc_gui",
+ "merc_rec-tests",
+ "merc_sabre",
+ "merc_sabre-compiling",
+ "merc_unsafety",
+ "merc_utilities",
+ "merc_version",
+]
+
+[[package]]
+name = "merc_aterm"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "allocator-api2 0.3.1",
+ "arbitrary",
+ "arbtest",
+ "dashmap",
+ "delegate",
+ "equivalent",
+ "itertools 0.14.0",
+ "log",
+ "merc_io",
+ "merc_macros",
+ "merc_number",
+ "merc_sharedmutex",
+ "merc_unsafety",
+ "merc_utilities",
+ "parking_lot",
+ "pest",
+ "pest_consume",
+ "pest_derive",
+ "rand 0.9.2",
+ "rayon",
+ "rustc-hash 2.1.1",
+ "thiserror 2.0.17",
+ "trybuild",
+]
+
+[[package]]
+name = "merc_aterm-ffi"
+version = "1.0.0"
+dependencies = [
+ "merc_aterm",
+]
+
+[[package]]
+name = "merc_data"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "delegate",
+ "indoc",
+ "merc_aterm",
+ "merc_macros",
+ "merc_syntax",
+ "merc_utilities",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "merc_gui"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "log",
+ "merc_utilities",
+ "streaming-iterator",
+ "winapi",
+]
+
+[[package]]
+name = "merc_io"
+version = "1.0.0"
+dependencies = [
+ "arbitrary",
+ "arbtest",
+ "bitstream-io 4.9.0",
+ "log",
+ "merc_number",
+ "merc_utilities",
+ "regex",
+ "streaming-iterator",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "merc_ldd"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "delegate",
+ "log",
+ "merc_aterm",
+ "merc_io",
+ "merc_number",
+ "merc_utilities",
+ "rand 0.9.2",
+ "rustc-hash 2.1.1",
+]
+
+[[package]]
+name = "merc_lts"
+version = "1.0.0"
+dependencies = [
+ "bumpalo",
+ "itertools 0.14.0",
+ "log",
+ "merc_aterm",
+ "merc_data",
+ "merc_io",
+ "merc_utilities",
+ "rand 0.9.2",
+ "regex",
+ "rustc-hash 2.1.1",
+ "streaming-iterator",
+ "test-log",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "merc_ltsgraph-lib"
+version = "1.0.0"
+dependencies = [
+ "cosmic-text",
+ "femtovg",
+ "glam",
+ "log",
+ "merc_lts",
+ "merc_unsafety",
+ "rand 0.9.2",
+ "tiny-skia",
+]
+
+[[package]]
+name = "merc_macros"
+version = "1.0.0"
+dependencies = [
+ "delegate",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "merc_number"
+version = "1.0.0"
+dependencies = [
+ "bitstream-io 4.9.0",
+ "merc_utilities",
+ "num",
+ "rand 0.9.2",
+]
+
+[[package]]
+name = "merc_rec-tests"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "env_logger",
+ "merc_aterm",
+ "merc_data",
+ "merc_sabre",
+ "merc_utilities",
+ "pest",
+ "pest_consume",
+ "pest_derive",
+ "test-case",
+]
+
+[[package]]
+name = "merc_reduction"
+version = "1.0.0"
+dependencies = [
+ "bumpalo",
+ "clap",
+ "log",
+ "merc_io",
+ "merc_lts",
+ "merc_utilities",
+ "rand 0.9.2",
+ "rustc-hash 2.1.1",
+ "test-log",
+]
+
+[[package]]
+name = "merc_sabre"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "env_logger",
+ "html-escape",
+ "itertools 0.14.0",
+ "log",
+ "merc_aterm",
+ "merc_data",
+ "merc_utilities",
+ "rand 0.9.2",
+ "rustc-hash 2.1.1",
+ "smallvec",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "merc_sabre-compiling"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "duct",
+ "env_logger",
+ "indoc",
+ "libloading 0.9.0",
+ "log",
+ "merc_aterm",
+ "merc_data",
+ "merc_rec-tests",
+ "merc_sabre",
+ "merc_sabre-ffi",
+ "merc_utilities",
+ "tempfile",
+ "test-log",
+ "toml 0.9.8",
+]
+
+[[package]]
+name = "merc_sabre-ffi"
+version = "1.0.0"
+dependencies = [
+ "merc_aterm",
+ "merc_data",
+ "merc_unsafety",
+ "merc_utilities",
+]
+
+[[package]]
+name = "merc_sharedmutex"
+version = "1.0.0"
+dependencies = [
+ "crossbeam-utils",
+ "delegate",
+ "merc_utilities",
+ "rand 0.9.2",
+]
+
+[[package]]
+name = "merc_symbolic"
+version = "1.0.0"
+dependencies = [
+ "merc_aterm",
+ "merc_data",
+ "merc_io",
+ "merc_ldd",
+ "merc_utilities",
+ "oxidd",
+]
+
+[[package]]
+name = "merc_syntax"
+version = "1.0.0"
+dependencies = [
+ "arbitrary",
+ "env_logger",
+ "indoc",
+ "itertools 0.14.0",
+ "log",
+ "merc_utilities",
+ "pest",
+ "pest_consume",
+ "pest_derive",
+ "test-case",
+]
+
+[[package]]
+name = "merc_unsafety"
+version = "1.0.0"
+dependencies = [
+ "allocator-api2 0.3.1",
+ "equivalent",
+ "itertools 0.14.0",
+ "log",
+ "merc_utilities",
+ "mimalloc",
+ "papaya",
+ "rand 0.9.2",
+ "rustc-hash 2.1.1",
+ "tikv-jemallocator",
+]
+
+[[package]]
+name = "merc_utilities"
+version = "1.0.0"
+dependencies = [
+ "ahash",
+ "arbitrary",
+ "backtrace",
+ "delegate",
+ "env_logger",
+ "hashbrown 0.16.0",
+ "log",
+ "pest",
+ "rand 0.9.2",
+ "rustc-hash 2.1.1",
+ "toml 0.9.8",
+]
+
+[[package]]
+name = "merc_version"
+version = "1.0.0"
 
 [[package]]
 name = "metal"

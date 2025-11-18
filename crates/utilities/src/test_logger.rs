@@ -1,6 +1,6 @@
 /// Constructs a logger for tests. This logger will not print anything to the console, but will instead write to a buffer.
 pub fn test_logger() {
-    if cfg!(not(feature = "mcrl3_miri")) {
+    if cfg!(not(feature = "merc_miri")) {
         // Ignore double initialisations in tests since nexttest runs them in parallel.
         let _ = env_logger::builder().is_test(true).try_init();
     }

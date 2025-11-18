@@ -5,8 +5,8 @@ use std::rc::Rc;
 
 use ldd::LddIndex;
 use ldd::SharedProtectionSet;
-use mcrl3_utilities::IndexedSet;
-use mcrl3_utilities::ProtectionSet;
+use merc_utilities::IndexedSet;
+use merc_utilities::ProtectionSet;
 
 use crate::operations::height;
 
@@ -318,7 +318,7 @@ mod tests {
     use crate::operations::singleton;
     use crate::test_utility::*;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     #[test]
     fn test_random_garbage_collection_small() {

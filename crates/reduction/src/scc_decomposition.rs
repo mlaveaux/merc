@@ -3,9 +3,9 @@ use std::time::Instant;
 
 use log::debug;
 use log::trace;
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelIndex;
-use mcrl3_lts::StateIndex;
+use merc_lts::LTS;
+use merc_lts::LabelIndex;
+use merc_lts::StateIndex;
 
 use crate::BlockIndex;
 use crate::IndexedPartition;
@@ -186,11 +186,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use mcrl3_lts::LabelIndex;
-    use mcrl3_lts::LabelledTransitionSystem;
-    use mcrl3_lts::StateIndex;
-    use mcrl3_lts::random_lts;
-    use mcrl3_utilities::random_test;
+    use merc_lts::LabelIndex;
+    use merc_lts::LabelledTransitionSystem;
+    use merc_lts::StateIndex;
+    use merc_lts::random_lts;
+    use merc_utilities::random_test;
     use test_log::test;
 
     use crate::Partition;

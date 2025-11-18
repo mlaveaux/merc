@@ -8,9 +8,9 @@ use bitstream_io::BitReader;
 use bitstream_io::BitWrite;
 use bitstream_io::BitWriter;
 
-use mcrl3_number::read_u64_variablelength;
-use mcrl3_number::write_u64_variablelength;
-use mcrl3_utilities::MCRL3Error;
+use merc_number::read_u64_variablelength;
+use merc_number::write_u64_variablelength;
+use merc_utilities::MCRL3Error;
 
 /// Trait for writing bit-level data.
 pub trait BitStreamWrite {
@@ -136,7 +136,7 @@ mod tests {
     use arbitrary::Unstructured;
     use arbtest::arbitrary::Arbitrary;
     use log::debug;
-    use mcrl3_utilities::test_logger;
+    use merc_utilities::test_logger;
 
     use super::*;
 

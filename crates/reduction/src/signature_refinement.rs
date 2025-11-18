@@ -6,16 +6,16 @@ use clap::ValueEnum;
 use log::debug;
 use log::info;
 use log::trace;
-use mcrl3_io::TimeProgress;
-use mcrl3_lts::IncomingTransitions;
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelIndex;
-use mcrl3_lts::LabelledTransitionSystem;
-use mcrl3_lts::StateIndex;
+use merc_io::TimeProgress;
+use merc_lts::IncomingTransitions;
+use merc_lts::LTS;
+use merc_lts::LabelIndex;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::StateIndex;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 
-use mcrl3_utilities::Timing;
+use merc_utilities::Timing;
 
 use crate::BlockIndex;
 use crate::BlockPartition;
@@ -565,9 +565,9 @@ mod tests {
 
     use test_log::test;
 
-    use mcrl3_lts::random_lts;
-    use mcrl3_utilities::Timing;
-    use mcrl3_utilities::random_test;
+    use merc_lts::random_lts;
+    use merc_utilities::Timing;
+    use merc_utilities::random_test;
 
     #[test]
     fn test_random_strong_bisim_sigref() {

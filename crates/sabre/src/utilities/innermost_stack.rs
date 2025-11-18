@@ -2,11 +2,11 @@
 
 use std::fmt;
 
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::ProtectedWriteGuard;
-use mcrl3_data::DataExpressionRef;
-use mcrl3_data::DataFunctionSymbolRef;
-use mcrl3_utilities::debug_trace;
+use merc_aterm::Protected;
+use merc_aterm::ProtectedWriteGuard;
+use merc_data::DataExpressionRef;
+use merc_data::DataFunctionSymbolRef;
+use merc_utilities::debug_trace;
 
 // Only used in debug_trace!
 #[allow(unused_imports)]

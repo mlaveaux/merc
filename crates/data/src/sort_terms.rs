@@ -6,31 +6,31 @@ use std::ops::Deref;
 
 use delegate::delegate;
 
-use mcrl3_aterm::ATerm;
-use mcrl3_aterm::ATermArgs;
-use mcrl3_aterm::ATermIndex;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::Markable;
-use mcrl3_aterm::Marker;
-use mcrl3_aterm::Symb;
-use mcrl3_aterm::SymbolRef;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::TermIterator;
-use mcrl3_aterm::Transmutable;
-use mcrl3_macros::mcrl3_derive_terms;
-use mcrl3_macros::mcrl3_term;
+use merc_aterm::ATerm;
+use merc_aterm::ATermArgs;
+use merc_aterm::ATermIndex;
+use merc_aterm::ATermRef;
+use merc_aterm::Markable;
+use merc_aterm::Marker;
+use merc_aterm::Symb;
+use merc_aterm::SymbolRef;
+use merc_aterm::Term;
+use merc_aterm::TermIterator;
+use merc_aterm::Transmutable;
+use merc_macros::merc_derive_terms;
+use merc_macros::merc_term;
 
 use crate::DATA_SYMBOLS;
 use crate::is_sort_expression;
 
 // This module is only used internally to run the proc macro.
-#[mcrl3_derive_terms]
+#[merc_derive_terms]
 mod inner {
-    use mcrl3_aterm::ATermString;
+    use merc_aterm::ATermString;
 
     use super::*;
 
-    #[mcrl3_term(is_sort_expression)]
+    #[merc_term(is_sort_expression)]
     pub struct SortExpression {
         term: ATerm,
     }

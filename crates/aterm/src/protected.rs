@@ -7,8 +7,8 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use mcrl3_utilities::PhantomUnsend;
-use mcrl3_utilities::ProtectionIndex;
+use merc_utilities::PhantomUnsend;
+use merc_utilities::ProtectionIndex;
 
 use crate::Markable;
 use crate::Symb;
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_aterm_container() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let t = ATerm::from_string("f(g(a),b)").unwrap();
 

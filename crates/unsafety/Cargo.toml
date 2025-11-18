@@ -1,26 +1,26 @@
 [package]
-name = "mcrl3_unsafety"
+name = "merc_unsafety"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [features]
-# Enables an allocator that counts additional metrics (but is slower), this disables `mcrl3_jemalloc` and `mcrl3_mimalloc`.
-mcrl3_metrics = []
+# Enables an allocator that counts additional metrics (but is slower), this disables `merc_jemalloc` and `merc_mimalloc`.
+merc_metrics = []
 
 # Feature to enable jemalloc as the global allocator. This feature only works if 
 # the `tikv-jemallocator` crate is supported on that platform.
-mcrl3_jemalloc = ["dep:tikv-jemallocator"]
+merc_jemalloc = ["dep:tikv-jemallocator"]
 
 # Feature to enable mimalloc as the global allocator.
-mcrl3_mimalloc = ["dep:mimalloc"]
+merc_mimalloc = ["dep:mimalloc"]
 
 # Enables extra debug options to be enabled. Also enables jemalloc debugging.
-mcrl3_debug = ["tikv-jemallocator?/debug"]
+merc_debug = ["tikv-jemallocator?/debug"]
 
 [dependencies]
-mcrl3_utilities.workspace = true
+merc_utilities.workspace = true
 
 allocator-api2.workspace = true
 equivalent.workspace = true

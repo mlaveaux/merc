@@ -1,4 +1,4 @@
-use mcrl3_utilities::MCRL3Error;
+use merc_utilities::MCRL3Error;
 use wgpu::Instance;
 
 pub async fn init_wgpu() -> Result<(wgpu::Device, wgpu::Queue), MCRL3Error> {

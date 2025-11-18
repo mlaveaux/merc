@@ -8,8 +8,8 @@ use femtovg::Renderer;
 use glam::Vec2;
 use glam::Vec3Swizzles;
 
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelledTransitionSystem;
+use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
 
 use crate::Viewer;
 
@@ -148,7 +148,7 @@ mod tests {
 
     use femtovg::renderer::Void;
 
-    use mcrl3_lts::read_aut;
+    use merc_lts::read_aut;
 
     #[test]
     fn test_femtovg_renderer() {

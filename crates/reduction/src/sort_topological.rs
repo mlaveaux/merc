@@ -3,11 +3,11 @@ use std::fmt;
 use log::debug;
 use log::trace;
 
-use mcrl3_lts::LTS;
-use mcrl3_lts::LabelIndex;
-use mcrl3_lts::StateIndex;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::is_valid_permutation;
+use merc_lts::LTS;
+use merc_lts::LabelIndex;
+use merc_lts::StateIndex;
+use merc_utilities::MCRL3Error;
+use merc_utilities::is_valid_permutation;
 
 /// Returns a topological ordering of the states of the given LTS.
 ///
@@ -155,9 +155,9 @@ where
 #[cfg(test)]
 mod tests {
 
-    use mcrl3_lts::LabelledTransitionSystem;
-    use mcrl3_lts::random_lts;
-    use mcrl3_utilities::random_test;
+    use merc_lts::LabelledTransitionSystem;
+    use merc_lts::random_lts;
+    use merc_utilities::random_test;
     use rand::seq::SliceRandom;
     use test_log::test;
 

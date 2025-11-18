@@ -428,7 +428,7 @@ mod tests {
     use crate::fmt_node;
     use crate::test_utility::*;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
     use rand::Rng;
     use std::collections::HashSet;
     use std::ops::Sub;

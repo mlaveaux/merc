@@ -9,7 +9,7 @@
 
 use std::result::Result;
 
-use mcrl3_utilities::MCRL3Error;
+use merc_utilities::MCRL3Error;
 #[cfg(windows)]
 use winapi::um::consoleapi::AllocConsole;
 

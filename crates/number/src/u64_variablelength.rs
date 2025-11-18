@@ -7,7 +7,7 @@ use bitstream_io::BitWrite;
 use bitstream_io::BitWriter;
 use bitstream_io::Endianness;
 
-use mcrl3_utilities::MCRL3Error;
+use merc_utilities::MCRL3Error;
 
 /// The number of bits needed to represent a value of type T in most significant bit encoding.
 pub const fn encoding_size<T>() -> usize {
@@ -66,7 +66,7 @@ mod tests {
     use bitstream_io::BigEndian;
     use rand::Rng;
 
-    use mcrl3_utilities::random_test;
+    use merc_utilities::random_test;
 
     #[test]
     fn test_random_integer_encoding() {

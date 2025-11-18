@@ -10,22 +10,22 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-use mcrl3_aterm::ATermIndex;
-use mcrl3_aterm::ATermInt;
-use mcrl3_aterm::ATermList;
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::SharedSymbol;
-use mcrl3_aterm::SharedTerm;
-use mcrl3_aterm::Symb;
-use mcrl3_aterm::Symbol;
-use mcrl3_aterm::SymbolIndex;
-use mcrl3_aterm::SymbolRef;
-use mcrl3_aterm::THREAD_TERM_POOL;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::TermOrAnnotation;
-use mcrl3_aterm::is_empty_list_term;
-use mcrl3_aterm::is_int_term;
-use mcrl3_aterm::is_list_term;
+use merc_aterm::ATermIndex;
+use merc_aterm::ATermInt;
+use merc_aterm::ATermList;
+use merc_aterm::ATermRef;
+use merc_aterm::SharedSymbol;
+use merc_aterm::SharedTerm;
+use merc_aterm::Symb;
+use merc_aterm::Symbol;
+use merc_aterm::SymbolIndex;
+use merc_aterm::SymbolRef;
+use merc_aterm::THREAD_TERM_POOL;
+use merc_aterm::Term;
+use merc_aterm::TermOrAnnotation;
+use merc_aterm::is_empty_list_term;
+use merc_aterm::is_int_term;
+use merc_aterm::is_list_term;
 
 /// The is the underlying shared aterm that is pointed to by the term.
 #[repr(C)]

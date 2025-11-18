@@ -6,8 +6,8 @@ use criterion::Criterion;
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use mcrl3_rec_tests::load_rec_from_strings;
-use mcrl3_sabre::SetAutomaton;
+use merc_rec_tests::load_rec_from_strings;
+use merc_sabre::SetAutomaton;
 
 pub fn criterion_benchmark_set_automaton(c: &mut Criterion) {
     {

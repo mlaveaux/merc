@@ -1,15 +1,15 @@
 [package]
-name = "mcrl3_lts"
+name = "merc_lts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-mcrl3_aterm.workspace = true
-mcrl3_data.workspace = true
-mcrl3_io.workspace = true
-mcrl3_utilities.workspace = true
+merc_aterm.workspace = true
+merc_data.workspace = true
+merc_io.workspace = true
+merc_utilities.workspace = true
 
 bumpalo.workspace = true
 itertools.workspace = true

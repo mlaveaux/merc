@@ -8,9 +8,9 @@ use std::ops::Deref;
 
 use arbitrary::Arbitrary;
 use delegate::delegate;
-use mcrl3_unsafety::StablePointer;
-use mcrl3_utilities::ProtectionIndex;
-use mcrl3_utilities::readable_string;
+use merc_unsafety::StablePointer;
+use merc_utilities::ProtectionIndex;
+use merc_utilities::readable_string;
 
 use crate::Markable;
 use crate::SharedSymbol;

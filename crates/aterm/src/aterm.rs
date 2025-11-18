@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 use delegate::delegate;
 
-use mcrl3_sharedmutex::RecursiveLockReadGuard;
-use mcrl3_unsafety::StablePointer;
-use mcrl3_utilities::MCRL3Error;
-use mcrl3_utilities::PhantomUnsend;
-use mcrl3_utilities::ProtectionIndex;
+use merc_sharedmutex::RecursiveLockReadGuard;
+use merc_unsafety::StablePointer;
+use merc_utilities::MCRL3Error;
+use merc_utilities::PhantomUnsend;
+use merc_utilities::ProtectionIndex;
 
 use crate::ATermIntRef;
 use crate::GlobalTermPool;

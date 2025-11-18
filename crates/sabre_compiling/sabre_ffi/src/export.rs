@@ -1,6 +1,6 @@
-use mcrl3_aterm::ATermRef;
-use mcrl3_aterm::Term;
-use mcrl3_data::DataExpressionRef;
+use merc_aterm::ATermRef;
+use merc_aterm::Term;
+use merc_data::DataExpressionRef;
 
 use crate::DataExpressionFFI;
 use crate::DataExpressionRefFFI;

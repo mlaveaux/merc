@@ -8,10 +8,10 @@ use std::sync::atomic::Ordering;
 
 use dashmap::DashMap;
 use equivalent::Equivalent;
-use mcrl3_unsafety::StablePointer;
+use merc_unsafety::StablePointer;
 use rustc_hash::FxBuildHasher;
 
-use mcrl3_unsafety::StablePointerSet;
+use merc_unsafety::StablePointerSet;
 
 use crate::Symb;
 use crate::SymbolIndex;
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_symbol_sharing() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let f1 = Symbol::new("f", 2);
         let f2 = Symbol::new("f", 2);
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_prefix_counter() {
-        let _ = mcrl3_utilities::test_logger();
+        let _ = merc_utilities::test_logger();
 
         let _symbol = Symbol::new("x69", 0);
         let _symbol2 = Symbol::new("x_y", 0);

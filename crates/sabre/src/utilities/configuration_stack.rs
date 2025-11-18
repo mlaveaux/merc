@@ -2,11 +2,11 @@
 
 use std::fmt;
 
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::ThreadTermPool;
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
+use merc_aterm::Protected;
+use merc_aterm::Term;
+use merc_aterm::ThreadTermPool;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
 
 use crate::Rule;
 use crate::matching::conditions::EMACondition;

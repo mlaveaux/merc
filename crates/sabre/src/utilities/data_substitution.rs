@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
-use mcrl3_aterm::Protected;
-use mcrl3_aterm::Term;
-use mcrl3_aterm::ThreadTermPool;
-use mcrl3_data::DataExpression;
-use mcrl3_data::DataExpressionRef;
-use mcrl3_data::is_data_application;
+use merc_aterm::Protected;
+use merc_aterm::Term;
+use merc_aterm::ThreadTermPool;
+use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
+use merc_data::is_data_application;
 
 use super::DataPosition;
 
@@ -83,7 +83,7 @@ fn substitute_rec(
 mod tests {
     use super::*;
 
-    use mcrl3_aterm::THREAD_TERM_POOL;
+    use merc_aterm::THREAD_TERM_POOL;
 
     use crate::utilities::DataPosition;
     use crate::utilities::DataPositionIndexed;

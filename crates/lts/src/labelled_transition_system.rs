@@ -1,9 +1,9 @@
 use std::fmt;
 
-use mcrl3_utilities::ByteCompressedVec;
-use mcrl3_utilities::CompressedEntry;
-use mcrl3_utilities::TagIndex;
-use mcrl3_utilities::bytevec;
+use merc_utilities::ByteCompressedVec;
+use merc_utilities::CompressedEntry;
+use merc_utilities::TagIndex;
+use merc_utilities::bytevec;
 
 /// A unique type for the labels.
 pub struct LabelTag;
