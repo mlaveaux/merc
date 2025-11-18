@@ -116,6 +116,7 @@ impl Drop for PauseableThread {
 }
 
 #[cfg(test)]
+#[cfg(feature = "merc_gui")]
 mod tests {
     use super::*;
 

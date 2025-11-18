@@ -43,11 +43,8 @@ members = [
     "crates/utilities",
     "crates/version",
     "crates/xtask",
-    "tools/release/ltsgraph",
-    "tools/release/ltsgraph/library",
-    "tools/release/ltsgraph/benchmarks",
-    "tools/release/ltsinfo",
-    "tools/release/rewrite",
+    "tools/ltsinfo",
+    "tools/rewrite",
 ]
 
 [workspace.dependencies]
@@ -76,6 +73,7 @@ smallvec = "1.15"
 tempfile = "3.23"
 thiserror = "2.0"
 toml = "0.9"
+winapi = { version = "0.3", features = ["consoleapi"] }
 
 # Used by the lower level crates
 allocator-api2 =  "0.3"
@@ -85,19 +83,6 @@ libloading = "0.9"
 mimalloc = "0.1"
 streaming-iterator = "0.1"
 tikv-jemallocator = "0.6"
-
-# Used for GUI tools
-cosmic-text = "0.15"
-femtovg = { version = "0.19", features = ["wgpu"] }
-glam = "0.30"
-rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
-slint = { version = "1.14", features = ["compat-1-2", "std", "accessibility", 
-    "backend-winit", "renderer-skia"], default-features = false}
-slint-build = "1.14"
-tiny-skia = "0.11"
-tokio = { version = "1.48", features = ["rt", "macros"] }
-wgpu = "27.0"
-winapi = { version = "0.3", features = ["consoleapi"] }
 
 # Used in macros
 proc-macro2 = "1.0"

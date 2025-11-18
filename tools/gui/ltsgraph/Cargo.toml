@@ -9,15 +9,18 @@ rust-version.workspace = true
 merc_gui.workspace = true
 merc_lts.workspace = true
 merc_utilities.workspace = true
-merc_ltsgraph-lib = { path = "./library" }
+merc_ltsgraph-lib= { path = "./library" }
 merc_version.workspace = true
 
 clap.workspace = true
 env_logger.workspace = true
-femtovg.workspace = true
 log.workspace = true
+cosmic-text.workspace = true
+femtovg.workspace = true
+glam.workspace = true
 rfd.workspace = true
 slint.workspace = true
+slint-build.workspace = true
 tiny-skia.workspace = true
 tokio.workspace = true
 wgpu.workspace = true

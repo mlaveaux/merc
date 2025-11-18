@@ -4,7 +4,7 @@ This repository contains a re-implementation of the core functionality of the [m
 
 ## Tools
 
-The tools directory contains prototypes to show the viability of this approach. The `merc-rewrite` tool can for example be executed using `cargo run --release --bin merc-rewrite`. Compiling the GUI tools on Ubuntu requires both `libfreetype-dev` and `libfontconfig1-dev` to be installed.
+The tools directory contains prototypes to show the viability of this approach. The `merc-rewrite` tool can for example be executed using `cargo run --release --bin merc-rewrite`.
 
 # Contributing
 

@@ -1,0 +1,43 @@
+[workspace.package]
+authors = ["Maurice Laveaux"]
+edition = "2024"
+license = "BSL-1.0"
+repository = "https://github.com/mlaveaux/merc.git"
+rust-version = "1.85.0"
+version = "1.0.0"
+
+# Add debug information to the release binaries.
+[profile.release]
+lto = "fat"
+panic = "abort"
+debug = "full"
+split-debuginfo= "packed"
+
+[workspace]
+resolver = "2"
+members = [
+    "ltsgraph",
+    "ltsgraph/library"
+]
+
+[workspace.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+cosmic-text = "0.15"
+env_logger = "0.11"
+femtovg = { version = "0.19", features = ["wgpu"] }
+glam = "0.30"
+log = "0.4"
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
+slint = { version = "1.14", features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-skia"], default-features = false}
+slint-build = "1.14"
+tiny-skia = "0.11"
+tokio = { version = "1.48", features = ["rt", "macros"] }
+wgpu = "27.0"
+rand = "0.9"
+
+# The workspace libraries.
+merc_gui = { path = "../../crates/gui" }
+merc_lts = { path = "../../crates/lts" }
+merc_utilities = { path = "../../crates/utilities" }
+merc_unsafety = { path = "../../crates/unsafety" }
+merc_version = { path = "../../crates/version" }
