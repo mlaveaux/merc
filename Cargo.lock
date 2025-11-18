@@ -1407,20 +1407,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
-name = "dashmap"
-version = "7.0.0-rc2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4a1e35a65fe0538a60167f0ada6e195ad5d477f6ddae273943596d4a1a5730b"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "equivalent",
- "hashbrown 0.15.5",
- "lock_api",
- "parking_lot_core",
-]
-
-[[package]]
 name = "data-url"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3423,7 +3409,6 @@ dependencies = [
  "allocator-api2 0.3.1",
  "arbitrary",
  "arbtest",
- "dashmap",
  "delegate",
  "equivalent",
  "itertools 0.14.0",
@@ -3434,6 +3419,7 @@ dependencies = [
  "merc_sharedmutex",
  "merc_unsafety",
  "merc_utilities",
+ "papaya",
  "parking_lot",
  "pest",
  "pest_consume",

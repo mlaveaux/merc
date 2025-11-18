@@ -6,7 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-use dashmap::DashMap;
+use papaya::HashMap;
+use papaya::ResizeMode;
 use equivalent::Equivalent;
 use merc_unsafety::StablePointer;
 use rustc_hash::FxBuildHasher;
@@ -26,7 +27,7 @@ pub struct SymbolPool {
     symbols: StablePointerSet<SharedSymbol, FxBuildHasher>,
 
     /// A map from prefixes to counters that track the next available index for function symbols
-    prefix_to_register_function_map: DashMap<String, Arc<AtomicUsize>, FxBuildHasher>,
+    prefix_to_register_function_map: HashMap<String, Arc<AtomicUsize>, FxBuildHasher>,
 }
 
 impl SymbolPool {
@@ -34,7 +35,10 @@ impl SymbolPool {
     pub(crate) fn new() -> Self {
         Self {
             symbols: StablePointerSet::with_hasher(FxBuildHasher),
-            prefix_to_register_function_map: DashMap::with_hasher(FxBuildHasher),
+            prefix_to_register_function_map: HashMap::builder()
+                .hasher(FxBuildHasher)
+                .resize_mode(ResizeMode::Blocking)
+                .build(),
         }
     }
 
@@ -91,21 +95,25 @@ impl SymbolPool {
     /// Creates a new prefix counter for the given prefix.
     pub fn create_prefix(&self, prefix: &str) -> Arc<AtomicUsize> {
         // Create a new counter for the prefix if it does not exist
-        let result = self
+        let guard = self
             .prefix_to_register_function_map
-            .entry(prefix.to_string())
-            .or_insert_with(|| Arc::new(AtomicUsize::new(0)))
-            .clone();
+            .pin();
+
+        // TODO: Can there be a reace between the get and insert?
+        let result = match guard.get(prefix) {
+            Some(result) => result,
+            None => guard.insert(prefix.to_string(), Arc::new(AtomicUsize::new(0))).expect("This key does not yet exist"),
+        };
 
         // Ensure the counter starts at a sufficiently large index
         self.get_sufficiently_large_postfix_index(prefix, &result);
-        result
+        result.clone()
     }
 
     /// Removes a prefix counter from the pool.
     pub fn remove_prefix(&self, prefix: &str) {
         // Remove the prefix counter if it exists
-        self.prefix_to_register_function_map.remove(prefix);
+        self.prefix_to_register_function_map.pin().remove(prefix);
     }
 
     /// Updates the counter for a registered prefix for the newly created symbol.
@@ -121,7 +129,7 @@ impl SymbolPool {
             let potential_number = &name[start_of_index..];
             let prefix = &name[..start_of_index];
 
-            if let Some(counter) = self.prefix_to_register_function_map.get(prefix) {
+            if let Some(counter) = self.prefix_to_register_function_map.pin().get(prefix) {
                 if let Ok(number) = potential_number.parse::<usize>() {
                     counter.fetch_max(number + 1, Ordering::Relaxed);
                 }
