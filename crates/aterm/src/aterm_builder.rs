@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::debug_trace;
 
 use crate::ATerm;
@@ -90,11 +90,11 @@ impl<I: fmt::Debug, C: fmt::Debug> TermBuilder<I, C> {
         input: I,
         transformer: F,
         construct: G,
-    ) -> Result<ATerm, MCRL3Error>
+    ) -> Result<ATerm, MercError>
     where
-        F: Fn(&ThreadTermPool, &mut ArgStack<I, C>, I) -> Result<Yield<C>, MCRL3Error>,
+        F: Fn(&ThreadTermPool, &mut ArgStack<I, C>, I) -> Result<Yield<C>, MercError>,
         // We need impl<Iterator<Item=&ATerm>> here, but that is not possible.
-        G: Fn(&ThreadTermPool, C, std::iter::Flatten<std::slice::Iter<Option<ATerm>>>) -> Result<ATerm, MCRL3Error>,
+        G: Fn(&ThreadTermPool, C, std::iter::Flatten<std::slice::Iter<Option<ATerm>>>) -> Result<ATerm, MercError>,
     {
         debug_trace!("Transforming {:?}", input);
         self.terms.push(None);

@@ -3,12 +3,12 @@
 use ahash::AHashSet;
 use merc_aterm::ATerm;
 use merc_data::to_untyped_data_expression;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 use crate::Rule;
 
 /// Create a rewrite rule lhs -> rhs with the given names being variables.
-pub fn create_rewrite_rule(lhs: &str, rhs: &str, variables: &[&str]) -> Result<Rule, MCRL3Error> {
+pub fn create_rewrite_rule(lhs: &str, rhs: &str, variables: &[&str]) -> Result<Rule, MercError> {
     let lhs = ATerm::from_string(lhs)?;
     let rhs = ATerm::from_string(rhs)?;
     let mut vars = AHashSet::new();

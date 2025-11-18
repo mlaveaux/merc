@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use merc_io::LineIterator;
 use merc_io::Progress;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 use crate::LTS;
 use crate::LabelIndex;
@@ -61,7 +61,7 @@ fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
 /// And one line for every transition:
 ///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
 ///     `(<from>: Nat, <label>: Str, <to>: Nat)`
-pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MCRL3Error> {
+pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
     let start = Instant::now();
     debug!("Reading LTS in .aut format...");
 
@@ -145,7 +145,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
 }
 
 /// Write a labelled transition system in plain text in Aldebaran format to the given writer.
-pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MCRL3Error> {
+pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercError> {
     writeln!(
         writer,
         "des ({}, {}, {})",

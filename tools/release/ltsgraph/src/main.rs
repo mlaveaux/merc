@@ -36,7 +36,7 @@ use merc_ltsgraph_lib::FemtovgRenderer;
 use merc_ltsgraph_lib::GraphLayout;
 use merc_ltsgraph_lib::SkiaRenderer;
 use merc_ltsgraph_lib::Viewer;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_version::Version;
 
 use merc_ltsgraph::PauseableThread;
@@ -120,7 +120,7 @@ impl GuiSettings {
 
 // Initialize a tokio runtime for async calls
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<ExitCode, MCRL3Error> {
+async fn main() -> Result<ExitCode, MercError> {
     // Attach the standard output to the command line.
     let _console = console::init()?;
 

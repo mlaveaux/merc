@@ -9,7 +9,7 @@
 
 use std::result::Result;
 
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 #[cfg(windows)]
 use winapi::um::consoleapi::AllocConsole;
 
@@ -28,7 +28,7 @@ pub struct Console {
 }
 
 /// Initialises the console. On Windows this either attaches to the
-pub fn init() -> Result<Console, MCRL3Error> {
+pub fn init() -> Result<Console, MercError> {
     #[cfg(windows)]
     unsafe {
         // SAFETY: Only unsafe because we use the winapi crate to call Windows API functions.

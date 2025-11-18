@@ -15,7 +15,7 @@ use merc_io::BitStreamRead;
 use merc_io::BitStreamWrite;
 use merc_number::bits_for_value;
 use merc_utilities::IndexedSet;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 use crate::Data;
 use crate::Ldd;
@@ -33,7 +33,7 @@ pub struct BinaryLddWriter<W: BitStreamWrite> {
 }
 
 impl<W: BitStreamWrite> BinaryLddWriter<W> {
-    pub fn new(mut writer: W, storage: &mut Storage) -> Result<Self, MCRL3Error> {
+    pub fn new(mut writer: W, storage: &mut Storage) -> Result<Self, MercError> {
         // Write the header of the binary LDD format.
         writer.write_bits(BLF_MAGIC, 16)?;
         writer.write_bits(BLF_VERSION, 16)?;
@@ -50,7 +50,7 @@ impl<W: BitStreamWrite> BinaryLddWriter<W> {
     }
 
     /// Writes an LDD to the stream.
-    pub fn write_ldd(&mut self, ldd: &Ldd, storage: &Storage) -> Result<(), MCRL3Error> {
+    pub fn write_ldd(&mut self, ldd: &Ldd, storage: &Storage) -> Result<(), MercError> {
         for (node, Data(value, down, right)) in iter_nodes(storage, ldd, |node| {
             // Skip any LDD that we have already inserted in the stream
             !self.nodes.borrow().contains(node)
@@ -100,7 +100,7 @@ pub struct BinaryLddReader<R: BitStreamRead> {
 
 impl<R: BitStreamRead> BinaryLddReader<R> {
     /// Inserts the header into the stream and initializes the reader.
-    pub fn new(mut reader: R) -> Result<Self, MCRL3Error> {
+    pub fn new(mut reader: R) -> Result<Self, MercError> {
         // Read and verify the header of the binary LDD format.
         let magic = reader.read_bits(16)?;
         if magic != BLF_MAGIC {
@@ -121,7 +121,7 @@ impl<R: BitStreamRead> BinaryLddReader<R> {
     }
 
     /// Reads an LDD from the stream.
-    pub fn read_ldd(&mut self, storage: &mut Storage) -> Result<Ldd, MCRL3Error> {
+    pub fn read_ldd(&mut self, storage: &mut Storage) -> Result<Ldd, MercError> {
         loop {
             let is_output = self.reader.read_bits(1)? == 1;
 
@@ -162,8 +162,8 @@ impl<R: BitStreamRead> BinaryLddReader<R> {
 impl<R: BitStreamRead + ATermRead> ATermRead for BinaryLddReader<R> {
     delegate::delegate! {
         to self.reader {
-            fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error>;
-            fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error>;
+            fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError>;
+            fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MercError>>, MercError>;
         }
     }
 }
@@ -171,9 +171,9 @@ impl<R: BitStreamRead + ATermRead> ATermRead for BinaryLddReader<R> {
 impl<R: BitStreamRead> BitStreamRead for BinaryLddReader<R> {
     delegate::delegate! {
         to self.reader {
-            fn read_bits(&mut self, num_bits: u8) -> Result<u64, MCRL3Error>;
-            fn read_integer(&mut self) -> Result<u64, MCRL3Error>;
-            fn read_string(&mut self) -> Result<String, MCRL3Error>;
+            fn read_bits(&mut self, num_bits: u8) -> Result<u64, MercError>;
+            fn read_integer(&mut self) -> Result<u64, MercError>;
+            fn read_string(&mut self) -> Result<String, MercError>;
         }
     }
 }

@@ -21,7 +21,7 @@ use merc_io::BitStreamWrite;
 use merc_io::BitStreamWriter;
 use merc_number::bits_for_value;
 use merc_utilities::IndexedSet;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::debug_trace;
 
 use crate::ATerm;
@@ -83,10 +83,10 @@ impl From<u8> for PacketType {
 /// Trait for writing ATerms to a stream.
 pub trait ATermWrite {
     /// Writes an ATerm to the stream.
-    fn write_aterm(&mut self, term: &ATerm) -> Result<(), MCRL3Error>;
+    fn write_aterm(&mut self, term: &ATerm) -> Result<(), MercError>;
 
     /// Writes an iterator of ATerms to the stream.
-    fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MCRL3Error>
+    fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MercError>
     where
         I: ExactSizeIterator<Item = ATerm>;
 
@@ -94,25 +94,25 @@ pub trait ATermWrite {
     ///
     /// This method should be called when you're done writing terms to ensure
     /// all data is properly written and the stream is correctly terminated.
-    fn flush(&mut self) -> Result<(), MCRL3Error>;
+    fn flush(&mut self) -> Result<(), MercError>;
 }
 
 /// Trait for reading ATerms from a stream.
 pub trait ATermRead {
     /// Reads the next ATerm from the stream. Returns None when the end of the stream is reached.
-    fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error>;
+    fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError>;
 
     /// Reads an iterator of ATerms from the stream.
-    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error>;
+    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MercError>>, MercError>;
 }
 
 /// Trait for objects that can be written to and read from an ATerm stream.
 pub trait ATermStreamable {
     /// Writes the object to the given ATerm writer.
-    fn write<W: ATermWrite>(&self, writer: &mut W) -> Result<(), MCRL3Error>;
+    fn write<W: ATermWrite>(&self, writer: &mut W) -> Result<(), MercError>;
 
     /// Reads the object from the given ATerm reader.
-    fn read<R: ATermRead>(reader: &mut R) -> Result<Self, MCRL3Error>
+    fn read<R: ATermRead>(reader: &mut R) -> Result<Self, MercError>
     where
         Self: Sized;
 }
@@ -156,7 +156,7 @@ impl<W: Write> BinaryATermWriter<W> {
     ///
     /// # Returns
     /// A new `BinaryATermOutputStream` instance or an error if header writing fails
-    pub fn new(writer: W) -> Result<Self, MCRL3Error> {
+    pub fn new(writer: W) -> Result<Self, MercError> {
         let mut stream = BitStreamWriter::new(writer);
 
         // Write the header of the binary aterm format
@@ -180,7 +180,7 @@ impl<W: Write> BinaryATermWriter<W> {
     }
 
     /// \brief Write a function symbol to the output stream.
-    fn write_function_symbol(&mut self, symbol: &SymbolRef<'_>) -> Result<usize, MCRL3Error> {
+    fn write_function_symbol(&mut self, symbol: &SymbolRef<'_>) -> Result<usize, MercError> {
         let (index, inserted) = self.function_symbols.insert(symbol.protect());
 
         if inserted {
@@ -223,7 +223,7 @@ impl<W: Write> BinaryATermWriter<W> {
 }
 
 impl<W: Write> ATermWrite for BinaryATermWriter<W> {
-    fn write_aterm(&mut self, term: &ATerm) -> Result<(), MCRL3Error> {
+    fn write_aterm(&mut self, term: &ATerm) -> Result<(), MercError> {
         self.stack.push_back((term.clone(), false));
 
         while let Some((current_term, write_ready)) = self.stack.pop_back() {
@@ -289,7 +289,7 @@ impl<W: Write> ATermWrite for BinaryATermWriter<W> {
         Ok(())
     }
 
-    fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MCRL3Error>
+    fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MercError>
     where
         I: ExactSizeIterator<Item = ATerm>,
     {
@@ -300,7 +300,7 @@ impl<W: Write> ATermWrite for BinaryATermWriter<W> {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), MCRL3Error> {
+    fn flush(&mut self) -> Result<(), MercError> {
         // Write the end of stream marker
         self.stream.write_bits(PacketType::ATerm as u64, PACKET_BITS)?;
         self.stream.write_bits(0, self.function_symbol_index_width())?;
@@ -313,10 +313,10 @@ impl<W: Write> ATermWrite for BinaryATermWriter<W> {
 impl<W: Write> BitStreamWrite for BinaryATermWriter<W> {
     delegate::delegate! {
         to self.stream {
-            fn write_bits(&mut self, value: u64, number_of_bits: u8) -> Result<(), MCRL3Error>;
-            fn write_string(&mut self, s: &str) -> Result<(), MCRL3Error>;
-            fn write_integer(&mut self, value: u64) -> Result<(), MCRL3Error>;
-            fn flush(&mut self) -> Result<(), MCRL3Error>;
+            fn write_bits(&mut self, value: u64, number_of_bits: u8) -> Result<(), MercError>;
+            fn write_string(&mut self, s: &str) -> Result<(), MercError>;
+            fn write_integer(&mut self, value: u64) -> Result<(), MercError>;
+            fn flush(&mut self) -> Result<(), MercError>;
         }
     }
 }
@@ -347,7 +347,7 @@ pub struct BinaryATermReader<R: Read> {
 
 impl<R: Read> BinaryATermReader<R> {
     /// Checks for the header and initializes the binary aterm input stream.
-    pub fn new(reader: R) -> Result<Self, MCRL3Error> {
+    pub fn new(reader: R) -> Result<Self, MercError> {
         let mut stream = BitStreamReader::new(reader);
 
         // Read the binary aterm format header
@@ -413,7 +413,7 @@ impl<R: Read> BinaryATermReader<R> {
 }
 
 impl<R: Read> ATermRead for BinaryATermReader<R> {
-    fn read_aterm(&mut self) -> Result<Option<ATerm>, MCRL3Error> {
+    fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError> {
         if self.ended {
             return Err(Error::new(
                 ErrorKind::UnexpectedEof,
@@ -502,7 +502,7 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
         }
     }
 
-    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MCRL3Error>>, MCRL3Error> {
+    fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MercError>>, MercError> {
         if self.ended {
             return Err(Error::new(
                 ErrorKind::UnexpectedEof,
@@ -525,9 +525,9 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
 impl<R: Read> BitStreamRead for BinaryATermReader<R> {
     delegate::delegate! {
         to self.stream {
-            fn read_bits(&mut self, number_of_bits: u8) -> Result<u64, MCRL3Error>;
-            fn read_string(&mut self) -> Result<String, MCRL3Error>;
-            fn read_integer(&mut self) -> Result<u64, MCRL3Error>;
+            fn read_bits(&mut self, number_of_bits: u8) -> Result<u64, MercError>;
+            fn read_string(&mut self) -> Result<String, MercError>;
+            fn read_integer(&mut self) -> Result<u64, MercError>;
         }
     }
 }
@@ -539,7 +539,7 @@ pub struct ATermReadIter<'a, R: Read> {
 }
 
 impl<'a, R: Read> Iterator for ATermReadIter<'a, R> {
-    type Item = Result<ATerm, MCRL3Error>;
+    type Item = Result<ATerm, MercError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining == 0 {

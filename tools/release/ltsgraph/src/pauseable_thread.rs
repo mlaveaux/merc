@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 /// A thread that can be paused and stopped.
 pub struct PauseableThread {
@@ -27,8 +27,8 @@ impl PauseableThread {
     /// The loop_function can return false to pause the thread explicitly, or the loop pauses whenever `stop` is called.
     pub fn new<C, I, F>(name: &str, init_function: I, loop_function: F) -> Result<PauseableThread, std::io::Error>
     where
-        I: Fn() -> Result<C, MCRL3Error> + Send + 'static,
-        F: Fn(&mut C) -> Result<bool, MCRL3Error> + Send + 'static,
+        I: Fn() -> Result<C, MercError> + Send + 'static,
+        F: Fn(&mut C) -> Result<bool, MercError> + Send + 'static,
     {
         let shared = Arc::new(PauseableThreadShared {
             running: AtomicBool::new(true),
@@ -85,7 +85,7 @@ impl PauseableThread {
     }
 
     /// Joins the thread and returns its result
-    pub fn join(&mut self) -> Result<(), MCRL3Error> {
+    pub fn join(&mut self) -> Result<(), MercError> {
         if let Some(handle) = self.handle.take() {
             handle.join().map_err(|e| {
                 if let Some(s) = e.downcast_ref::<&'static str>() {

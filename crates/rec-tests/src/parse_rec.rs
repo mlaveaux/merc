@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use merc_aterm::ATerm;
 use merc_aterm::THREAD_TERM_POOL;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use pest::Parser;
 use pest_consume::Error;
 use pest_consume::Node;
@@ -40,13 +40,13 @@ struct RecSpecResult {
 }
 
 /// Load a REC specification from a specified file.
-pub fn load_rec_from_file(file: PathBuf) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MCRL3Error> {
+pub fn load_rec_from_file(file: PathBuf) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MercError> {
     let contents = fs::read_to_string(file.clone())?;
     parse_rec(&contents, Some(file))
 }
 
 /// Load and join multiple REC specifications
-pub fn load_rec_from_strings(specs: &[&str]) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MCRL3Error> {
+pub fn load_rec_from_strings(specs: &[&str]) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MercError> {
     let mut rewrite_spec = RewriteSpecificationSyntax::default();
     let mut terms = vec![];
 
@@ -61,7 +61,7 @@ pub fn load_rec_from_strings(specs: &[&str]) -> Result<(RewriteSpecificationSynt
 
 /// Parses a REC specification. REC files can import other REC files.
 /// Returns a RewriteSpec containing all the rewrite rules and a list of terms that need to be rewritten.
-fn parse_rec(contents: &str, path: Option<PathBuf>) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MCRL3Error> {
+fn parse_rec(contents: &str, path: Option<PathBuf>) -> Result<(RewriteSpecificationSyntax, Vec<ATerm>), MercError> {
     // Initialize return result
     let mut rewrite_spec = RewriteSpecificationSyntax::default();
     let mut terms = vec![];

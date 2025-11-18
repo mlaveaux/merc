@@ -19,7 +19,7 @@ use merc_reduction::reduce;
 use merc_reduction::Equivalence;
 use merc_symbolic::read_symbolic_lts;
 use merc_unsafety::print_allocator_metrics;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::Timing;
 use merc_version::Version;
 
@@ -75,7 +75,7 @@ struct ReduceArgs {
     tau: Option<Vec<String>>,
 }
 
-fn main() -> Result<ExitCode, MCRL3Error> {
+fn main() -> Result<ExitCode, MercError> {
     let cli = Cli::parse();
 
     env_logger::Builder::new()

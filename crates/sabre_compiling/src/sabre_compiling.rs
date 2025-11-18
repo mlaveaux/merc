@@ -9,7 +9,7 @@ use toml::Table;
 
 use merc_aterm::ATermRef;
 use merc_aterm::Term;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_data::DataExpression;
 use merc_sabre::RewriteEngine;
 use merc_sabre::RewriteSpecification;
@@ -48,7 +48,7 @@ impl SabreCompilingRewriter {
         spec: &RewriteSpecification,
         use_local_workspace: bool,
         use_local_tmp: bool,
-    ) -> Result<SabreCompilingRewriter, MCRL3Error> {
+    ) -> Result<SabreCompilingRewriter, MercError> {
         let system_tmp_dir = tempdir()?;
         let temp_dir = if use_local_tmp {
             Path::new("./tmp")

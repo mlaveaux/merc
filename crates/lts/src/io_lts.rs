@@ -22,7 +22,7 @@ use merc_aterm::is_list_term;
 use merc_data::DataSpecification;
 use merc_io::TimeProgress;
 use merc_utilities::IndexedSet;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
@@ -30,7 +30,7 @@ use crate::LtsBuilder;
 use crate::StateIndex;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
-pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MCRL3Error> {
+pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MercError> {
     let start = Instant::now();
     debug!("Reading LTS in .lts format...");
 

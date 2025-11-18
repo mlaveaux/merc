@@ -13,14 +13,14 @@ use toml::map::Map;
 use toml::Table;
 use toml::Value;
 
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 /// Apply the value from compilation_toml for every given variable as an environment variable.
 fn apply_env(
     builder: Expression,
     compilation_toml: &Map<String, Value>,
     variables: &[&'_ str],
-) -> Result<Expression, MCRL3Error> {
+) -> Result<Expression, MercError> {
     let mut result = builder;
     let env = compilation_toml.get("env").ok_or("Missing [env] table")?;
 
@@ -44,7 +44,7 @@ pub struct RuntimeLibrary {
 impl RuntimeLibrary {
     /// Creates a new library that can be compiled at runtime.
     /// - depe
-    pub fn new(temp_dir: &Path, dependencies: Vec<String>) -> Result<RuntimeLibrary, MCRL3Error> {
+    pub fn new(temp_dir: &Path, dependencies: Vec<String>) -> Result<RuntimeLibrary, MercError> {
         info!("Creating library in directory {}", temp_dir.to_string_lossy());
         let source_dir = PathBuf::from(temp_dir).join("src");
 
@@ -106,7 +106,7 @@ impl RuntimeLibrary {
     }
 
     /// Compiles the library into
-    pub fn compile(&mut self) -> Result<Library, MCRL3Error> {
+    pub fn compile(&mut self) -> Result<Library, MercError> {
         let compilation_toml = include_str!("../../../target/Compilation.toml").parse::<Table>()?;
 
         // Compile the dynamic object.

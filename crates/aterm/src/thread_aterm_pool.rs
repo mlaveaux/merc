@@ -27,7 +27,7 @@ use crate::aterm::ATermRef;
 use crate::global_aterm_pool::GLOBAL_TERM_POOL;
 
 use merc_sharedmutex::RecursiveLock;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::ProtectionIndex;
 use merc_utilities::debug_trace;
 
@@ -172,9 +172,9 @@ impl ThreadTermPool {
         &self,
         symbol: &'b impl Symb<'a, 'b>,
         args: I,
-    ) -> Result<ATerm, MCRL3Error>
+    ) -> Result<ATerm, MercError>
     where
-        I: IntoIterator<Item = Result<T, MCRL3Error>>,
+        I: IntoIterator<Item = Result<T, MercError>>,
         T: Term<'c, 'd>,
     {
         let mut arguments = self.tmp_arguments.borrow_mut();
@@ -307,7 +307,7 @@ impl ThreadTermPool {
     }
 
     /// Parse the given string and returns the Term representation.
-    pub fn from_string(&self, text: &str) -> Result<ATerm, MCRL3Error> {
+    pub fn from_string(&self, text: &str) -> Result<ATerm, MercError> {
         let mut result = TermParser::parse(Rule::TermSpec, text)?;
         let root = result.next().unwrap();
 

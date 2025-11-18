@@ -13,7 +13,7 @@ use delegate::delegate;
 
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::PhantomUnsend;
 use merc_utilities::ProtectionIndex;
 
@@ -226,9 +226,9 @@ impl ATerm {
     }
 
     /// Creates a new term with the given symbol and an iterator over the arguments.
-    pub fn try_with_iter<'a, 'b, 'c, 'd, I, T>(symbol: &'b impl Symb<'a, 'b>, iter: I) -> Result<ATerm, MCRL3Error>
+    pub fn try_with_iter<'a, 'b, 'c, 'd, I, T>(symbol: &'b impl Symb<'a, 'b>, iter: I) -> Result<ATerm, MercError>
     where
-        I: IntoIterator<Item = Result<T, MCRL3Error>>,
+        I: IntoIterator<Item = Result<T, MercError>>,
         T: Term<'c, 'd>,
     {
         THREAD_TERM_POOL.with_borrow(|tp| tp.try_create_term_iter(symbol, iter))
@@ -253,7 +253,7 @@ impl ATerm {
     }
 
     /// Constructs a term from the given string.
-    pub fn from_string(text: &str) -> Result<ATerm, MCRL3Error> {
+    pub fn from_string(text: &str) -> Result<ATerm, MercError> {
         THREAD_TERM_POOL.with_borrow(|tp| tp.from_string(text))
     }
 

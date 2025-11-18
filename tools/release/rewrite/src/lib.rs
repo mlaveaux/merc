@@ -10,7 +10,7 @@ use merc_sabre::NaiveRewriter;
 use merc_sabre::RewriteEngine;
 use merc_sabre::SabreRewriter;
 use merc_sabre_compiling::SabreCompilingRewriter;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 mod trs_format;
 
@@ -26,7 +26,7 @@ pub enum Rewriter {
 }
 
 /// Rewrites the given REC specification.
-pub fn rewrite_rec(rewriter: Rewriter, filename_specification: &str, output: bool) -> Result<(), MCRL3Error> {
+pub fn rewrite_rec(rewriter: Rewriter, filename_specification: &str, output: bool) -> Result<(), MercError> {
     let (syntax_spec, syntax_terms) = load_rec_from_file(filename_specification.into())?;
 
     let spec = syntax_spec.to_rewrite_spec();

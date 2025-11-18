@@ -11,7 +11,7 @@ use merc_sabre::RewriteSpecification;
 use merc_sabre::SetAutomaton;
 use merc_sabre::utilities::DataPosition;
 use merc_sabre::utilities::TermStack;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 use crate::indenter::IndentFormatter;
 
@@ -19,7 +19,7 @@ use crate::indenter::IndentFormatter;
 ///
 /// Takes a rewrite specification and a source directory path, and generates the
 /// necessary code for term rewriting using an automaton-based approach.
-pub fn generate(spec: &RewriteSpecification, source_dir: &Path) -> Result<(), MCRL3Error> {
+pub fn generate(spec: &RewriteSpecification, source_dir: &Path) -> Result<(), MercError> {
     let mut file = File::create(PathBuf::from(source_dir).join("lib.rs"))?;
 
     // Create an indented formatter for clean code generation
@@ -148,7 +148,7 @@ fn generate_termstack_constructors(
     formatter: &mut IndentFormatter<File>,
     positions: &mut HashSet<DataPosition>,
     term_stacks: &[TermStack],
-) -> Result<(), MCRL3Error> {
+) -> Result<(), MercError> {
     writeln!(formatter, "// TermStack-based constructor functions")?;
 
     for (index, term_stack) in term_stacks.iter().enumerate() {
@@ -189,7 +189,7 @@ fn generate_termstack_constructors(
 fn generate_position_getters(
     formatter: &mut IndentFormatter<File>,
     positions: &HashSet<DataPosition>,
-) -> Result<(), MCRL3Error> {
+) -> Result<(), MercError> {
     writeln!(formatter, "// Get positions from term")?;
 
     for position in positions {

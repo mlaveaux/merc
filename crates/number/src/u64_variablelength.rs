@@ -7,7 +7,7 @@ use bitstream_io::BitWrite;
 use bitstream_io::BitWriter;
 use bitstream_io::Endianness;
 
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 /// The number of bits needed to represent a value of type T in most significant bit encoding.
 pub const fn encoding_size<T>() -> usize {
@@ -27,7 +27,7 @@ pub const fn encoding_size<T>() -> usize {
 pub fn write_u64_variablelength<W: Write, E: Endianness>(
     stream: &mut BitWriter<W, E>,
     mut value: u64,
-) -> Result<(), MCRL3Error> {
+) -> Result<(), MercError> {
     // While more than 7 bits of data are left, occupy the last output byte
     // and set the next byte flag.
     while value > 0b01111111 {
@@ -42,7 +42,7 @@ pub fn write_u64_variablelength<W: Write, E: Endianness>(
 }
 
 /// Decodes an unsigned variable-length integer using the MSB algorithm.
-pub fn read_u64_variablelength<R: Read, E: Endianness>(stream: &mut BitReader<R, E>) -> Result<u64, MCRL3Error> {
+pub fn read_u64_variablelength<R: Read, E: Endianness>(stream: &mut BitReader<R, E>) -> Result<u64, MercError> {
     let mut value: u64 = 0;
     for i in 0..encoding_size::<u64>() {
         let byte = stream.read::<8, u8>()?;

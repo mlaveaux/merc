@@ -11,7 +11,7 @@ use merc_io::BitStreamRead;
 use merc_ldd::BinaryLddReader;
 use merc_ldd::Ldd;
 use merc_ldd::Storage;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 
 /// Represents a symbolic LTS encoded by a disjunctive transition relation and a set of states.
 pub struct SymbolicLts {
@@ -47,7 +47,7 @@ struct SummandGroup {
 }
 
 /// Reads a symbolic LTS from a binary stream.
-pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<SymbolicLts, MCRL3Error> {
+pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<SymbolicLts, MercError> {
     let aterm_stream = BinaryATermReader::new(reader)?;
     let mut stream = BinaryLddReader::new(aterm_stream)?;
 

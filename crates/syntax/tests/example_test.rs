@@ -8,12 +8,12 @@ use test_case::test_case;
 use merc_syntax::UntypedDataSpecification;
 use merc_syntax::UntypedProcessSpecification;
 use merc_syntax::UntypedStateFrmSpec;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::test_logger;
 
 /// Creates a snapshot of the given object, in JSON format, in the snapshot directory. If the snapshot already exists then
 /// the JSON representation of the object is compared to the stored snapshot.
-fn check_snapshot<T: fmt::Display>(result: &T, snapshot_path: &Path) -> Result<(), MCRL3Error> {
+fn check_snapshot<T: fmt::Display>(result: &T, snapshot_path: &Path) -> Result<(), MercError> {
     if snapshot_path.exists() {
         // Read the existing tests/snapshot and compare it to the given object.
         let result = format!("{}", result);

@@ -8,7 +8,7 @@ use clap::Subcommand;
 use merc_gui::verbosity::VerbosityFlag;
 use merc_rec_tests::load_rec_from_file;
 use merc_unsafety::print_allocator_metrics;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_version::Version;
 
 use merc_rewrite::TrsFormatter;
@@ -65,7 +65,7 @@ struct ConvertArgs {
     output: String,
 }
 
-fn main() -> Result<ExitCode, MCRL3Error> {
+fn main() -> Result<ExitCode, MercError> {
     let cli = Cli::parse();
 
     env_logger::Builder::new()

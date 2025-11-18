@@ -6,7 +6,7 @@ use log::trace;
 use merc_lts::LTS;
 use merc_lts::LabelIndex;
 use merc_lts::StateIndex;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use merc_utilities::is_valid_permutation;
 
 /// Returns a topological ordering of the states of the given LTS.
@@ -14,7 +14,7 @@ use merc_utilities::is_valid_permutation;
 /// An error is returned if the LTS contains a cycle.
 ///     - filter: Only transitions satisfying the filter are considered part of the graph.
 ///     - reverse: If true, the topological ordering is reversed, i.e. successors before the incoming state.
-pub fn sort_topological<F, L>(lts: &L, filter: F, reverse: bool) -> Result<Vec<StateIndex>, MCRL3Error>
+pub fn sort_topological<F, L>(lts: &L, filter: F, reverse: bool) -> Result<Vec<StateIndex>, MercError>
 where
     F: Fn(LabelIndex, StateIndex) -> bool,
     L: LTS + fmt::Debug,

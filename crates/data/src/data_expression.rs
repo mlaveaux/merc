@@ -43,7 +43,7 @@ mod inner {
     use std::iter;
 
     use merc_aterm::ATermStringRef;
-    use merc_utilities::MCRL3Error;
+    use merc_utilities::MercError;
 
     use super::*;
 
@@ -98,7 +98,7 @@ mod inner {
 
         /// Creates a closed [DataExpression] from a string, i.e., has no free variables.
         #[merc_ignore]
-        pub fn from_string(text: &str) -> Result<DataExpression, MCRL3Error> {
+        pub fn from_string(text: &str) -> Result<DataExpression, MercError> {
             let term = ATerm::from_string(text)?;
 
             Ok(to_untyped_data_expression(&term, None))
@@ -106,7 +106,7 @@ mod inner {
 
         /// Creates a [DataExpression] from a string with free untyped variables indicated by the set of names.
         #[merc_ignore]
-        pub fn from_string_untyped(text: &str, variables: &AHashSet<String>) -> Result<DataExpression, MCRL3Error> {
+        pub fn from_string_untyped(text: &str, variables: &AHashSet<String>) -> Result<DataExpression, MercError> {
             let term = ATerm::from_string(text)?;
 
             Ok(to_untyped_data_expression(&term, Some(variables)))

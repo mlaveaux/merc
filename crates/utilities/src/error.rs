@@ -4,11 +4,11 @@ use core::fmt::Display;
 
 /// The MCRL3 error type. This has a blanket [`From`] impl for any type that implements Rust's [`Error`],
 /// meaning it can be used as a "catch all" error. Captures a backtrace that can be printed from this object.
-pub struct MCRL3Error {
+pub struct MercError {
     inner: Box<InnerMCRL3Error>,
 }
 
-impl MCRL3Error {
+impl MercError {
     /// Attempts to downcast the internal error to the given type.
     pub fn downcast_ref<E: Error + 'static>(&self) -> Option<&E> {
         self.inner.error.downcast_ref::<E>()
@@ -26,13 +26,13 @@ struct InnerMCRL3Error {
 }
 
 // NOTE: writing the impl this way gives us From<&str>
-impl<E> From<E> for MCRL3Error
+impl<E> From<E> for MercError
 where
     Box<dyn Error + Send + Sync + 'static>: From<E>,
 {
     #[cold]
     fn from(error: E) -> Self {
-        MCRL3Error {
+        MercError {
             inner: Box::new(InnerMCRL3Error {
                 error: error.into(),
                 backtrace: std::backtrace::Backtrace::capture(),
@@ -41,14 +41,14 @@ where
     }
 }
 
-impl Display for MCRL3Error {
+impl Display for MercError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "{}", self.inner.error)?;
         Ok(())
     }
 }
 
-impl Debug for MCRL3Error {
+impl Debug for MercError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "{:?}", self.inner.error)?;
         {

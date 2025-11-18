@@ -1,6 +1,6 @@
 use log::trace;
 use merc_utilities::DisplayPair;
-use merc_utilities::MCRL3Error;
+use merc_utilities::MercError;
 use pest::Parser;
 use pest_consume::Error;
 use pest_derive::Parser;
@@ -19,7 +19,7 @@ pub struct Mcrl2Parser;
 
 /// Parses the given mCRL2 specification into an AST.
 impl UntypedProcessSpecification {
-    pub fn parse(spec: &str) -> Result<UntypedProcessSpecification, MCRL3Error> {
+    pub fn parse(spec: &str) -> Result<UntypedProcessSpecification, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::MCRL2Spec, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 specification");
         trace!("Parse tree {}", DisplayPair(root.clone()));
@@ -30,7 +30,7 @@ impl UntypedProcessSpecification {
 
 /// Parses the given mCRL2 specification into an AST.
 impl UntypedDataSpecification {
-    pub fn parse(spec: &str) -> Result<UntypedDataSpecification, MCRL3Error> {
+    pub fn parse(spec: &str) -> Result<UntypedDataSpecification, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::DataSpec, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 data specification");
         trace!("Parse tree {}", DisplayPair(root.clone()));
@@ -40,7 +40,7 @@ impl UntypedDataSpecification {
 }
 
 impl UntypedStateFrmSpec {
-    pub fn parse(spec: &str) -> Result<UntypedStateFrmSpec, MCRL3Error> {
+    pub fn parse(spec: &str) -> Result<UntypedStateFrmSpec, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::StateFrmSpec, spec).map_err(extend_parser_error)?;
         let root = result
             .next()
@@ -52,7 +52,7 @@ impl UntypedStateFrmSpec {
 }
 
 impl UntypedActionRenameSpec {
-    pub fn parse(spec: &str) -> Result<UntypedActionRenameSpec, MCRL3Error> {
+    pub fn parse(spec: &str) -> Result<UntypedActionRenameSpec, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::ActionRenameSpec, spec).map_err(extend_parser_error)?;
         let root = result
             .next()
