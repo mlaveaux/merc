@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::ActDecl;
 use crate::ActFrm;
-use crate::ActFrmOp;
+use crate::ActFrmBinaryOp;
 use crate::Action;
 use crate::Assignment;
 use crate::Comm;
@@ -21,9 +21,14 @@ use crate::IdDecl;
 use crate::ModalityOperator;
 use crate::MultiAction;
 use crate::MultiActionLabel;
+use crate::PbesEquation;
+use crate::PbesExpr;
+use crate::PbesExprBinaryOp;
 use crate::ProcDecl;
 use crate::ProcExprBinaryOp;
 use crate::ProcessExpr;
+use crate::PropVarDecl;
+use crate::PropVarInst;
 use crate::Quantifier;
 use crate::RegFrm;
 use crate::Rename;
@@ -37,6 +42,7 @@ use crate::StateFrmUnaryOp;
 use crate::StateVarAssignment;
 use crate::StateVarDecl;
 use crate::UntypedDataSpecification;
+use crate::UntypedPbes;
 use crate::UntypedProcessSpecification;
 use crate::UntypedStateFrmSpec;
 use crate::VarDecl;
@@ -74,27 +80,27 @@ impl fmt::Display for UntypedProcessSpecification {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}", self.data_specification)?;
 
-        if !self.act_decls.is_empty() {
+        if !self.action_declarations.is_empty() {
             writeln!(f, "act")?;
-            for act_decl in &self.act_decls {
+            for act_decl in &self.action_declarations {
                 writeln!(f, "   {act_decl};")?;
             }
 
             writeln!(f)?;
         }
 
-        if !self.proc_decls.is_empty() {
+        if !self.process_declarations.is_empty() {
             writeln!(f, "proc")?;
-            for proc_decl in &self.proc_decls {
+            for proc_decl in &self.process_declarations {
                 writeln!(f, "   {proc_decl};")?;
             }
 
             writeln!(f)?;
         }
 
-        if !self.glob_vars.is_empty() {
+        if !self.global_variables.is_empty() {
             writeln!(f, "glob")?;
-            for var_decl in &self.glob_vars {
+            for var_decl in &self.global_variables {
                 writeln!(f, "   {var_decl};")?;
             }
 
@@ -110,37 +116,116 @@ impl fmt::Display for UntypedProcessSpecification {
 
 impl fmt::Display for UntypedDataSpecification {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if !self.sort_decls.is_empty() {
+        if !self.sort_declarations.is_empty() {
             writeln!(f, "sort")?;
-            for decl in &self.sort_decls {
+            for decl in &self.sort_declarations {
                 writeln!(f, "   {decl};")?;
             }
 
             writeln!(f)?;
         }
 
-        if !self.cons_decls.is_empty() {
+        if !self.constructor_declarations.is_empty() {
             writeln!(f, "cons")?;
-            for decl in &self.cons_decls {
+            for decl in &self.constructor_declarations {
                 writeln!(f, "   {decl};")?;
             }
 
             writeln!(f)?;
         }
 
-        if !self.map_decls.is_empty() {
+        if !self.map_declarations.is_empty() {
             writeln!(f, "map")?;
-            for decl in &self.map_decls {
+            for decl in &self.map_declarations {
                 writeln!(f, "   {decl};")?;
             }
 
             writeln!(f)?;
         }
 
-        for decl in &self.eqn_decls {
+        for decl in &self.equation_declarations {
             writeln!(f, "{decl}")?;
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for UntypedPbes {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "{}", self.data_specification)?;
+        writeln!(f)?;
+        if !self.global_variables.is_empty() {
+            writeln!(f, "glob")?;
+            for var_decl in &self.global_variables {
+                writeln!(f, "   {var_decl};")?;
+            }
+
+            writeln!(f)?;
+        }
+        writeln!(f)?;
+
+        if !self.equations.is_empty() {
+            writeln!(f, "pbes")?;
+            for equation in &self.equations {
+                writeln!(f, "   {equation};")?;
+            }
+        }
+
+        writeln!(f, "init {};", self.init)
+    }
+}
+
+impl fmt::Display for PropVarInst {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.arguments.is_empty() {
+            write!(f, "{}", self.identifier)
+        } else {
+            write!(f, "{}({})", self.identifier, self.arguments.iter().format(", "))
+        }
+    }
+}
+
+impl fmt::Display for PbesEquation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} = {}", self.operator, self.variable, self.formula)
+    }
+}
+
+impl fmt::Display for PropVarDecl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.parameters.is_empty() {
+            write!(f, "{}", self.identifier)
+        } else {
+            write!(f, "{}({})", self.identifier, self.parameters.iter().format(", "))
+        }
+    }
+}
+
+impl fmt::Display for PbesExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PbesExpr::True => write!(f, "true"),
+            PbesExpr::False => write!(f, "false"),
+            PbesExpr::PropVarInst(instance) => write!(f, "{instance}"), 
+            PbesExpr::Negation(expr) => write!(f, "(! {expr})"),
+            PbesExpr::Binary { op, lhs, rhs } => write!(f, "({lhs} {op} {rhs})"),
+            PbesExpr::Quantifier {
+                quantifier,
+                variables,
+                body,
+            } => write!(f, "({} {} . {})", quantifier, variables.iter().format(", "), body),
+            PbesExpr::DataValExpr(data_expr) => write!(f, "val({data_expr})"),
+        }
+    }
+}
+
+impl fmt::Display for PbesExprBinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PbesExprBinaryOp::Conjunction => write!(f, "&&"),
+            PbesExprBinaryOp::Disjunction => write!(f, "||"),
+            PbesExprBinaryOp::Implies => write!(f, "=>"),
+        }
     }
 }
 
@@ -431,12 +516,12 @@ impl fmt::Display for ActFrm {
     }
 }
 
-impl fmt::Display for ActFrmOp {
+impl fmt::Display for ActFrmBinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ActFrmOp::Implies => write!(f, "=>"),
-            ActFrmOp::Intersect => write!(f, "&&"),
-            ActFrmOp::Union => write!(f, "||"),
+            ActFrmBinaryOp::Implies => write!(f, "=>"),
+            ActFrmBinaryOp::Intersect => write!(f, "&&"),
+            ActFrmBinaryOp::Union => write!(f, "||"),
         }
     }
 }

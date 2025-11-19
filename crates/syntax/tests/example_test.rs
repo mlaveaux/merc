@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use merc_syntax::UntypedPbes;
 use test_case::test_case;
 
 use merc_syntax::UntypedDataSpecification;
@@ -481,6 +482,21 @@ fn test_parse_mcrl2_dataspec(input: &str, snapshot_file: &str) {
     let _ = test_logger();
 
     match UntypedDataSpecification::parse(input) {
+        Ok(spec) => {
+            check_snapshot(&spec, Path::new(snapshot_file)).expect("Could not read or write the tests/snapshot file");
+        }
+        Err(err) => panic!("{}", err),
+    }
+}
+
+#[test_case(include_str!("../../../examples/mCRL2/pbes/datatypes.txt"), "tests/snapshot/result_datatypes.txt" ; "datatypes.txt")]
+#[test_case(include_str!("../../../examples/mCRL2/pbes/nonmonotonic.txt"), "tests/snapshot/result_nonmonotonic.txt" ; "nonmonotonic.txt")]
+#[test_case(include_str!("../../../examples/mCRL2/pbes/overloading.txt"), "tests/snapshot/result_overloading.txt" ; "overloading.txt")]
+#[test_case(include_str!("../../../examples/mCRL2/pbes/true.txt"), "tests/snapshot/result_true.txt" ; "true.txt")]
+fn test_parse_pbes(input: &str, snapshot_file: &str) {
+    let _ = test_logger();
+
+    match UntypedPbes::parse(input) {
         Ok(spec) => {
             check_snapshot(&spec, Path::new(snapshot_file)).expect("Could not read or write the tests/snapshot file");
         }

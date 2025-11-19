@@ -10,6 +10,7 @@ use crate::ParseNode;
 use crate::StateFrmOp;
 use crate::UntypedActionRenameSpec;
 use crate::UntypedDataSpecification;
+use crate::UntypedPbes;
 use crate::UntypedProcessSpecification;
 use crate::UntypedStateFrmSpec;
 
@@ -60,6 +61,18 @@ impl UntypedActionRenameSpec {
         trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::ActionRenameSpec(ParseNode::new(root))?)
+    }
+}
+
+impl UntypedPbes {
+    pub fn parse(spec: &str) -> Result<UntypedPbes, MercError> {
+        let mut result = Mcrl2Parser::parse(Rule::PbesSpec, spec).map_err(extend_parser_error)?;
+        let root = result
+            .next()
+            .expect("Could not parse parameterised boolean equation system");
+        trace!("Parse tree {}", DisplayPair(root.clone()));
+
+        Ok(Mcrl2Parser::PbesSpec(ParseNode::new(root))?)
     }
 }
 

@@ -5,28 +5,41 @@ use arbitrary::Arbitrary;
 /// An mCRL2 specification containing declarations.
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedProcessSpecification {
-    /// Sort declarations
     pub data_specification: UntypedDataSpecification,
-    /// Global variables
-    pub glob_vars: Vec<VarDecl>,
-    /// Action declarations
-    pub act_decls: Vec<ActDecl>,
-    /// Process declarations
-    pub proc_decls: Vec<ProcDecl>,
-    /// Initial process
+    pub global_variables: Vec<VarDecl>,
+    pub action_declarations: Vec<ActDecl>,
+    pub process_declarations: Vec<ProcDecl>,
     pub init: Option<ProcessExpr>,
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedDataSpecification {
-    /// Sort declarations
-    pub sort_decls: Vec<SortDecl>,
-    /// Constructor declarations
-    pub cons_decls: Vec<IdDecl>,
-    /// Map declarations
-    pub map_decls: Vec<IdDecl>,
-    /// Equation declarations
-    pub eqn_decls: Vec<EqnSpec>,
+    pub sort_declarations: Vec<SortDecl>,
+    pub constructor_declarations: Vec<IdDecl>,
+    pub map_declarations: Vec<IdDecl>,
+    pub equation_declarations: Vec<EqnSpec>,
+}
+
+#[derive(Debug, Default, Eq, PartialEq, Hash)]
+pub struct UntypedPbes {
+    pub data_specification: UntypedDataSpecification,
+    pub global_variables: Vec<VarDecl>,
+    pub equations: Vec<PbesEquation>,
+    pub init: PropVarInst,
+}
+
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub struct PropVarDecl {
+    pub identifier: String,
+    pub parameters: Vec<VarDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Default, Eq, PartialEq, Hash)]
+pub struct PropVarInst {
+    pub identifier: String,
+    pub arguments: Vec<DataExpr>,
 }
 
 /// A declaration of an identifier with its sort.
@@ -415,7 +428,7 @@ pub enum Quantifier {
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
-pub enum ActFrmOp {
+pub enum ActFrmBinaryOp {
     Implies,
     Union,
     Intersect,
@@ -434,10 +447,44 @@ pub enum ActFrm {
         body: Box<ActFrm>,
     },
     Binary {
-        op: ActFrmOp,
+        op: ActFrmBinaryOp,
         lhs: Box<ActFrm>,
         rhs: Box<ActFrm>,
     },
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum PbesExpr {
+    DataValExpr(DataExpr),
+    PropVarInst(PropVarInst),
+    Quantifier {
+        quantifier: Quantifier,
+        variables: Vec<VarDecl>,
+        body: Box<PbesExpr>,
+    },
+    Negation(Box<PbesExpr>),
+    Binary {
+        op: PbesExprBinaryOp,
+        lhs: Box<PbesExpr>,
+        rhs: Box<PbesExpr>,
+    },
+    True,
+    False,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub struct PbesEquation {
+    pub operator: FixedPointOperator,
+    pub variable: PropVarDecl,
+    pub formula: PbesExpr,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum PbesExprBinaryOp {
+    Implies,
+    Disjunction,
+    Conjunction,
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
@@ -463,14 +510,14 @@ pub struct Comm {
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct UntypedActionRenameSpec {
-    pub data_spec: UntypedDataSpecification,
-    pub act_decls: Vec<ActDecl>,
-    pub rename_decls: Vec<ActionRenameDecl>,
+    pub data_specification: UntypedDataSpecification,
+    pub action_declarations: Vec<ActDecl>,
+    pub rename_declarations: Vec<ActionRenameDecl>,
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct ActionRenameDecl {
-    pub vars_spec: Vec<VarDecl>,
+    pub variables_specification: Vec<VarDecl>,
     pub rename_rule: ActionRenameRule,
 }
 
@@ -488,12 +535,10 @@ pub enum ActionRHS {
     Action(Action),
 }
 
-/// Source location information.
+/// Source location information, spanning from start to end in the source text.
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct Span {
-    /// Start position in source
     pub start: usize,
-    /// End position in source
     pub end: usize,
 }
 

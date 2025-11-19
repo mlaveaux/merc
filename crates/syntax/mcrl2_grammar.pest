@@ -563,22 +563,35 @@ ActionRenameRuleRHS = {
     |  Action                                                      // Action
 }
 
-FixedPointOperator = { "mu" | "nu" }
+FixedPointOperator = { FixedPointMu | FixedPointNu }
+    FixedPointMu = { "mu" }
+    FixedPointNu = { "nu" }
 
 /// Parameterised boolean equations systems
-PbesExpr = { PbesExprPrefix* ~ PbesExprPrimary ~ (PbesExprPrefix* ~ PbesExprPrimary)* }
+PbesSpec = { DataSpec? ~ GlobVarSpec? ~ PbesEqnSpec ~ PbesInit }
+
+PbesEqnSpec = { "pbes" ~ PbesEqnDecl+ }
+
+PbesEqnDecl = { FixedPointOperator ~ PropVarDecl ~ "=" ~ PbesExpr ~ ";" }
+
+PropVarDecl = { Id ~ ("(" ~ VarsDeclList ~ ")")? }
+
+PropVarInst = { Id ~ ("(" ~ DataExprList ~ ")")? }
+
+PbesInit = { "init" ~ PropVarInst ~ ";" }
+
+PbesExpr = { PbesExprPrefix* ~ PbesExprPrimary ~ (PbesExprInfix ~ PbesExprPrefix* ~ PbesExprPrimary)* }
 
 PbesExprPrimary = _{
       DataValExpr
     | PbesExprParens
     | PbesExprTrue
     | PbesExprFalse
-    | PbesExprId    
+    | PropVarInst    
 }
     PbesExprParens = { "(" ~ PbesExpr ~ ")" }
     PbesExprTrue = { "true" }
     PbesExprFalse = { "false" }
-    PbesExprId = { Id ~ ( "(" ~ DataExprList ~ ")")? }
 
 PbesExprPrefix = _{
       PbesExprForall
@@ -607,7 +620,7 @@ PresExprPrimary = _{
     | PresExprParens
     | PbesExprTrue
     | PbesExprFalse
-    | PbesExprId    
+    | PropVarInst    
     | PresExprEqinf
     | PresExprEqninf
     | PresExprCondsm
