@@ -7,19 +7,19 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#ifndef MCRL3_STRING_VIEW_H
-#define MCRL3_STRING_VIEW_H
+#ifndef MERC_STRING_VIEW_H
+#define MERC_STRING_VIEW_H
 
-#include <mcrl3_ffi.h>
+#include <merc_ffi.h>
 
-namespace mcrl3 {
+namespace merc {
 
-/// Converts a `mcrl3::ffi::string_view_t` to a `std::string_view`.
+/// Converts a `merc::ffi::string_view_t` to a `std::string_view`.
 inline
-std::string_view to_string_view(mcrl3::ffi::string_view_t view) {
+std::string_view to_string_view(merc::ffi::string_view_t view) {
     return std::string_view(view.ptr, view.length);
 }
 
-} // namespace mcrl3
+} // namespace merc
 
-#endif // MCRL3_STRING_VIEW_H
+#endif // MERC_STRING_VIEW_H

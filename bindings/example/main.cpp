@@ -7,14 +7,14 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#include <mcrl3/string_view.h>
+#include <merc/string_view.h>
 
-#include <mcrl3_ffi.h>
+#include <merc_ffi.h>
 
 #include <iostream>
 
-using namespace mcrl3;
-using namespace mcrl3::ffi;
+using namespace merc;
+using namespace merc::ffi;
 
 int main()
 {

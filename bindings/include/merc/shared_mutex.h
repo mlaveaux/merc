@@ -7,12 +7,12 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#ifndef MCRL3_SHARED_MUTEX_H
-#define MCRL3_SHARED_MUTEX_H
+#ifndef MERC_SHARED_MUTEX_H
+#define MERC_SHARED_MUTEX_H
 
-#include <mcrl3_ffi.h>
+#include <merc_ffi.h>
 
-namespace mcrl3
+namespace merc
 {
 
 /// A shared lock guard for the shared_mutex.
@@ -29,14 +29,14 @@ public:
   /// Locks the guard again explicitly.
   inline void lock_shared()
   {
-    mcrl3::ffi::global_lock_shared();
+    merc::ffi::global_lock_shared();
     is_locked = true;
   }
 
   /// Unlocks the acquired shared guard explicitly. Otherwise, performed in destructor.
   inline void unlock_shared()
   {
-    mcrl3::ffi::global_unlock_shared();
+    merc::ffi::global_unlock_shared();
     is_locked = false;
   }
 
@@ -68,7 +68,7 @@ public:
   /// Unlocks the acquired shared guard explicitly. Otherwise, performed in destructor.
   void unlock()
   {
-    mcrl3::ffi::global_unlock_exclusive();
+    merc::ffi::global_unlock_exclusive();
     is_locked = false;
   }
 
@@ -89,17 +89,17 @@ private:
 inline
 shared_guard global_lock_shared()
 {
-  mcrl3::ffi::global_lock_exclusive();
+  merc::ffi::global_lock_exclusive();
   return shared_guard();
 }
 
 inline
 lock_guard global_lock_exclusive()
 {
-  mcrl3::ffi::global_lock_exclusive();
+  merc::ffi::global_lock_exclusive();
   return lock_guard();
 }
 
-} // namespace mcrl3
+} // namespace merc
 
-#endif // MCRL3_SHARED_MUTEX_H
+#endif // MERC_SHARED_MUTEX_H

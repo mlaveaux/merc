@@ -12,4 +12,4 @@ language = "C++"
 namespaces = ["merc", "ffi"]
 
 # Use include guards.
-include_guard = "MCRL3_FFI_H"
+include_guard = "MERC_FFI_H"
