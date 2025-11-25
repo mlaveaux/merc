@@ -2,7 +2,6 @@ use std::fmt;
 use std::mem::swap;
 
 use bumpalo::Bump;
-use clap::ValueEnum;
 use log::debug;
 use log::info;
 use log::trace;
@@ -30,49 +29,9 @@ use crate::branching_bisim_signature_sorted;
 use crate::combine_partition;
 use crate::is_tau_hat;
 use crate::preprocess_branching;
-use crate::quotient_lts_block;
-use crate::quotient_lts_naive;
 use crate::strong_bisim_signature;
 use crate::weak_bisim_signature_sorted;
 use crate::weak_bisim_signature_sorted_taus;
-
-#[derive(Clone, Debug, ValueEnum)]
-pub enum Equivalence {
-    WeakBisim,
-    StrongBisim,
-    StrongBisimNaive,
-    BranchingBisim,
-    BranchingBisimNaive,
-}
-
-/// Reduces the given LTS modulo the given equivalence using signature refinement
-pub fn reduce<L>(lts: L, equivalence: Equivalence, timing: &mut Timing) -> LabelledTransitionSystem
-where
-    L: LTS + Clone + fmt::Debug,
-{
-    match equivalence {
-        Equivalence::WeakBisim => {
-            let partition = weak_bisim_sigref_naive(lts.clone(), timing);
-            quotient_lts_naive(&lts, &partition, true)
-        }
-        Equivalence::StrongBisim => {
-            let (lts, partition) = strong_bisim_sigref(lts, timing);
-            quotient_lts_block::<false>(&lts, &partition)
-        }
-        Equivalence::StrongBisimNaive => {
-            let (lts, partition) = strong_bisim_sigref_naive(lts, timing);
-            quotient_lts_naive(&lts, &partition, false)
-        }
-        Equivalence::BranchingBisim => {
-            let (lts, partition) = branching_bisim_sigref(lts, timing);
-            quotient_lts_block::<true>(&lts, &partition)
-        }
-        Equivalence::BranchingBisimNaive => {
-            let (lts, partition) = branching_bisim_sigref_naive(lts, timing);
-            quotient_lts_naive(&lts, &partition, true)
-        }
-    }
-}
 
 /// Computes a strong bisimulation partitioning using signature refinement
 pub fn strong_bisim_sigref<L>(lts: L, timing: &mut Timing) -> (L, BlockPartition)
