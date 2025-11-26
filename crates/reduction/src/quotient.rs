@@ -124,7 +124,7 @@ pub fn quotient_lts_naive(
         Some(partition.num_of_blocks()),
         || transitions.iter(),
         lts.labels().into(),
-        lts.hidden_labels().into(),
+        Vec::new(),
     );
     debug!("Time quotient: {:.3}s", start.elapsed().as_secs_f64());
     result
@@ -194,7 +194,7 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
         Some(partition.num_of_blocks()),
         || transitions.iter(),
         lts.labels().into(),
-        lts.hidden_labels().into(),
+        Vec::new(),
     );
     debug!("Time quotient: {:.3}s", start.elapsed().as_secs_f64());
     result

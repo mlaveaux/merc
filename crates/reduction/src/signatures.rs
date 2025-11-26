@@ -289,7 +289,7 @@ pub fn weak_bisim_signature_sorted_taus(
 
 /// Perform the preprocessing necessary for branching bisimulation with the
 /// sorted signature see `branching_bisim_signature_sorted`.
-pub fn preprocess_branching<L>(lts: L) -> (LabelledTransitionSystem, IndexedPartition)
+pub fn preprocess_branching<L>(lts: L) -> LabelledTransitionSystem
 where
     L: LTS + fmt::Debug,
 {
@@ -305,8 +305,5 @@ where
     )
     .expect("After quotienting, the LTS should not contain cycles");
 
-    (
-        LabelledTransitionSystem::new_from_permutation(tau_loop_free_lts, |i| topological_permutation[i]),
-        reorder_partition(scc_partition, |i| BlockIndex::new(topological_permutation[i].value())),
-    )
+    LabelledTransitionSystem::new_from_permutation(tau_loop_free_lts, |i| topological_permutation[i])
 }

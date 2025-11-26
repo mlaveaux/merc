@@ -82,7 +82,7 @@ where
     L: LTS + fmt::Debug,
 {
     let mut timepre = timing.start("preprocess");
-    let (preprocessed_lts, _preprocess_partition) = preprocess_branching(lts);
+    let preprocessed_lts = preprocess_branching(lts);
     let incoming = IncomingTransitions::new(&preprocessed_lts);
     timepre.finish();
 
@@ -161,7 +161,7 @@ where
     L: LTS + fmt::Debug,
 {
     let mut timepre = timing.start("preprocess");
-    let (preprocessed_lts, _preprocess_partition) = preprocess_branching(lts);
+    let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
 
     let mut time = timing.start("reduction");
@@ -201,12 +201,12 @@ where
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn weak_bisim_sigref_naive<L>(lts: L, timing: &mut Timing) -> IndexedPartition
+pub fn weak_bisim_sigref_naive<L>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition)
 where
     L: LTS + fmt::Debug,
 {
     let mut timepre = timing.start("preprocess");
-    let (preprocessed_lts, preprocess_partition) = preprocess_branching(lts);
+    let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
 
     let mut time = timing.start("reduction");
@@ -219,11 +219,7 @@ where
     );
     time.finish();
 
-    // Combine the SCC partition with the branching bisimulation partition.
-    let combined_partition = combine_partition(preprocess_partition, &partition);
-
-    trace!("Final partition {combined_partition}");
-    combined_partition
+    (preprocessed_lts, partition)
 }
 
 /// General signature refinement algorithm that accepts an arbitrary signature
