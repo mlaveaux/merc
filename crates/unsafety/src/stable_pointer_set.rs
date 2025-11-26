@@ -7,6 +7,8 @@ use std::hash::Hasher;
 use std::ops::Deref;
 use std::ptr::NonNull;
 use std::ptr::addr_eq;
+#[cfg(debug_assertions)]
+use std::sync::Arc;
 
 use allocator_api2::alloc::Allocator;
 use allocator_api2::alloc::Global;
@@ -16,8 +18,6 @@ use papaya::HashSet;
 use papaya::ResizeMode;
 
 use crate::AllocatorDst;
-#[cfg(debug_assertions)]
-use crate::AtomicRefCounter;
 use crate::SliceDst;
 
 /// A safe wrapper around a raw pointer that allows immutable dereferencing. This remains valid as long as the `StablePointerSet` remains
@@ -33,7 +33,7 @@ pub struct StablePointer<T: ?Sized> {
 
     /// Keep track of reference counts in debug mode.
     #[cfg(debug_assertions)]
-    reference_counter: AtomicRefCounter<()>,
+    reference_counter: Arc<()>,
 }
 
 /// Check that the Option<StablePointer> is the same size as a usize for release builds.
@@ -46,7 +46,7 @@ impl<T: ?Sized> StablePointer<T> {
         #[cfg(debug_assertions)]
         {
             // There is a reference in the table, and the one of `self.ptr`.
-            self.reference_counter.strong_count() == 2
+            Arc::strong_count(&self.reference_counter) == 2
         }
         #[cfg(not(debug_assertions))]
         {
@@ -63,7 +63,7 @@ impl<T: ?Sized> StablePointer<T> {
         Self {
             ptr,
             #[cfg(debug_assertions)]
-            reference_counter: AtomicRefCounter::new(()),
+            reference_counter: Arc::new(()),
         }
     }
 
@@ -470,7 +470,7 @@ where
     pub fn clear(&self) {
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.index.pin().iter().all(|x| x.reference_counter.strong_count() == 1),
+            self.index.pin().iter().all(|x| Arc::strong_count(&x.reference_counter) == 1),
             "All pointers must be the last reference to the element"
         );
 
@@ -603,7 +603,7 @@ where
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.index.pin().iter().all(|x| x.reference_counter.strong_count() == 1),
+            self.index.pin().iter().all(|x| Arc::strong_count(&x.reference_counter) == 1),
             "All pointers must be the last reference to the element"
         );
 
@@ -625,7 +625,7 @@ struct Entry<T: ?Sized> {
     ptr: NonNull<T>,
 
     #[cfg(debug_assertions)]
-    reference_counter: AtomicRefCounter<()>,
+    reference_counter: Arc<()>,
 }
 
 unsafe impl<T: ?Sized + Send> Send for Entry<T> {}
@@ -637,7 +637,7 @@ impl<T: ?Sized> Entry<T> {
         Self {
             ptr,
             #[cfg(debug_assertions)]
-            reference_counter: AtomicRefCounter::new(()),
+            reference_counter: Arc::new(()),
         }
     }
 }
