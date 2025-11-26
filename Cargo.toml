@@ -15,11 +15,11 @@ split-debuginfo= "packed"
 [workspace]
 resolver = "2"
 members = [
-    "3rd-party/pest_consume",
     "3rd-party/pest_consume_macros",
+    "3rd-party/pest_consume",
+    "crates/aterm-ffi",
     "crates/aterm",
     "crates/aterm/benchmarks",
-    "crates/aterm-ffi",
     "crates/data",
     "crates/gui",
     "crates/io",
@@ -41,6 +41,7 @@ members = [
     "crates/unsafety",
     "crates/utilities",
     "crates/version",
+    "crates/vpg",
     "crates/xtask",
     "tools/ltsinfo",
     "tools/rewrite",
@@ -48,6 +49,7 @@ members = [
 
 [workspace.dependencies]
 ahash = "0.8"
+bitvec = "1.0"
 bitstream-io = "4.9"
 bumpalo = "3.19"
 clap = { version = "4.5", features = ["derive"] }
@@ -129,5 +131,6 @@ merc_syntax = { path = "crates/syntax" }
 merc_unsafety = { path = "crates/unsafety" }
 merc_utilities = { path = "crates/utilities" }
 merc_version = { path = "crates/version" }
+merc_vpg = { path = "crates/vpg" }
 pest_consume  = { path = "3rd-party/pest_consume" }
 pest_consume_macros  = { path = "3rd-party/pest_consume_macros" }
