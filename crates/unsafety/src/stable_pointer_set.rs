@@ -140,7 +140,7 @@ impl<T: ?Sized> Deref for StablePointer<T> {
 
 impl<T: fmt::Debug + ?Sized> fmt::Debug for StablePointer<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("StablePointer").field(self).finish()
+        f.debug_tuple("StablePointer").field(&self.ptr).finish()
     }
 }
 
@@ -525,28 +525,29 @@ where
             construct(ptr.as_mut(), value);
         }
 
-        let entry = Entry::new(ptr);
-        let ptr = StablePointer::from_entry(&entry);
 
-        let inserted = self.index.pin().insert(entry);
-        if !inserted {
-            // Add the result to the storage, it could be at this point that the entry was inserted by another thread. So
-            // this insertion might actually fail, in which case we should clean up the created entry and return the old pointer.
+        loop {
+            let entry = Entry::new(ptr);
+            let ptr = StablePointer::from_entry(&entry);
 
-            // SAFETY: We have exclusive access during drop and the pointer is valid
-            unsafe {
-                self.drop_and_deallocate_entry(ptr.ptr);
+            if !self.index.pin().insert(entry) {
+                // It could be at this point that the entry was inserted by another
+                // thread. So this insertion might actually fail, in which case we
+                // should clean up the created entry and return the old pointer.
+
+                // TODO: I suppose this can go wrong with begin_insert(x); insert(x); remove(x); end_insert(x) chain.
+                if let Some(existing_ptr) = self.get(value) {
+                    // SAFETY: We have exclusive access during drop and the pointer is valid
+                    unsafe {
+                        self.drop_and_deallocate_entry(ptr.ptr);
+                    }
+
+                    return (existing_ptr, false);
+                }
             }
 
-            // TODO: I suppose this can go wrong with begin_insert(x); insert(x); remove(x); end_insert(x) chain.
-            return (
-                self.get(value)
-                    .expect("Insertion failed, but the entry is also not in the set"),
-                false,
-            );
+            return (ptr, true);
         }
-
-        (ptr, inserted)
     }
 }
 
