@@ -21,7 +21,6 @@ members = [
     "crates/aterm",
     "crates/aterm/benchmarks",
     "crates/data",
-    "crates/gui",
     "crates/io",
     "crates/ldd",
     "crates/ldd/benchmarks",
@@ -38,9 +37,9 @@ members = [
     "crates/sharedmutex/benchmarks",
     "crates/symbolic",
     "crates/syntax",
+    "crates/tools",
     "crates/unsafety",
     "crates/utilities",
-    "crates/version",
     "crates/vpg",
     "crates/xtask",
     "tools/ltsinfo",
@@ -114,7 +113,6 @@ criterion = "0.7"
 # The workspace libraries.
 merc_aterm = { path = "crates/aterm" }
 merc_data = { path = "crates/data" }
-merc_gui = { path = "crates/gui" }
 merc_io = { path = "crates/io" }
 merc_ldd = { path = "crates/ldd" }
 merc_lts = { path = "crates/lts" }
@@ -128,9 +126,9 @@ merc_sabre-ffi = { path = "crates/sabre_compiling/sabre_ffi" }
 merc_sharedmutex = { path = "crates/sharedmutex" }
 merc_symbolic = { path = "crates/symbolic" }
 merc_syntax = { path = "crates/syntax" }
+merc_tools = { path = "crates/tools" }
 merc_unsafety = { path = "crates/unsafety" }
 merc_utilities = { path = "crates/utilities" }
-merc_version = { path = "crates/version" }
 merc_vpg = { path = "crates/vpg" }
 pest_consume  = { path = "3rd-party/pest_consume" }
 pest_consume_macros  = { path = "3rd-party/pest_consume_macros" }

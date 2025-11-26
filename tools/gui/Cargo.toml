@@ -36,8 +36,7 @@ wgpu = "27.0"
 rand = "0.9"
 
 # The workspace libraries.
-merc_gui = { path = "../../crates/gui" }
 merc_lts = { path = "../../crates/lts" }
-merc_utilities = { path = "../../crates/utilities" }
+merc_tools = { path = "../../crates/tools" }
 merc_unsafety = { path = "../../crates/unsafety" }
-merc_version = { path = "../../crates/version" }
+merc_utilities = { path = "../../crates/utilities" }

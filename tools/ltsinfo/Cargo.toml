@@ -6,14 +6,13 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-merc_gui.workspace = true
 merc_ldd.workspace = true
 merc_lts.workspace = true
 merc_reduction.workspace = true
 merc_symbolic.workspace = true
+merc_tools.workspace = true
 merc_unsafety.workspace = true
 merc_utilities.workspace = true
-merc_version.workspace = true
 
 clap.workspace = true
 env_logger.workspace = true

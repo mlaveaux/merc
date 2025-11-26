@@ -5,11 +5,12 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
-use merc_gui::verbosity::VerbosityFlag;
 use merc_rec_tests::load_rec_from_file;
+use merc_tools::VerbosityFlag;
+use merc_tools::VersionFlag;
+use merc_tools::Version;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
-use merc_version::Version;
 
 use merc_rewrite::Rewriter;
 use merc_rewrite::rewrite_rec;
@@ -21,13 +22,8 @@ pub use trs_format::*;
 #[derive(clap::Parser, Debug)]
 #[command(name = "Maurice Laveaux", about = "A command line rewriting tool")]
 struct Cli {
-    #[arg(
-        long,
-        global = true,
-        default_value_t = false,
-        help = "Print the version of this tool"
-    )]
-    version: bool,
+    #[command(flatten)]
+    version: VersionFlag,
 
     #[command(flatten)]
     verbosity: VerbosityFlag,
@@ -74,7 +70,7 @@ fn main() -> Result<ExitCode, MercError> {
         .parse_default_env()
         .init();
 
-    if cli.version {
+    if cli.version.into() {
         eprintln!("{}", Version);
         return Ok(ExitCode::SUCCESS);
     }

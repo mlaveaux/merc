@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::stdout;
@@ -8,35 +7,28 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
-use merc_gui::verbosity::VerbosityFlag;
 use merc_ldd::Storage;
-use merc_lts::LTS;
-use merc_lts::LtsType;
 use merc_lts::guess_format_from_extension;
 use merc_lts::is_explicit_lts;
-use merc_lts::read_aut;
+use merc_lts::LTS;
+use merc_lts::LtsType;
 use merc_lts::read_explicit_lts;
-use merc_lts::read_lts;
 use merc_lts::write_aut;
-use merc_reduction::reduce;
-
 use merc_reduction::Equivalence;
+use merc_reduction::reduce;
 use merc_symbolic::read_symbolic_lts;
+use merc_tools::verbosity::VerbosityFlag;
+use merc_tools::Version;
+use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
-use merc_version::Version;
 
 #[derive(clap::Parser, Debug)]
-#[command(name = "Maurice Laveaux", about = "A command line rewriting tool")]
+#[command(name = "Maurice Laveaux", about = "A command line tool for labelled transition systems")]
 struct Cli {
-    #[arg(
-        long,
-        global = true,
-        default_value_t = false,
-        help = "Print the version of this tool"
-    )]
-    version: bool,
+    #[command(flatten)]
+    version: VersionFlag,
 
     #[command(flatten)]
     verbosity: VerbosityFlag,
@@ -92,7 +84,7 @@ fn main() -> Result<ExitCode, MercError> {
         .parse_default_env()
         .init();
 
-    if cli.version {
+    if cli.version.into() {
         eprintln!("{}", Version);
         return Ok(ExitCode::SUCCESS);
     }

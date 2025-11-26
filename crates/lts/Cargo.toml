@@ -12,6 +12,7 @@ merc_io.workspace = true
 merc_utilities.workspace = true
 
 bumpalo.workspace = true
+clap.workspace = true
 itertools.workspace = true
 log.workspace = true
 rand.workspace = true
