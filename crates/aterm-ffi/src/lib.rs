@@ -57,13 +57,13 @@ pub struct function_symbol_t {
 /// Returns true iff the term is an integer term.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_is_int(term: unprotected_aterm_t) -> bool {
-    unsafe { is_int_term(&term_to_aterm_ref(term)) }
+    unsafe { is_int_term(&term_to_aterm_ref(term, true)) }
 }
 
 /// Returns true iff the term is a list term.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_is_list(term: unprotected_aterm_t) -> bool {
-    unsafe { is_list_term(&term_to_aterm_ref(term)) }
+    unsafe { is_list_term(&term_to_aterm_ref(term, false)) }
 }
 
 #[unsafe(no_mangle)]
@@ -77,7 +77,7 @@ pub unsafe extern "C" fn term_empty_list() -> unprotected_aterm_t {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_is_empty_list(term: unprotected_aterm_t) -> bool {
-    unsafe { is_empty_list_term(&term_to_aterm_ref(term)) }
+    unsafe { is_empty_list_term(&term_to_aterm_ref(term, false)) }
 }
 
 #[unsafe(no_mangle)]
@@ -104,7 +104,7 @@ pub unsafe extern "C" fn term_create_int(value: usize) -> aterm_t {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_get_int_value(term: unprotected_aterm_t) -> usize {
     unsafe {
-        let shared_term = term_to_aterm_ref(term);
+        let shared_term = term_to_aterm_ref(term, true);
         debug_assert!(shared_term.annotation().is_some(), "Term is not an integer term");
         shared_term.annotation().unwrap_unchecked()
     }
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn term_get_int_value(term: unprotected_aterm_t) -> usize 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_protect(term: unprotected_aterm_t) -> root_index_t {
     THREAD_TERM_POOL.with_borrow(|tp| {
-        let term = unsafe { tp.protect(&term_to_aterm_ref(term)) };
+        let term = unsafe { tp.protect(&term_to_aterm_ref(term, false)) };
         let root = term.root();
         std::mem::forget(term); // Prevent the term from being dropped
         root_index_t { index: *root.deref() }
@@ -224,7 +224,7 @@ pub unsafe extern "C" fn shared_counter_unref(counter: prefix_shared_counter_t) 
 pub unsafe extern "C" fn term_get_function_symbol(term: unprotected_aterm_t) -> function_symbol_t {
     unsafe {
         function_symbol_t {
-            ptr: term_to_aterm_ref(term).shared().symbol().shared().deref() as *const SharedSymbol
+            ptr: term_to_aterm_ref(term, false).shared().symbol().shared().deref() as *const SharedSymbol
                 as *const std::ffi::c_void,
             root: root_index_t { index: 0 },
         }
@@ -397,9 +397,9 @@ unsafe fn term_len(term: unprotected_aterm_t) -> usize {
 /// Converts a raw pointer to an `ATermRef`, must ensure that the raw ptr is valid.
 ///
 /// Safety: The unprotected_aterm_t must point to a valid term.
-unsafe fn term_to_aterm_ref(term: unprotected_aterm_t) -> ATermRef<'static> {
+unsafe fn term_to_aterm_ref(term: unprotected_aterm_t, annotated: bool) -> ATermRef<'static> {
     unsafe {
-        let wide_ptr = ptr::slice_from_raw_parts(term.ptr as *const TermOrAnnotation, term_len(term));
+        let wide_ptr = ptr::slice_from_raw_parts(term.ptr as *const TermOrAnnotation, term_len(term) + annotated as usize);
         ATermRef::from_index(&ATermIndex::from_ptr(NonNull::new_unchecked(
             wide_ptr as *mut SharedTerm,
         )))
