@@ -42,8 +42,9 @@ members = [
     "crates/utilities",
     "crates/vpg",
     "crates/xtask",
-    "tools/ltsinfo",
+    "tools/lts",
     "tools/rewrite",
+    "tools/vpg",
 ]
 
 [workspace.dependencies]
