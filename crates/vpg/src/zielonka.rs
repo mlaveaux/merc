@@ -16,7 +16,6 @@ use crate::VertexIndex;
 
 type Set = BitVec<usize, Lsb0>;
 
-
 /// Solves the given parity game using the Zielonka algorithm.
 pub fn solve_zielonka(game: &ParityGame) -> Player {
     let mut V = bitvec![usize, Lsb0; 0; game.num_of_vertices()];
@@ -25,6 +24,17 @@ pub fn solve_zielonka(game: &ParityGame) -> Player {
     let mut zielonka = ZielonkaSolver::new(game);
 
     let W = zielonka.solve_recursive(V);
+
+    // Check that the result is a valid partition
+    debug_assert!(
+        W[0].clone().bitand(&W[1]).not_any(),
+        "The winning sets are not disjoint"
+    );
+    debug_assert!(
+        (W[0].clone() | W[1].clone()).all(),
+        "The winning sets do not cover all vertices"
+    );
+
     if W[0][*game.initial_vertex()] {
         Player::Even
     } else {
@@ -83,6 +93,7 @@ impl ZielonkaSolver<'_> {
         let (highest_prio, lowest_prio) = self.get_highest_lowest_prio(&V);
         let alpha = Player::from_priority(&highest_prio);
 
+        // Collect the set U of vertices with the highest priority in V
         let mut U = bitvec![usize, Lsb0; 0; self.game.num_of_vertices()];
         for &v in self.priority_vertices[highest_prio].iter() {
             if V[*v] {
@@ -103,7 +114,7 @@ impl ZielonkaSolver<'_> {
 
         debug!("begin solve_rec(V \\ A)");
         let mut W_prime = self.solve_recursive(
-            V.iter_mut()
+            V.iter()
                 .enumerate()
                 .map(|(index, value)| value.bitand(!A[index]))
                 .collect(),
@@ -114,15 +125,22 @@ impl ZielonkaSolver<'_> {
             W_prime[alpha.to_index()] |= A;
             W_prime
         } else {
-            let B = self.attractor(alpha.opponent(), &V, W_prime[alpha.opponent().to_index()].clone());
+            // Get ownershop of a single element in the array.
+            let W_prime_opponent = std::mem::take(&mut W_prime[alpha.opponent().to_index()]);
+            let B = self.attractor(alpha.opponent(), &V, W_prime_opponent);
 
-            V &= !B.clone();
+            // Computes V \ B in place
+            for (index, value) in V.iter_mut().enumerate() {
+                let tmp = value.bitand(!B[index]);
+                value.commit(tmp);
+            }
+
             debug!("begin solve_rec(V \\ B)");
-            let mut W_double_prime = self.solve_recursive(V & !B.clone());
+            let mut W_double_prime = self.solve_recursive(V); // V has been updated to V \ B
             debug!("end solve_rec(V \\ B)");
 
             W_double_prime[alpha.to_index()] |= B;
-            return W_double_prime;
+            W_double_prime
         }
     }
 
@@ -153,7 +171,11 @@ impl ZielonkaSolver<'_> {
             }
         }
 
-        debug!("Attracted |A| = {} vertices towards |U| = {}", A.count_ones(), initial_size);
+        debug!(
+            "Attracted |A| = {} vertices towards |U| = {}",
+            A.count_ones(),
+            initial_size
+        );
 
         A
     }
