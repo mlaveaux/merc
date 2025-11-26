@@ -40,8 +40,10 @@ const BAF_MAGIC: u16 = 0x8baf;
 /// - 24 September 2014: version changed to 0x0303 (introduction of stochastic distribution)
 /// - 2 April 2017: version changed to 0x0304 (removed a few superfluous fields in the format)
 /// - 19 July 2019: version changed to 0x8305 (introduction of the streamable aterm format)
-/// - 28 February 2020: version changed to 0x8306 (added ability to stream aterm_int, implemented structured streaming for all objects)
-/// - 24 January 2023: version changed to 0x8307 (removed NoIndex from Variables, Boolean variables. Made the .lts format more compact by not storing states with a default probability 1)
+/// - 28 February 2020: version changed to 0x8306 (added ability to stream aterm_int, 
+///     implemented structured streaming for all objects)
+/// - 24 January 2023: version changed to 0x8307 (removed NoIndex from Variables, Boolean variables. 
+///     Made the .lts format more compact by not storing states with a default probability 1)
 /// - 6 August 2024: version changed to 0x8308 (introduced machine numbers)
 const BAF_VERSION: u16 = 0x8308;
 
@@ -112,14 +114,16 @@ pub trait ATermStreamable {
 ///
 /// # The streamable aterm format:
 ///
-/// Aterms (and function symbols) are written as packets (with an identifier in the header) and their
-/// indices are derived from the number of aterms, resp. symbols, that occur before them in this stream. For each term
-/// we first ensure that its arguments and symbol are written to the stream (avoiding duplicates). Then its
-/// symbol index followed by a number of indices (depending on the arity) for its argments are written as integers.
-/// Packet headers also contain a special value to indicate that the read term should be visible as output as opposed to
-/// being only a subterm.
-/// The start of the stream is a zero followed by a header and a version and a term with function symbol index zero
-/// indicates the end of the stream.
+/// Aterms (and function symbols) are written as packets (with an identifier in
+/// the header) and their indices are derived from the number of aterms, resp.
+/// symbols, that occur before them in this stream. For each term we first
+/// ensure that its arguments and symbol are written to the stream (avoiding
+/// duplicates). Then its symbol index followed by a number of indices
+/// (depending on the arity) for its argments are written as integers. Packet
+/// headers also contain a special value to indicate that the read term should
+/// be visible as output as opposed to being only a subterm. The start of the
+/// stream is a zero followed by a header and a version and a term with function
+/// symbol index zero indicates the end of the stream.
 ///
 pub struct BinaryATermWriter<W: Write> {
     stream: BitStreamWriter<W>,

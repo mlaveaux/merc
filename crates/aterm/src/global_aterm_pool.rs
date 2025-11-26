@@ -6,19 +6,18 @@ use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
 
 use log::info;
+
 use merc_sharedmutex::GlobalBfSharedMutex;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use merc_utilities::LargeFormatter;
-use rustc_hash::FxBuildHasher;
-
-use merc_unsafety::StablePointerSet;
 use merc_utilities::ProtectionSet;
 use merc_utilities::SimpleTimer;
 use merc_utilities::debug_trace;
 
 use crate::ATermIndex;
 use crate::ATermRef;
+use crate::ATermStorage;
 use crate::Markable;
 use crate::SharedTerm;
 use crate::SharedTermLookup;
@@ -42,7 +41,7 @@ pub(crate) type GlobalTermPoolGuard<'a> = RecursiveLockReadGuard<'a, GlobalTermP
 /// The single global (singleton) term pool.
 pub struct GlobalTermPool {
     /// Unique table of all terms with stable pointers for references
-    terms: StablePointerSet<SharedTerm, FxBuildHasher>,
+    terms: ATermStorage,
     /// The symbol pool for managing function symbols.
     symbol_pool: SymbolPool,
     /// The thread-specific protection sets.
@@ -80,7 +79,7 @@ impl GlobalTermPool {
         let empty_list_symbol = unsafe { SymbolRef::from_index(&symbol_pool.create("<empty_list>", 0)) };
 
         GlobalTermPool {
-            terms: StablePointerSet::with_hasher(FxBuildHasher),
+            terms: ATermStorage::new(),
             symbol_pool,
             thread_pools: Vec::new(),
             marked_terms: HashSet::new(),

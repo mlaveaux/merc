@@ -1,14 +1,11 @@
 use std::hash::Hash;
-use std::hash::RandomState;
 
 use merc_unsafety::AllocBlock;
-use merc_unsafety::BlockAllocator;
 use merc_unsafety::StablePointer;
 use merc_unsafety::StablePointerSet;
 use papaya::Equivalent;
 use rustc_hash::FxBuildHasher;
 
-use crate::ATerm;
 use crate::ATermIndex;
 use crate::SharedTerm;
 use crate::SymbolRef;

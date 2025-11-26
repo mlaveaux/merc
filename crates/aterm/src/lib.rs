@@ -4,14 +4,17 @@
 //!
 //! t := c | f(t1, ..., tn) | u64
 //!
-//! where `f` is a function symbol with arity `n > 0` and a unique name, `c` is a constant and `u64` is a numerical term.
+//! where `f` is a function symbol with arity `n > 0` and a unique name, `c` is
+//! a constant and `u64` is a numerical term.
 //!
 //! Terms are stored maximally shared in the global aterm pool, meaning that T1,
 //! Tn are shared between all terms and the term is immutable. This global aterm
 //! pool performs garbage collection to remove terms that are no longer
 //! reachable. This is kept track of by the thread-local aterm pool.
 //!
-//! This crate does use `unsafe` for some of the more intricrate parts of the ATerm library, but every module that only uses safe Rust is marked with `#![forbid(unsafe_code)]`.
+//! This crate does use `unsafe` for some of the more intricrate parts of the
+//! ATerm library, but every module that only uses safe Rust is marked with
+//! `#![forbid(unsafe_code)]`.
 
 mod aterm;
 mod aterm_binary_stream;
@@ -37,7 +40,7 @@ pub use aterm_binary_stream::*;
 pub use aterm_builder::*;
 pub use aterm_int::*;
 pub use aterm_list::*;
-pub use aterm_storage::*;
+pub(crate) use aterm_storage::*;
 pub use aterm_string::*;
 pub use global_aterm_pool::*;
 pub use markable::*;
