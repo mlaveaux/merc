@@ -1,3 +1,6 @@
+#![allow(nonstandard_style)]
+//! To keep with the theory, we use capitalized variable names for sets of vertices.
+
 use std::ops::BitAnd;
 
 use bitvec::bitvec;
@@ -13,8 +16,6 @@ use crate::VertexIndex;
 
 type Set = BitVec<usize, Lsb0>;
 
-/// To keep with the theory, we use capitalized variable names for sets of vertices.
-#[allow(nonstandard_style)]
 
 /// Solves the given parity game using the Zielonka algorithm.
 pub fn solve_zielonka(game: &ParityGame) -> Player {
