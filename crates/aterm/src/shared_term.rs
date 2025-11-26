@@ -130,7 +130,7 @@ impl SharedTerm {
                 Some(
                     self.arguments
                         .last()
-                        .expect("For annotated terms the last argument stores the annotation")
+                        .expect("For annotated terms the last argument should store the annotation")
                         .index,
                 )
             }

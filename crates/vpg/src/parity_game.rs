@@ -1,12 +1,10 @@
 use merc_utilities::TagIndex;
 
-
-
 /// The two players in a parity game.
 #[derive(Clone)]
 pub enum Player {
     Even,
-    Odd
+    Odd,
 }
 
 impl Player {
@@ -42,7 +40,6 @@ pub type Priority = TagIndex<usize, PriorityTag>;
 
 /// Represents an explicit parity game.
 pub struct ParityGame {
-    
     /// Stores the owner of every vertex.
     owner: Vec<Player>,
 
@@ -66,8 +63,16 @@ impl ParityGame {
         transitions_to: Vec<VertexIndex>,
     ) -> Self {
         // Check that the sizes are consistent
-        debug_assert_eq!(owner.len(), priority.len(), "There should an owner and priority for every vertex");
-        debug_assert_eq!(vertices.len(), owner.len(), "There should be an offset for every vertex");
+        debug_assert_eq!(
+            owner.len(),
+            priority.len(),
+            "There should an owner and priority for every vertex"
+        );
+        debug_assert_eq!(
+            vertices.len(),
+            owner.len(),
+            "There should be an offset for every vertex"
+        );
 
         Self {
             owner,
@@ -81,5 +86,10 @@ impl ParityGame {
     /// Returns the initial vertex of the parity game.
     pub fn initial_vertex(&self) -> VertexIndex {
         self.initial_vertex
+    }
+
+    /// Returns the number of vertices in the parity game.
+    pub fn num_of_vertices(&self) -> usize {
+        self.owner.len()
     }
 }

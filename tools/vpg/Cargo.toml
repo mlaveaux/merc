@@ -1,0 +1,14 @@
+[package]
+name = "merc-vpg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+merc_tools.workspace = true
+merc_utilities.workspace = true
+merc_vpg.workspace = true
+
+clap.workspace = true
+env_logger.workspace = true

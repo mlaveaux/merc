@@ -29,6 +29,7 @@ use merc_aterm::is_list_term;
 
 /// The is the underlying shared aterm that is pointed to by the term.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct unprotected_aterm_t {
     ptr: *const std::ffi::c_void,
 }
@@ -84,12 +85,15 @@ pub unsafe extern "C" fn term_is_defined(term: unprotected_aterm_t) -> bool {
     !term.ptr.is_null()
 }
 
+/// Creates a new integer term with the given value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn term_create_int(value: usize) -> aterm_t {
     let term = ATermInt::new(value);
 
     let term_ptr = term.shared().deref() as *const SharedTerm as *const std::ffi::c_void;
     let root = *term.root().deref();
+
+    std::mem::forget(term); // Prevent the term from being dropped
 
     aterm_t {
         term: unprotected_aterm_t { ptr: term_ptr },
@@ -410,5 +414,20 @@ unsafe fn function_to_symbol_ref(symbol: function_symbol_t) -> SymbolRef<'static
         SymbolRef::from_index(&SymbolIndex::from_ptr(NonNull::new_unchecked(
             symbol.ptr as *mut SharedSymbol,
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_term_create_int() {
+        unsafe {
+            let aterm = term_create_int(42);
+            assert!(term_is_int(aterm.term));
+            let value = term_get_int_value(aterm.term);
+            assert_eq!(value, 42);
+        }
     }
 }
