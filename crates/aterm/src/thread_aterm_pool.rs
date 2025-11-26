@@ -6,7 +6,6 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use log::debug;
-use log::info;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use pest_consume::Parser;

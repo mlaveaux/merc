@@ -6,7 +6,6 @@ use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
 
 use log::debug;
-use log::info;
 
 use merc_sharedmutex::GlobalBfSharedMutex;
 use merc_sharedmutex::RecursiveLockReadGuard;
