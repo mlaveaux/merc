@@ -28,7 +28,6 @@ pub struct UntypedPbes {
     pub init: PropVarInst,
 }
 
-
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct PropVarDecl {
     pub identifier: String,

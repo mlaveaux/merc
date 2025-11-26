@@ -4,14 +4,14 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-use duct::cmd;
 use duct::Expression;
+use duct::cmd;
 use indoc::indoc;
 use libloading::Library;
 use log::info;
-use toml::map::Map;
 use toml::Table;
 use toml::Value;
+use toml::map::Map;
 
 use merc_utilities::MercError;
 

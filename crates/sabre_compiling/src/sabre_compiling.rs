@@ -9,12 +9,12 @@ use toml::Table;
 
 use merc_aterm::ATermRef;
 use merc_aterm::Term;
-use merc_utilities::MercError;
 use merc_data::DataExpression;
 use merc_sabre::RewriteEngine;
 use merc_sabre::RewriteSpecification;
 use merc_sabre_ffi::DataExpressionFFI;
 use merc_sabre_ffi::DataExpressionRefFFI;
+use merc_utilities::MercError;
 
 use crate::generate;
 use crate::library::RuntimeLibrary;

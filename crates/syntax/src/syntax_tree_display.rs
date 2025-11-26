@@ -206,7 +206,7 @@ impl fmt::Display for PbesExpr {
         match self {
             PbesExpr::True => write!(f, "true"),
             PbesExpr::False => write!(f, "false"),
-            PbesExpr::PropVarInst(instance) => write!(f, "{instance}"), 
+            PbesExpr::PropVarInst(instance) => write!(f, "{instance}"),
             PbesExpr::Negation(expr) => write!(f, "(! {expr})"),
             PbesExpr::Binary { op, lhs, rhs } => write!(f, "({lhs} {op} {rhs})"),
             PbesExpr::Quantifier {

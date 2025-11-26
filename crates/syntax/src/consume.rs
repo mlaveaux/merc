@@ -141,28 +141,28 @@ impl Mcrl2Parser {
 
     pub fn PbesSpec(spec: ParseNode) -> ParseResult<UntypedPbes> {
         let mut data_specification = None;
-        let mut global_variables =  None;
-        let mut equations =  None;
+        let mut global_variables = None;
+        let mut equations = None;
         let mut init = None;
 
         for child in spec.into_children() {
             match child.as_rule() {
                 Rule::DataSpec => {
                     data_specification = Some(Mcrl2Parser::DataSpec(child)?);
-                },
+                }
                 Rule::GlobVarSpec => {
                     global_variables = Some(Mcrl2Parser::GlobVarSpec(child)?);
-                },
+                }
                 Rule::PbesEqnSpec => {
                     equations = Some(Mcrl2Parser::PbesEqnSpec(child)?);
-                },
+                }
                 Rule::PbesInit => {
                     init = Some(Mcrl2Parser::PbesInit(child)?);
-                },
+                }
                 Rule::EOI => {
                     // End of input
                     break;
-                },
+                }
                 _ => {
                     unimplemented!("Unexpected rule: {:?}", child.as_rule());
                 }
@@ -402,7 +402,6 @@ impl Mcrl2Parser {
             },
         )
     }
-    
 
     fn MapSpec(spec: ParseNode) -> ParseResult<Vec<IdDecl>> {
         match_nodes!(spec.into_children();
