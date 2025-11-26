@@ -8,24 +8,27 @@ use clap::Parser;
 use clap::Subcommand;
 
 use merc_ldd::Storage;
-use merc_lts::guess_format_from_extension;
-use merc_lts::is_explicit_lts;
 use merc_lts::LTS;
 use merc_lts::LtsType;
+use merc_lts::guess_format_from_extension;
+use merc_lts::is_explicit_lts;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
 use merc_reduction::Equivalence;
 use merc_reduction::reduce;
 use merc_symbolic::read_symbolic_lts;
-use merc_tools::verbosity::VerbosityFlag;
 use merc_tools::Version;
 use merc_tools::VersionFlag;
+use merc_tools::verbosity::VerbosityFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
 #[derive(clap::Parser, Debug)]
-#[command(name = "Maurice Laveaux", about = "A command line tool for labelled transition systems")]
+#[command(
+    name = "Maurice Laveaux",
+    about = "A command line tool for labelled transition systems"
+)]
 struct Cli {
     #[command(flatten)]
     version: VersionFlag,

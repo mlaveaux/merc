@@ -1,14 +1,21 @@
 use std::io::Read;
+use std::io::Write;
 
-use log::{info, trace};
+use itertools::Itertools;
+use log::info;
+use log::trace;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 use thiserror::Error;
 
-use merc_io::{LineIterator, Progress};
+use merc_io::LineIterator;
+use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
-use crate::{ParityGame, Player, Priority, VertexIndex};
+use crate::ParityGame;
+use crate::Player;
+use crate::Priority;
+use crate::VertexIndex;
 
 #[derive(Error, Debug)]
 pub enum IOError {
@@ -43,10 +50,7 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         .extract();
 
     let num_of_vertices: usize = num_of_vertices_txt.parse()?;
-    let mut progress = Progress::new(
-        |value, increment| info!("Reading vertices {}%...", value / increment),
-        num_of_vertices,
-    );
+    let mut progress = TimeProgress::new(|percentage: usize| info!("Reading vertices {}%...", percentage), 1);
 
     // Collect that data into the parity game structure
     let mut owner: Vec<Player> = vec![Player::Even; num_of_vertices];
@@ -55,6 +59,7 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
     let mut vertices: Vec<usize> = Vec::with_capacity(num_of_vertices + 1);
     let mut transitions_to: Vec<VertexIndex> = Vec::with_capacity(num_of_vertices);
 
+    let mut vertex_count = 0;
     while let Some(line) = lines.next() {
         trace!("{line}");
 
@@ -82,11 +87,9 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         // Store the offset for the vertex
         vertices.push(transitions_to.len());
 
-        if let Some(succesors) = parts.next() 
-        {
+        if let Some(succesors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
-            for successor in 
-                succesors
+            for successor in succesors
                 .trim_end_matches(';')
                 .split(',')
                 .filter(|s| !s.trim().is_empty())
@@ -97,9 +100,12 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
             }
         }
 
-
-        progress.add(1);
+        progress.print(vertex_count / num_of_vertices);
+        vertex_count += 1;
     }
+
+    // Add the sentinel state.
+    vertices.push(transitions_to.len());
 
     Ok(ParityGame::new(
         VertexIndex::new(0),
@@ -108,6 +114,22 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         vertices,
         transitions_to,
     ))
+}
+
+/// Writes the given parity game to the given writer in .pg format.
+pub fn write_pg(game: &ParityGame, mut writer: impl Write) -> Result<(), MercError> {
+    writeln!(writer, "parity {};", game.num_of_vertices())?;
+
+    for v in game.iter_vertices() {
+        let prio = game.priority(v);
+        let owner = game.owner(v).to_index();
+
+        write!(writer, "{} {} {} ", v.value(), prio.value(), owner)?;
+        write!(writer, "{}", game.outgoing_edges(v).map(|to| to.value()).format(", "))?;
+        writeln!(writer, ";")?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

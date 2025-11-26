@@ -7,8 +7,8 @@ use clap::Subcommand;
 
 use merc_rec_tests::load_rec_from_file;
 use merc_tools::VerbosityFlag;
-use merc_tools::VersionFlag;
 use merc_tools::Version;
+use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 
