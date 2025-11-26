@@ -1,6 +1,5 @@
 use std::fmt;
 
-use log::debug;
 use log::trace;
 
 use merc_lts::LTS;
@@ -19,9 +18,6 @@ where
     F: Fn(LabelIndex, StateIndex) -> bool,
     L: LTS + fmt::Debug,
 {
-    let start = std::time::Instant::now();
-    trace!("{lts:?}");
-
     // The resulting order of states.
     let mut stack = Vec::new();
 
@@ -61,7 +57,6 @@ where
         is_topologically_sorted(lts, filter, |i| reorder[i], reverse),
         "The permutation {reorder:?} is not a valid topological ordering of the states of the given LTS: {lts:?}"
     );
-    debug!("Time sort_topological: {:.3}s", start.elapsed().as_secs_f64());
 
     Ok(reorder)
 }

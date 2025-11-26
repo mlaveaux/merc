@@ -1,5 +1,4 @@
 use std::fmt;
-use std::time::Instant;
 
 use log::debug;
 use log::trace;

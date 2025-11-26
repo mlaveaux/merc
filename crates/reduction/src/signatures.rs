@@ -13,8 +13,6 @@ use crate::Partition;
 use crate::quotient_lts_naive;
 
 use super::BlockPartition;
-use super::IndexedPartition;
-use super::reorder_partition;
 use super::sort_topological;
 use super::tau_scc_decomposition;
 
