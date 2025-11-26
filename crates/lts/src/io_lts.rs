@@ -49,7 +49,7 @@ pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let _multi_actions: IndexedSet<ATerm> = IndexedSet::new();
 
     // Keep track of the number of states (derived from the transitions).
-    let num_of_states: usize = 1;
+    let num_of_states: usize = 0;
 
     let mut labels = IndexedSet::<ATerm>::new();
     let mut initial_state: Option<StateIndex> = None;
@@ -126,4 +126,19 @@ fn initial_state_marker() -> ATerm {
 /// Returns the ATerm marker for the probabilistic transition.
 fn probabilistic_transition_mark() -> ATerm {
     ATerm::constant(&Symbol::new("probabilistic_transition", 0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::LTS;
+    
+    #[test]
+    fn test_read_lts() {
+        let lts = read_lts(include_bytes!("../../../examples/lts/abp.lts").as_ref(), vec![]).unwrap();
+
+        assert_eq!(lts.num_of_states(), 74);
+        assert_eq!(lts.num_of_transitions(), 92);
+    }
 }

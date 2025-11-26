@@ -9,7 +9,7 @@ use merc_utilities::bytevec;
 /// A unique type for the labels.
 pub struct LabelTag;
 
-/// A unique type for the labels.
+/// A unique type for the states.
 pub struct StateTag;
 
 /// The index type for a label.
