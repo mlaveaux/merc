@@ -11,7 +11,11 @@ use clap::Subcommand;
 use merc_gui::verbosity::VerbosityFlag;
 use merc_ldd::Storage;
 use merc_lts::LTS;
+use merc_lts::LtsType;
+use merc_lts::guess_format_from_extension;
+use merc_lts::is_explicit_lts;
 use merc_lts::read_aut;
+use merc_lts::read_explicit_lts;
 use merc_lts::read_lts;
 use merc_lts::write_aut;
 use merc_reduction::reduce;
@@ -55,6 +59,7 @@ enum Commands {
 #[command(about = "Prints information related to the given LTS")]
 struct InfoArgs {
     filename: String,
+    filetype: Option<LtsType>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -62,14 +67,18 @@ struct InfoArgs {
 struct ReduceArgs {
     equivalence: Equivalence,
 
+    /// Specify the input LTS.
     filename: String,
+
+    #[arg(long, help = "Explicitly specify the LTS file format")]
+    filetype: Option<LtsType>,
 
     output: Option<String>,
 
     #[arg(
         short,
         long,
-        help = "List of actions that are considered tau actions",
+        help = "List of actions that should be considered tau actions",
         value_delimiter = ','
     )]
     tau: Option<Vec<String>>,
@@ -96,26 +105,22 @@ fn main() -> Result<ExitCode, MercError> {
                 let path = Path::new(&args.filename);
                 let file = File::open(path)?;
 
-                if path.extension() == Some(OsStr::new("aut")) {
-                    let lts = read_aut(&file, Vec::new())?;
+                let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
+                if is_explicit_lts(&format) {
+                    let lts = read_explicit_lts(path, format, Vec::new())?;
                     println!("Number of states: {}", lts.num_of_states())
-                } else if path.extension() == Some(OsStr::new("lts")) {
-                    let lts = read_lts(&file)?;
-                    println!("Number of states: {}", lts.num_of_states())
-                } else if path.extension() == Some(OsStr::new("sym")) {
+                } else {
                     let mut storage = Storage::new();
                     let lts = read_symbolic_lts(&file, &mut storage)?;
                     println!("Number of states: {}", merc_ldd::len(&mut storage, lts.states()))
-                } else {
-                    return Err("Unsupported LTS file format.".into());
                 }
             }
             Commands::Reduce(args) => {
                 let path = Path::new(&args.filename);
-                let file = File::open(path)?;
+                let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
 
-                if path.extension() == Some(OsStr::new("aut")) {
-                    let lts = read_aut(&file, args.tau.unwrap_or_default())?;
+                if is_explicit_lts(&format) {
+                    let lts = read_explicit_lts(path, format, args.tau.unwrap_or_default())?;
                     print_allocator_metrics();
 
                     let reduced_lts = reduce(lts, args.equivalence, &mut timing);
@@ -126,11 +131,8 @@ fn main() -> Result<ExitCode, MercError> {
                     } else {
                         write_aut(&mut stdout(), &reduced_lts)?;
                     }
-                } else if path.extension() == Some(OsStr::new("sym")) {
-                    let mut storage = Storage::new();
-                    let _lts = read_symbolic_lts(&file, &mut storage)?;
                 } else {
-                    return Err("Unsupported file format for LTS reduce.".into());
+                    return Err("Unsupported file format for reduction.".into());
                 }
             }
         }

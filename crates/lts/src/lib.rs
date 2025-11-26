@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod incoming_transitions;
+mod io;
 mod io_aut;
 mod io_lts;
 mod labelled_transition_system;
@@ -13,6 +14,7 @@ mod lts_builder;
 mod random_lts;
 
 pub use incoming_transitions::*;
+pub use io::*;
 pub use io_aut::*;
 pub use io_lts::*;
 pub use labelled_transition_system::*;

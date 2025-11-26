@@ -30,7 +30,7 @@ use crate::LtsBuilder;
 use crate::StateIndex;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
-pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MercError> {
+pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
     let start = Instant::now();
     debug!("Reading LTS in .lts format...");
 
@@ -97,7 +97,6 @@ pub fn read_lts(reader: impl Read) -> Result<LabelledTransitionSystem, MercError
 
     let labels = labels.iter().map(|(_, t)| t.to_string()).collect();
 
-    let mut hidden_labels = Vec::new();
     hidden_labels.push("tau".to_string());
     debug!("Time read_lts: {:.3}s", start.elapsed().as_secs_f64());
     Ok(LabelledTransitionSystem::new(
