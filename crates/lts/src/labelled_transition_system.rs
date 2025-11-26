@@ -2,6 +2,7 @@ use std::fmt;
 
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::CompressedEntry;
+use merc_utilities::CompressedVecMetrics;
 use merc_utilities::TagIndex;
 use merc_utilities::bytevec;
 
@@ -39,9 +40,6 @@ pub trait LTS {
     /// Returns the list of labels.
     fn labels(&self) -> &[String];
 
-    /// Returns the list of hidden labels.
-    fn hidden_labels(&self) -> &[String];
-
     /// Returns true iff the given label index is a hidden label.
     fn is_hidden_label(&self, label_index: LabelIndex) -> bool;
 }
@@ -57,7 +55,6 @@ pub struct LabelledTransitionSystem {
 
     /// Keeps track of the labels for every index, and which of them are hidden.
     labels: Vec<String>,
-    hidden_labels: Vec<String>,
 
     /// The index of the initial state.
     initial_state: StateIndex,
@@ -155,7 +152,6 @@ impl LabelledTransitionSystem {
         LabelledTransitionSystem {
             initial_state,
             labels,
-            hidden_labels,
             states,
             transition_labels,
             transition_to,
@@ -185,10 +181,21 @@ impl LabelledTransitionSystem {
         LabelledTransitionSystem {
             initial_state: permutation(lts.initial_state),
             labels: lts.labels,
-            hidden_labels: lts.hidden_labels,
             states,
             transition_labels: lts.transition_labels,
             transition_to: lts.transition_to,
+        }
+    }
+
+    /// Returns metrics about the LTS.
+    pub fn metrics(&self) -> LtsMetrics {
+        LtsMetrics {
+            num_of_states: self.num_of_states(),
+            num_of_labels: self.num_of_labels(),
+            num_of_transitions: self.num_of_transitions(),
+            state_metrics: self.states.metrics(),
+            transition_labels_metrics: self.transition_labels.metrics(),
+            transition_to_metrics: self.transition_to.metrics(),
         }
     }
 }
@@ -229,10 +236,6 @@ impl LTS for LabelledTransitionSystem {
 
     fn labels(&self) -> &[String] {
         &self.labels[0..]
-    }
-
-    fn hidden_labels(&self) -> &[String] {
-        &self.hidden_labels[0..]
     }
 
     fn is_hidden_label(&self, label_index: LabelIndex) -> bool {
@@ -282,23 +285,35 @@ impl Transition {
     }
 }
 
-impl fmt::Display for LabelledTransitionSystem {
+/// Metrics for a labelled transition system.
+#[derive(Debug, Clone)]
+pub struct LtsMetrics {
+    /// The number of states in the LTS.
+    pub num_of_states: usize,
+    pub state_metrics: CompressedVecMetrics,
+    /// The number of transitions in the LTS.
+    pub num_of_transitions: usize,
+    pub transition_labels_metrics: CompressedVecMetrics,
+    pub transition_to_metrics: CompressedVecMetrics,
+    /// The number of action labels in the LTS.
+    pub num_of_labels: usize,
+}
+
+impl fmt::Display for LtsMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Print some information about the LTS.
-        writeln!(f, "Number of states: {}", self.num_of_states())?;
-        writeln!(f, "Number of action labels: {}", self.labels.len())?;
-        writeln!(f, "Number of transitions: {}", self.num_of_transitions())?;
-        writeln!(f, "States {}", self.states.metrics())?;
-        writeln!(f, "Transition labels {}", self.transition_labels.metrics())?;
-        write!(f, "Transition to {}", self.transition_to.metrics())
+        writeln!(f, "Number of states: {}", self.num_of_states)?;
+        writeln!(f, "States {}", self.state_metrics)?;
+        writeln!(f, "Number of action labels: {}", self.num_of_labels)?;
+        writeln!(f, "Number of transitions: {}", self.num_of_transitions)?;
+        writeln!(f, "Transition labels {}", self.transition_labels_metrics)?;
+        write!(f, "Transition to {}", self.transition_to_metrics)
     }
 }
 
 impl fmt::Debug for LabelledTransitionSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{self}")?;
         writeln!(f, "Initial state: {}", self.initial_state)?;
-        writeln!(f, "Hidden labels: {:?}", self.hidden_labels)?;
 
         for state_index in self.iter_states() {
             for transition in self.outgoing_transitions(state_index) {
