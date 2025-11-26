@@ -102,8 +102,9 @@ fn main() -> Result<ExitCode, MercError> {
 
                 let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
                 if is_explicit_lts(&format) {
-                    let lts = read_explicit_lts(path, format, Vec::new())?;
-                    println!("Number of states: {}", lts.num_of_states())
+                    let lts = read_explicit_lts(path, format, Vec::new(), &mut timing)?;
+                    println!("Number of states: {}", lts.num_of_states());
+                    println!("Number of transitions: {}", lts.num_of_transitions());
                 } else {
                     let mut storage = Storage::new();
                     let lts = read_symbolic_lts(&file, &mut storage)?;
@@ -115,7 +116,7 @@ fn main() -> Result<ExitCode, MercError> {
                 let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
 
                 if is_explicit_lts(&format) {
-                    let lts = read_explicit_lts(path, format, args.tau.unwrap_or_default())?;
+                    let lts = read_explicit_lts(path, format, args.tau.unwrap_or_default(), &mut timing)?;
                     print_allocator_metrics();
 
                     let reduced_lts = reduce(lts, args.equivalence, &mut timing);
