@@ -133,7 +133,7 @@ mod tests {
     use super::*;
 
     use crate::LTS;
-    
+
     #[test]
     fn test_read_lts() {
         let lts = read_lts(include_bytes!("../../../examples/lts/abp.lts").as_ref(), vec![]).unwrap();

@@ -8,37 +8,6 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use std::time::Instant;
 
-/// The struct that can be initialised to keep track of progress counters.
-pub struct Progress<F: Fn(usize, usize)> {
-    maximum: usize,
-    counter: usize,
-
-    message: F,
-}
-
-impl<F: Fn(usize, usize)> Progress<F> {
-    /// Create a new progress tracker with a given maximum.
-    pub fn new(message: F, maximum: usize) -> Progress<F> {
-        Progress {
-            message,
-            maximum,
-            counter: 0,
-        }
-    }
-
-    /// Increase the progress with the given amount, prints the message when 1% progress has been made.
-    pub fn add(&mut self, amount: usize) {
-        let increment = (self.maximum / 100usize).max(1);
-
-        if (self.counter + amount) / increment > self.counter / increment {
-            // Print a progress message when the increment increased.
-            (self.message)(self.counter, increment);
-        }
-
-        self.counter += amount;
-    }
-}
-
 /// A time-based progress tracker that prints messages at regular intervals.
 pub struct TimeProgress<F: Fn(T), T> {
     interval: Duration,

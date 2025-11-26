@@ -11,7 +11,7 @@ use streaming_iterator::StreamingIterator;
 use thiserror::Error;
 
 use merc_io::LineIterator;
-use merc_io::Progress;
+use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
 use crate::LTS;
@@ -91,10 +91,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let mut labels: Vec<String> = Vec::new();
 
     let mut transitions = LtsBuilder::with_capacity(num_of_states, 16, num_of_transitions);
-    let mut progress = Progress::new(
-        |value, increment| info!("Reading transitions {}%...", value / increment),
-        num_of_transitions,
-    );
+    let mut progress = TimeProgress::new(|percentage: usize| info!("Reading transitions {}%...", percentage), 1);
 
     while let Some(line) = lines.next() {
         trace!("{line}");
@@ -125,7 +122,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
             labels[*label_index] = label_txt.to_string();
         }
 
-        progress.add(1);
+        progress.print(transitions.num_of_transitions() / num_of_transitions);
     }
 
     // Remove duplicated transitions, it is not clear if they are allowed in the .aut format.
