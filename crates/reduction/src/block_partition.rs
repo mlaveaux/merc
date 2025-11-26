@@ -1,12 +1,13 @@
 use std::fmt;
 
+use itertools::Itertools;
+
 use merc_lts::IncomingTransitions;
 use merc_lts::StateIndex;
 
-use crate::BlockIndex;
-
 use super::IndexedPartition;
 use super::Partition;
+use crate::BlockIndex;
 
 /// A partition that explicitly stores a list of blocks and their indexing into
 /// the list of elements.
@@ -394,40 +395,25 @@ impl PartialEq<IndexedPartition> for BlockPartition {
         self.equal(other)
     }
 }
-
 impl fmt::Display for BlockPartition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
+        let blocks_str = self.blocks.iter().format_with(", ", |block, f| {
+            let elements = block
+                .iter_unmarked(&self.elements)
+                .map(|e| (e, false))
+                .chain(block.iter_marked(&self.elements).map(|e| (e, true)))
+                .format_with(", ", |(e, marked), f| {
+                    if marked {
+                        f(&format_args!("{}*", e))
+                    } else {
+                        f(&format_args!("{}", e))
+                    }
+                });
 
-        let mut first_block = true;
-        for block in &self.blocks {
-            if !first_block {
-                write!(f, ", ")?;
-            }
-            write!(f, "{{")?;
+            f(&format_args!("{{{}}}", elements))
+        });
 
-            let mut first = true;
-            for element in block.iter_unmarked(&self.elements) {
-                if !first {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{element}")?;
-                first = false;
-            }
-
-            for element in block.iter_marked(&self.elements) {
-                if !first {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{element}*")?;
-                first = false;
-            }
-
-            write!(f, "}}")?;
-            first_block = false;
-        }
-
-        write!(f, "}}")
+        write!(f, "{{{}}}", blocks_str)
     }
 }
 
@@ -484,6 +470,7 @@ impl Block {
         }
     }
 
+    /// Returns an iterator over the unmarked elements in this block.
     pub fn iter_unmarked<'a>(&self, elements: &'a Vec<StateIndex>) -> BlockIter<'a> {
         BlockIter {
             elements,

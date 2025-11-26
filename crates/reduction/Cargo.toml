@@ -10,8 +10,10 @@ merc_io.workspace = true
 merc_lts.workspace = true
 merc_utilities.workspace = true
 
+bitvec.workspace = true
 bumpalo.workspace = true
 clap.workspace = true
+itertools.workspace = true
 log.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
