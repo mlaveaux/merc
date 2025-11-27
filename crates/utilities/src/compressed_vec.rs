@@ -274,7 +274,7 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
         let current_len = self.len();
         if new_len > current_len {
             // Preallocate the required space.
-            self.data.resize(new_len * self.bytes_per_entry, 0);
+            self.data.reserve(new_len * self.bytes_per_entry);
             for _ in current_len..new_len {
                 self.push(f());
             }
