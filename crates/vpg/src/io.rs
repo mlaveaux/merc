@@ -1,0 +1,25 @@
+use std::{ffi::OsStr, path::Path};
+
+use clap::ValueEnum;
+
+/// Explicitly specify the parity game file format.
+#[derive(Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum ParityGameFormat {
+    PG,
+    VPG,
+}
+
+/// Guesses the parity game file format from the file extension, or uses a fixed format if provided.
+pub fn guess_format_from_extension(path: &Path, format: Option<ParityGameFormat>) -> Option<ParityGameFormat> {
+    if let Some(format) = format {
+        return Some(format);
+    }
+
+    if path.extension() == Some(OsStr::new("pg")) {
+        Some(ParityGameFormat::PG)
+    } else if path.extension() == Some(OsStr::new("vpg")) {
+        Some(ParityGameFormat::VPG)
+    } else {
+        None
+    }
+}

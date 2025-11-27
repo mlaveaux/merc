@@ -10,7 +10,7 @@ use crate::read_aut;
 use crate::read_lts;
 
 /// Explicitly specify the LTS file format.
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug, ValueEnum, PartialEq, Eq)]
 pub enum LtsType {
     Aut,
     Lts,
@@ -34,22 +34,6 @@ pub fn guess_format_from_extension(path: &Path, format: Option<LtsType>) -> Opti
     }
 }
 
-/// Returns true iff the given filename is an explicit LTS file based on its extension or the provided format.
-pub fn is_explicit_lts(format: &LtsType) -> bool {
-    match format {
-        LtsType::Aut | LtsType::Lts => true,
-        LtsType::Sym => false,
-    }
-}
-
-/// Returns true iff the given filename is a symbolic LTS file based on its extension or the provided format.
-pub fn is_symbolic_lts(format: &LtsType) -> bool {
-    match format {
-        LtsType::Aut | LtsType::Lts => false,
-        LtsType::Sym => true,
-    }
-}
-
 /// Reads an explicit labelled transition system from the given path and format.
 pub fn read_explicit_lts(
     path: &Path,
@@ -57,6 +41,8 @@ pub fn read_explicit_lts(
     hidden_labels: Vec<String>,
     timing: &mut Timing,
 ) -> Result<LabelledTransitionSystem, MercError> {
+    assert!(format != LtsType::Sym, "Cannot read symbolic LTS as explicit LTS.");
+
     let file = std::fs::File::open(path)?;
     let mut time_read = timing.start("read_aut");
 

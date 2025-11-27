@@ -139,7 +139,6 @@ mod tests {
     #[test]
     fn test_read_pg() {
         let parity_game = read_pg(include_bytes!("../../../examples/vpg/example.pg") as &[u8]).unwrap();
-
         assert_eq!(parity_game.num_of_vertices(), 4);
     }
 }

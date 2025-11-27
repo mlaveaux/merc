@@ -12,7 +12,6 @@ use merc_ldd::Storage;
 use merc_lts::LTS;
 use merc_lts::LtsType;
 use merc_lts::guess_format_from_extension;
-use merc_lts::is_explicit_lts;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
 use merc_reduction::Equivalence;
@@ -102,7 +101,7 @@ fn main() -> Result<ExitCode, MercError> {
                 let file = File::open(path)?;
 
                 let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
-                if is_explicit_lts(&format) {
+                if format != LtsType::Sym {
                     let lts = read_explicit_lts(path, format, Vec::new(), &mut timing)?;
                     println!(
                         "LTS has {} states and {} transitions.",
@@ -119,7 +118,7 @@ fn main() -> Result<ExitCode, MercError> {
                 let path = Path::new(&args.filename);
                 let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
 
-                if is_explicit_lts(&format) {
+                if format != LtsType::Sym {
                     let lts = read_explicit_lts(path, format, args.tau.unwrap_or_default(), &mut timing)?;
                     info!(
                         "LTS has {} states and {} transitions.",
