@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
 
@@ -13,7 +12,6 @@ use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
 use crate::LTS;
-use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
 use crate::StateIndex;
@@ -83,11 +81,8 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let num_of_transitions: usize = num_of_transitions_txt.parse()?;
     let num_of_states: usize = num_of_states_txt.parse()?;
 
-    // This is used to keep track of the label to index mapping.
-    let mut labels_index: HashMap<String, LabelIndex> = HashMap::new();
-    let mut labels: Vec<String> = Vec::new();
-
-    let mut transitions = LtsBuilder::with_capacity(num_of_states, 16, num_of_transitions);
+    hidden_labels.push("tau".to_string());
+    let mut builder = LtsBuilder::with_capacity(hidden_labels, num_of_states, 16, num_of_transitions);
     let mut progress = TimeProgress::new(|percentage: usize| info!("Reading transitions {}%...", percentage), 1);
 
     while let Some(line) = lines.next() {
@@ -99,43 +94,16 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
         let from = StateIndex::new(from_txt.parse()?);
         let to = StateIndex::new(to_txt.parse()?);
 
-        let label_index = if let Some(&existing_index) = labels_index.get(label_txt) {
-            existing_index
-        } else {
-            let new_index = LabelIndex::new(labels.len());
-            labels_index.insert(label_txt.to_string(), new_index);
-            new_index
-        };
-
-        if *label_index >= labels.len() {
-            labels.resize_with(label_index.value() + 1, Default::default);
-        }
-
         trace!("Read transition {from} --[{label_txt}]-> {to}");
 
-        transitions.add_transition(from, label_index, to);
+        builder.add_transition(from, label_txt, to);
 
-        if labels[*label_index].is_empty() {
-            labels[*label_index] = label_txt.to_string();
-        }
-
-        progress.print(transitions.num_of_transitions() * 100 / num_of_transitions);
+        progress.print(builder.num_of_transitions() * 100 / num_of_transitions);
     }
-
-    // Remove duplicated transitions, it is not clear if they are allowed in the .aut format.
-    transitions.remove_duplicates();
 
     info!("Finished reading LTS");
 
-    hidden_labels.push("tau".to_string());
-
-    Ok(LabelledTransitionSystem::new(
-        initial_state,
-        Some(num_of_states),
-        || transitions.iter(),
-        labels,
-        hidden_labels,
-    ))
+    Ok(builder.finish(initial_state, false))
 }
 
 /// Write a labelled transition system in plain text in Aldebaran format to the given writer.

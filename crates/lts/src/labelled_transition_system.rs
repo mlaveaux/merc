@@ -68,8 +68,7 @@ impl LabelledTransitionSystem {
         initial_state: StateIndex,
         num_of_states: Option<usize>,
         mut transition_iter: F,
-        mut labels: Vec<String>,
-        hidden_labels: Vec<String>,
+        labels: Vec<String>,
     ) -> LabelledTransitionSystem
     where
         F: FnMut() -> I,
@@ -119,34 +118,6 @@ impl LabelledTransitionSystem {
 
         // Add the sentinel state.
         states.push(transition_labels.len());
-
-        // Keep track of which label indexes are hidden labels.
-        let mut hidden_indices: Vec<usize> = Vec::new();
-        for label in &hidden_labels {
-            if let Some(index) = labels.iter().position(|other| other == label) {
-                hidden_indices.push(index);
-            }
-        }
-        hidden_indices.sort();
-
-        // Make an implicit tau label the first label.
-        let introduced_tau = if hidden_indices.contains(&0) {
-            labels[0] = "tau".to_string();
-            false
-        } else {
-            labels.insert(0, "tau".to_string());
-            true
-        };
-
-        // Remap all hidden actions to zero.
-        transition_labels.map(|label| {
-            if hidden_indices.binary_search(&label.value()).is_ok() {
-                *label = LabelIndex::new(0);
-            } else if introduced_tau {
-                // Remap all labels to not be the zero hidden action.
-                *label = LabelIndex::new(label.value() + 1);
-            }
-        });
 
         LabelledTransitionSystem {
             initial_state,

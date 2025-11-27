@@ -22,7 +22,6 @@ use merc_io::TimeProgress;
 use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
-use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
 use crate::StateIndex;
@@ -45,13 +44,11 @@ pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     // An indexed set to keep track of indices for multi-actions
     let _multi_actions: IndexedSet<ATerm> = IndexedSet::new();
 
-    // Keep track of the number of states (derived from the transitions).
-    let num_of_states: usize = 0;
-
-    let mut labels = IndexedSet::<ATerm>::new();
+    // The initial state is not known yet.
     let mut initial_state: Option<StateIndex> = None;
 
-    let mut builder = LtsBuilder::new();
+    hidden_labels.push("tau".to_string());
+    let mut builder = LtsBuilder::new(hidden_labels);
 
     let mut progress = TimeProgress::new(
         |num_of_transitions| {
@@ -69,11 +66,10 @@ pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
                     let label = reader.read_aterm()?.ok_or("Missing transition label")?;
                     let to: ATermInt = reader.read_aterm()?.ok_or("Missing to state")?.into();
 
-                    let (label_index, _) = labels.insert(label);
 
                     builder.add_transition(
                         StateIndex::new(from.value()),
-                        LabelIndex::new(*label_index),
+                        &label.to_string(),
                         StateIndex::new(to.value()),
                     );
 
@@ -91,19 +87,9 @@ pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
             None => break, // The default constructed term indicates the end of the stream.
         }
     }
-
-    let labels = labels.iter().map(|(_, t)| t.to_string()).collect();
-
-    hidden_labels.push("tau".to_string());
     info!("Finished reading LTS");
 
-    Ok(LabelledTransitionSystem::new(
-        initial_state.ok_or("Missing initial state")?,
-        Some(num_of_states),
-        || builder.iter(),
-        labels,
-        hidden_labels,
-    ))
+    Ok(builder.finish(initial_state.ok_or("Missing initial state")?, false))
 }
 
 /// Returns the ATerm marker for a labelled transition system.
@@ -125,6 +111,16 @@ fn initial_state_marker() -> ATerm {
 fn probabilistic_transition_mark() -> ATerm {
     ATerm::constant(&Symbol::new("probabilistic_transition", 0))
 }
+
+/// A multi-action, i.e., a set of action labels.
+// struct MultiAction {
+//     actions: Vec<LabelIndex>,
+// }
+
+// struct Action {
+//     name: String,
+//     sort: SortExpr,
+// }
 
 #[cfg(test)]
 mod tests {

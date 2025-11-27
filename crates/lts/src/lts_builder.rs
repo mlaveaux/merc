@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use itertools::Itertools;
@@ -5,6 +6,7 @@ use merc_utilities::ByteCompressedVec;
 use merc_utilities::CompressedEntry;
 
 use crate::LabelIndex;
+use crate::LabelledTransitionSystem;
 use crate::StateIndex;
 
 /// This struct helps in building a labelled transition system by accumulating transitions efficiently.
@@ -12,31 +14,88 @@ pub struct LtsBuilder {
     transition_from: ByteCompressedVec<StateIndex>,
     transition_labels: ByteCompressedVec<LabelIndex>,
     transition_to: ByteCompressedVec<StateIndex>,
+
+    // This is used to keep track of the label to index mapping.
+    labels_index: HashMap<String, LabelIndex>,
+    labels: Vec<String>,
+
+    /// The number of states (derived from the transitions).
+    num_of_states: usize,
 }
 
 impl LtsBuilder {
-    pub fn new() -> Self {
-        Self {
-            transition_from: ByteCompressedVec::new(),
-            transition_labels: ByteCompressedVec::new(),
-            transition_to: ByteCompressedVec::new(),
-        }
+    /// Initializes a new empty builder.
+    pub fn new(hidden_labels: Vec<String>) -> Self {
+        Self::with_capacity(hidden_labels, 0, 0, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(num_of_states: usize, num_of_labels: usize, num_of_transitions: usize) -> Self {
+    pub fn with_capacity(hidden_labels: Vec<String>, num_of_states: usize, num_of_labels: usize, num_of_transitions: usize) -> Self {
+        // Introduce the fixed 0 indexed tau label.
+        let labels = vec!["tau".to_string()];
+
+        let mut labels_index = HashMap::new();
+        labels_index.insert("tau".to_string(), LabelIndex::new(0));
+        for label in hidden_labels.iter() {
+            labels_index.insert(label.clone(), LabelIndex::new(0)); // Map hidden labels to tau
+        }
+
         Self {
             transition_from: ByteCompressedVec::with_capacity(num_of_transitions, num_of_states.bytes_required()),
             transition_labels: ByteCompressedVec::with_capacity(num_of_transitions, num_of_labels.bytes_required()),
             transition_to: ByteCompressedVec::with_capacity(num_of_transitions, num_of_states.bytes_required()),
+            labels_index,
+            labels,
+            num_of_states: 0,
         }
     }
 
     /// Adds a transition to the builder.
-    pub fn add_transition(&mut self, from: StateIndex, label: LabelIndex, to: StateIndex) {
+    pub fn add_transition(&mut self, from: StateIndex, label: &str, to: StateIndex) {
+        let label_index = if let Some(&index) = self.labels_index.get(label) {
+            index
+        } else {
+            let index = LabelIndex::new(self.labels.len());
+            self.labels_index.insert(label.to_string(), index);
+            self.labels.push(label.to_string());
+            index
+        };
+
+        self.transition_from.push(from);
+        self.transition_labels.push(label_index);
+        self.transition_to.push(to);
+
+        // Update the number of states.
+        self.num_of_states = self.num_of_states.max(from.value() + 1).max(to.value() + 1);
+    }
+
+    /// Adds a transition to the builder.
+    pub fn add_transition_index(&mut self, from: StateIndex, label: LabelIndex, to: StateIndex) {
         self.transition_from.push(from);
         self.transition_labels.push(label);
         self.transition_to.push(to);
+
+        // Update the number of states.
+        self.num_of_states = self.num_of_states.max(from.value() + 1).max(to.value() + 1);
+    }
+
+    /// Finalizes the builder and returns the constructed labelled transition system.
+    pub fn finish(&mut self, initial_state: StateIndex, remove_duplicates: bool) -> LabelledTransitionSystem {
+        if remove_duplicates {
+            self.remove_duplicates();
+        }
+
+        LabelledTransitionSystem::new(
+            initial_state,
+            Some(self.num_of_states),
+            || self.iter(),
+            self.labels.clone(),
+        )
+    }
+
+    /// Returns the number of transitions added to the builder.
+    pub fn num_of_transitions(&self) -> usize {
+        self.transition_from.len()
     }
 
     /// Removes duplicated transitions from the added transitions.
@@ -72,17 +131,6 @@ impl LtsBuilder {
             .map(|((from, label), to)| (from, label, to))
             .dedup()
     }
-
-    /// Returns the number of transitions added to the builder.
-    pub fn num_of_transitions(&self) -> usize {
-        self.transition_from.len()
-    }
-}
-
-impl Default for LtsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl fmt::Debug for LtsBuilder {
@@ -106,13 +154,13 @@ mod tests {
     #[test]
     fn test_random_remove_duplicates() {
         random_test(100, |rng| {
-            let mut builder = LtsBuilder::new();
+            let mut builder = LtsBuilder::new(Vec::new());
 
             for _ in 0..rng.random_range(0..10) {
                 let from = StateIndex::new(rng.random_range(0..10));
                 let label = LabelIndex::new(rng.random_range(0..2));
                 let to = StateIndex::new(rng.random_range(0..10));
-                builder.add_transition(from, label, to);
+                builder.add_transition_index(from, label, to);
             }
 
             builder.remove_duplicates();

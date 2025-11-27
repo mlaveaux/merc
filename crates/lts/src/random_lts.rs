@@ -1,9 +1,9 @@
 use rand::Rng;
-use rustc_hash::FxHashSet;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
+use crate::lts_builder;
 
 /// Generates a monolithic LTS with the desired number of states, labels, out
 /// degree and in degree for all the states.
@@ -22,7 +22,12 @@ pub fn random_lts(
         labels.push(char::from_digit(i + 10, 36).unwrap().to_string());
     }
 
-    let mut transitions: FxHashSet<(StateIndex, LabelIndex, StateIndex)> = FxHashSet::default();
+    let mut builder: lts_builder::LtsBuilder = lts_builder::LtsBuilder::with_capacity(
+        vec![tau_label.clone()],
+        num_of_states,
+        num_of_labels as usize,
+        num_of_states * outdegree,
+    );
 
     for state_index in 0..num_of_states {
         // Introduce outgoing transitions for this state based on the desired out degree.
@@ -31,21 +36,15 @@ pub fn random_lts(
             let label = rng.random_range(0..num_of_labels);
             let to = rng.random_range(0..num_of_states);
 
-            transitions.insert((
+            builder.add_transition_index(
                 StateIndex::new(state_index),
                 LabelIndex::new(label as usize),
                 StateIndex::new(to),
-            ));
+            );
         }
     }
 
-    LabelledTransitionSystem::new(
-        StateIndex::new(0),
-        Some(num_of_states),
-        || transitions.iter().cloned(),
-        labels,
-        vec![tau_label],
-    )
+    builder.finish(StateIndex::new(0), true)
 }
 
 #[cfg(test)]

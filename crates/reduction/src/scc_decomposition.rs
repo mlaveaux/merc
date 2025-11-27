@@ -263,7 +263,6 @@ mod tests {
             None,
             || transitions.iter().cloned(),
             vec!["tau".into(), "a".into()],
-            vec!["tau".into()],
         );
 
         let _ = tau_scc_decomposition(&lts);

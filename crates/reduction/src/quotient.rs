@@ -87,7 +87,8 @@ pub fn quotient_lts_naive(
     eliminate_tau_loops: bool,
 ) -> LabelledTransitionSystem {
     // Introduce the transitions based on the block numbers, the number of blocks is a decent approximation for the number of transitions.
-    let mut transitions = LtsBuilder::with_capacity(
+    let mut builder = LtsBuilder::with_capacity(
+        Vec::new(),
         partition.num_of_blocks(),
         lts.num_of_labels(),
         partition.num_of_blocks(),
@@ -105,7 +106,7 @@ pub fn quotient_lts_naive(
                     "Quotienting assumes that the block numbers do not exceed the number of blocks"
                 );
 
-                transitions.add_transition(
+                builder.add_transition_index(
                     StateIndex::new(block.value()),
                     transition.label,
                     StateIndex::new(to_block.value()),
@@ -114,17 +115,10 @@ pub fn quotient_lts_naive(
         }
     }
 
-    // Remove duplicates.
-    transitions.remove_duplicates();
-
-    let result = LabelledTransitionSystem::new(
+    builder.finish(
         StateIndex::new(partition.block_number(lts.initial_state_index()).value()),
-        Some(partition.num_of_blocks()),
-        || transitions.iter(),
-        lts.labels().into(),
-        Vec::new(),
-    );
-    result
+        true,
+    )
 }
 
 /// Optimised implementation for block partitions.
@@ -134,7 +128,7 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
     lts: &impl LTS,
     partition: &BlockPartition,
 ) -> LabelledTransitionSystem {
-    let mut transitions = LtsBuilder::new();
+    let mut builder = LtsBuilder::new(Vec::new());
 
     for block in (0..partition.num_of_blocks()).map(BlockIndex::new) {
         // Pick any state in the block
@@ -171,7 +165,7 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
                 );
             }
 
-            transitions.add_transition(
+            builder.add_transition_index(
                 StateIndex::new(*block),
                 trans.label,
                 StateIndex::new(*partition.block_number(trans.to)),
@@ -179,15 +173,8 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
         }
     }
 
-    // Remove duplicates.
-    transitions.remove_duplicates();
-
-    let result = LabelledTransitionSystem::new(
+    builder.finish(
         StateIndex::new(partition.block_number(lts.initial_state_index()).value()),
-        Some(partition.num_of_blocks()),
-        || transitions.iter(),
-        lts.labels().into(),
-        Vec::new(),
-    );
-    result
+        true,
+    )
 }
