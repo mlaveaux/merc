@@ -385,7 +385,7 @@ EqnDecl = { (DataExpr ~ "->")? ~ DataExpr ~ "=" ~ DataExpr ~ ";" }
 
 /// Single state formula or state formula specification
 StateFrmSpec = {
-    SOI ~ StateFrm | (StateFrmSpecElt* ~ FormSpec ~ StateFrmSpecElt*) ~ EOI
+    SOI ~ (StateFrm | (StateFrmSpecElt* ~ FormSpec ~ StateFrmSpecElt*)) ~ EOI
 }
 
 FormSpec = { "form" ~ StateFrm ~ ";" }

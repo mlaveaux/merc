@@ -1131,7 +1131,7 @@ impl Mcrl2Parser {
 
     pub(crate) fn StateFrmSpec(input: ParseNode) -> ParseResult<UntypedStateFrmSpec> {
         match_nodes!(input.into_children();
-            [StateFrm(state)] => {
+            [StateFrm(state), EOI(_)] => {
                 Ok(UntypedStateFrmSpec {
                     data_specification: UntypedDataSpecification::default(),
                     formula: state
