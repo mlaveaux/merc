@@ -9,7 +9,16 @@ use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
 
-/// This struct helps in building a labelled transition system by accumulating transitions efficiently.
+/// This struct helps in building a labelled transition system by accumulating
+/// transitions efficiently.
+///
+/// # Details
+///
+/// When labels are added via `add_transition`, they are mapped to `LabelIndex`
+/// values internally. The mapping is maintained in a `HashMap<String,
+/// LabelIndex>`, and new labels are assigned the next available index.
+/// Alternatively, labels can be added directly using `add_transition_index` an
+///
 pub struct LtsBuilder {
     transition_from: ByteCompressedVec<StateIndex>,
     transition_labels: ByteCompressedVec<LabelIndex>,
@@ -25,15 +34,30 @@ pub struct LtsBuilder {
 
 impl LtsBuilder {
     /// Initializes a new empty builder.
-    pub fn new(hidden_labels: Vec<String>) -> Self {
-        Self::with_capacity(hidden_labels, 0, 0, 0)
+    pub fn new(labels: Vec<String>, hidden_labels: Vec<String>) -> Self {
+        Self::with_capacity(labels, hidden_labels, 0, 0, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(hidden_labels: Vec<String>, num_of_states: usize, num_of_labels: usize, num_of_transitions: usize) -> Self {
+    pub fn with_capacity(
+        mut labels: Vec<String>,
+        hidden_labels: Vec<String>,
+        num_of_states: usize,
+        num_of_labels: usize,
+        num_of_transitions: usize,
+    ) -> Self {
         // Introduce the fixed 0 indexed tau label.
-        let labels = vec!["tau".to_string()];
+        if let Some(tau_pos) = labels.iter().position(|l| l == "tau") {
+            labels.swap(0, tau_pos);
+        } else {
+            labels.insert(0, "tau".to_string());
+        }
 
+        // Remove duplicates from the labels.
+        labels.sort();
+        labels.dedup();
+
+        // Ensure that all hidden labels are mapped to the tau action.
         let mut labels_index = HashMap::new();
         labels_index.insert("tau".to_string(), LabelIndex::new(0));
         for label in hidden_labels.iter() {
@@ -71,6 +95,13 @@ impl LtsBuilder {
 
     /// Adds a transition to the builder.
     pub fn add_transition_index(&mut self, from: StateIndex, label: LabelIndex, to: StateIndex) {
+        debug_assert!(
+            (label.value() < self.labels.len()),
+            "Label index {:?} out of bounds (num labels: {})",
+            label,
+            self.labels.len()
+        );
+
         self.transition_from.push(from);
         self.transition_labels.push(label);
         self.transition_to.push(to);
@@ -99,7 +130,7 @@ impl LtsBuilder {
     }
 
     /// Removes duplicated transitions from the added transitions.
-    pub fn remove_duplicates(&mut self) {
+    fn remove_duplicates(&mut self) {
         debug_assert!(
             self.transition_from.len() == self.transition_labels.len()
                 && self.transition_from.len() == self.transition_to.len(),
@@ -154,7 +185,7 @@ mod tests {
     #[test]
     fn test_random_remove_duplicates() {
         random_test(100, |rng| {
-            let mut builder = LtsBuilder::new(Vec::new());
+            let mut builder = LtsBuilder::new(Vec::new(), Vec::new());
 
             for _ in 0..rng.random_range(0..10) {
                 let from = StateIndex::new(rng.random_range(0..10));

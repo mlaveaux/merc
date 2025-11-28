@@ -2,6 +2,7 @@ use std::fmt;
 
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::CompressedVecMetrics;
+use merc_utilities::LargeFormatter;
 use merc_utilities::TagIndex;
 use merc_utilities::bytevec;
 
@@ -241,9 +242,9 @@ pub struct LtsMetrics {
 impl fmt::Display for LtsMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Print some information about the LTS.
-        writeln!(f, "Number of states: {}", self.num_of_states)?;
-        writeln!(f, "Number of action labels: {}", self.num_of_labels)?;
-        writeln!(f, "Number of transitions: {}\n", self.num_of_transitions)?;
+        writeln!(f, "Number of states: {}", LargeFormatter(self.num_of_states))?;
+        writeln!(f, "Number of action labels: {}", LargeFormatter(self.num_of_labels))?;
+        writeln!(f, "Number of transitions: {}\n", LargeFormatter(self.num_of_transitions))?;
         writeln!(f, "Memory usage:")?;
         writeln!(f, "States {}", self.state_metrics)?;
         writeln!(f, "Transition labels {}", self.transition_labels_metrics)?;

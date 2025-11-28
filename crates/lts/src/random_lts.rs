@@ -13,17 +13,15 @@ pub fn random_lts(
     num_of_labels: u32,
     outdegree: usize,
 ) -> LabelledTransitionSystem {
-    // Add the default tau label (for the weak transitions).
-    let tau_label = "tau".to_string();
-
     // Introduce lower case letters for the labels.
-    let mut labels: Vec<String> = vec![tau_label.clone()];
+    let mut labels: Vec<String> = Vec::new();
     for i in 0..num_of_labels {
         labels.push(char::from_digit(i + 10, 36).unwrap().to_string());
     }
 
     let mut builder: lts_builder::LtsBuilder = lts_builder::LtsBuilder::with_capacity(
-        vec![tau_label.clone()],
+        labels,
+        Vec::new(),
         num_of_states,
         num_of_labels as usize,
         num_of_states * outdegree,

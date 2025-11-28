@@ -57,7 +57,7 @@ fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
 /// And one line for every transition:
 ///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
 ///     `(<from>: Nat, <label>: Str, <to>: Nat)`
-pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
+pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
     info!("Reading LTS in .aut format...");
 
     let mut lines = LineIterator::new(reader);
@@ -81,8 +81,7 @@ pub fn read_aut(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let num_of_transitions: usize = num_of_transitions_txt.parse()?;
     let num_of_states: usize = num_of_states_txt.parse()?;
 
-    hidden_labels.push("tau".to_string());
-    let mut builder = LtsBuilder::with_capacity(hidden_labels, num_of_states, 16, num_of_transitions);
+    let mut builder = LtsBuilder::with_capacity(Vec::new(), hidden_labels, num_of_states, 16, num_of_transitions);
     let mut progress = TimeProgress::new(|percentage: usize| info!("Reading transitions {}%...", percentage), 1);
 
     while let Some(line) = lines.next() {

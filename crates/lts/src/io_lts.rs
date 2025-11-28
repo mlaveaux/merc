@@ -27,7 +27,7 @@ use crate::LtsBuilder;
 use crate::StateIndex;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
-pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
+pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
     info!("Reading LTS in .lts format...");
 
     let mut reader = BinaryATermReader::new(BufReader::new(reader))?;
@@ -45,10 +45,8 @@ pub fn read_lts(reader: impl Read, mut hidden_labels: Vec<String>) -> Result<Lab
     let _multi_actions: IndexedSet<ATerm> = IndexedSet::new();
 
     // The initial state is not known yet.
-    let mut initial_state: Option<StateIndex> = None;
-
-    hidden_labels.push("tau".to_string());
-    let mut builder = LtsBuilder::new(hidden_labels);
+    let mut initial_state: Option<StateIndex> = None;    
+    let mut builder = LtsBuilder::new(Vec::new(), hidden_labels);
 
     let mut progress = TimeProgress::new(
         |num_of_transitions| {

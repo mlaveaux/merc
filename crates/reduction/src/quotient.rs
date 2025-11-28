@@ -88,9 +88,11 @@ pub fn quotient_lts_naive(
 ) -> LabelledTransitionSystem {
     // Introduce the transitions based on the block numbers, the number of blocks is a decent approximation for the number of transitions.
     let mut builder = LtsBuilder::with_capacity(
+        lts.labels().into(),
         Vec::new(),
         partition.num_of_blocks(),
         lts.num_of_labels(),
+        // At least one transition per block
         partition.num_of_blocks(),
     );
 
@@ -128,7 +130,7 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
     lts: &impl LTS,
     partition: &BlockPartition,
 ) -> LabelledTransitionSystem {
-    let mut builder = LtsBuilder::new(Vec::new());
+    let mut builder = LtsBuilder::new(lts.labels().into(), Vec::new());
 
     for block in (0..partition.num_of_blocks()).map(BlockIndex::new) {
         // Pick any state in the block
