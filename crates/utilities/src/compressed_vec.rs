@@ -1,6 +1,8 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+use bitvec::bitvec;
+use bitvec::order::Lsb0;
 use log::trace;
 
 use crate::BytesFormatter;
@@ -216,7 +218,7 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
             "The given permutation must be a bijective mapping"
         );
 
-        let mut visited = vec![false; self.len()];
+        let mut visited = bitvec![usize, Lsb0; 0; self.len()];
 
         for start in 0..self.len() {
             if visited[start] {
@@ -229,7 +231,7 @@ impl<T: CompressedEntry> ByteCompressedVec<T> {
             let original = self.index(start);
 
             while !visited[current] {
-                visited[current] = true;
+                visited.set(current, true);
                 let next = indices(current);
 
                 if next != current {

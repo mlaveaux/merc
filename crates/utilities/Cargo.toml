@@ -17,6 +17,7 @@ merc_debug-trace = []
 ahash.workspace = true
 arbitrary.workspace = true
 backtrace.workspace = true
+bitvec.workspace = true
 delegate.workspace = true
 env_logger.workspace = true
 hashbrown.workspace = true
