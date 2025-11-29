@@ -1,0 +1,6 @@
+[submodule "3rd-party/mCRL2"]
+	path = 3rd-party/mCRL2
+	url = https://github.com/mCRL2org/mcrl2.git
+[submodule "3rd-party/boost-include-only"]
+	path = 3rd-party/boost-include-only
+	url = https://github.com/mlaveaux/boost-include-only.git

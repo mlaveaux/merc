@@ -2,6 +2,7 @@
 # will have compiled files and executables
 /target/
 /tools/gui/target/
+/tools/mcrl2/target/
 
 # Confiruation files for rustc
 .cargo

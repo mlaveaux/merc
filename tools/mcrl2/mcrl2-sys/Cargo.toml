@@ -1,0 +1,19 @@
+[package]
+name = "mcrl2-sys"
+links = "mcrl2"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cxx.workspace = true
+
+[build-dependencies]
+cxx-build.workspace = true
+cc.workspace = true
+cargo-emit.workspace = true
+
+[features]
+
+# Enables the compiling rewriter option for mCRL2.
+mcrl2_jittyc = []

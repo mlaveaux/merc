@@ -1,0 +1,27 @@
+[workspace.package]
+edition = "2024"
+license = "BSL-1.0"
+rust-version = "1.85.0"
+version = "1.0.0"
+
+[workspace]
+resolver = "2"
+members = [
+    "mcrl2-sys",
+    "pbessymmetry",
+]
+
+[workspace.dependencies]
+clap = "1.0"
+env_logger = "0.11"
+log = "0.4"
+
+# Dependencies for building the mCRL2 C++ bindings.
+cxx = "1.0"
+cxx-build = "1.0"
+cc = "1.0"
+cargo-emit = "0.2"
+
+# The workspace libraries.
+mcrl2_sys = { path = "../../crates/mcrl2_sys" }
+merc_utilities = { path = "../../crates/merc_utilities" }
