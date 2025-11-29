@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_random_remove_duplicates() {
         random_test(100, |rng| {
-            let mut builder = LtsBuilder::new(Vec::new(), Vec::new());
+            let mut builder = LtsBuilder::new(vec!["a".to_string(), "b".to_string(), "c".to_string()], Vec::new());
 
             for _ in 0..rng.random_range(0..10) {
                 let from = StateIndex::new(rng.random_range(0..10));
