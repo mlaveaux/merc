@@ -7,6 +7,7 @@ use crate::ActFrm;
 use crate::ActFrmBinaryOp;
 use crate::Action;
 use crate::Assignment;
+use crate::Bound;
 use crate::Comm;
 use crate::ComplexSort;
 use crate::ConstructorDecl;
@@ -412,6 +413,13 @@ impl fmt::Display for StateFrm {
             } => {
                 write!(f, "({} {} . {})", quantifier, variables.iter().format(", "), body)
             }
+            StateFrm::Bound {
+                bound: quantifier,
+                variables,
+                body,
+            } => {
+                write!(f, "({} {} . {})", quantifier, variables.iter().format(", "), body)
+            }
             StateFrm::Binary { op, lhs, rhs } => {
                 write!(f, "({lhs} {op} {rhs})")
             }
@@ -522,6 +530,16 @@ impl fmt::Display for ActFrmBinaryOp {
             ActFrmBinaryOp::Implies => write!(f, "=>"),
             ActFrmBinaryOp::Intersect => write!(f, "&&"),
             ActFrmBinaryOp::Union => write!(f, "||"),
+        }
+    }
+}
+
+impl fmt::Display for Bound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Bound::Inf => write!(f, "inf"),
+            Bound::Sum => write!(f, "sum"),
+            Bound::Sup => write!(f, "sup"),
         }
     }
 }

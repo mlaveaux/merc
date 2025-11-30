@@ -67,7 +67,7 @@ impl VariabilityParityGame {
     }
 
     /// Returns an iterator over the outgoing edges of the given vertex.
-    pub fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = Edge> + '_ {
+    pub fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = Edge<'_>> + '_ {
         let start = self.game.vertices[*state_index];
         let end = self.game.vertices[*state_index + 1];
         self.edges_configuration[start..end]

@@ -324,6 +324,7 @@ pub struct CommAction {
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct UntypedStateFrmSpec {
     pub data_specification: UntypedDataSpecification,
+    pub action_declarations: Vec<ActDecl>,
     pub formula: StateFrm,
 }
 
@@ -393,6 +394,11 @@ pub enum StateFrm {
     },
     Quantifier {
         quantifier: Quantifier,
+        variables: Vec<VarDecl>,
+        body: Box<StateFrm>,
+    },
+    Bound {
+        bound: Bound,
         variables: Vec<VarDecl>,
         body: Box<StateFrm>,
     },
@@ -466,6 +472,59 @@ pub enum PbesExpr {
         op: PbesExprBinaryOp,
         lhs: Box<PbesExpr>,
         rhs: Box<PbesExpr>,
+    },
+    True,
+    False,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum Eq {
+    EqInf,
+    EqnInf,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum Condition {
+    Condsm,
+    Condeq,
+}
+
+// TODO: What should this be called?
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum Bound {
+    Inf,
+    Sup,
+    Sum,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum PresExpr {
+    DataValExpr(DataExpr),
+    PropVarInst(PropVarInst),
+    LeftConstantMultiply {
+        constant: DataExpr,
+        expr: Box<PresExpr>,
+    },
+    Bound {
+        op: Bound,
+        variables: Vec<VarDecl>,
+        expr: Box<PresExpr>,
+    },
+    Equal {
+        eq: Eq,
+        body: Box<PbesExpr>,
+    },
+    Condition {
+        condition: Condition,
+        lhs: Box<PresExpr>,
+        then: Box<PresExpr>,
+        else_: Box<PresExpr>,
+    },
+    Negation(Box<PresExpr>),
+    Binary {
+        op: PbesExprBinaryOp,
+        lhs: Box<PresExpr>,
+        rhs: Box<PresExpr>,
     },
     True,
     False,

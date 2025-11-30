@@ -1129,15 +1129,83 @@ impl Mcrl2Parser {
         )
     }
 
-    pub(crate) fn StateFrmSpec(input: ParseNode) -> ParseResult<UntypedStateFrmSpec> {
-        match_nodes!(input.into_children();
-            [StateFrm(state), EOI(_)] => {
-                Ok(UntypedStateFrmSpec {
-                    data_specification: UntypedDataSpecification::default(),
-                    formula: state
-                })
-            },
-        )
+    pub(crate) fn StateFrmSpec(spec: ParseNode) -> ParseResult<UntypedStateFrmSpec> {
+        let mut map_declarations = Vec::new();
+        let mut equation_declarations = Vec::new();
+        let mut constructor_declarations = Vec::new();
+        let mut sort_declarations = Vec::new();
+        let mut action_declarations = Vec::new();
+
+        let mut form_spec = None;
+
+        let span = spec.as_span();
+        for child in spec.into_children() {
+            match child.as_rule() {
+                Rule::ConsSpec => {
+                    constructor_declarations.append(&mut Mcrl2Parser::ConsSpec(child)?);
+                }
+                Rule::MapSpec => {
+                    map_declarations.append(&mut Mcrl2Parser::MapSpec(child)?);
+                }
+                Rule::EqnSpec => {
+                    equation_declarations.append(&mut Mcrl2Parser::EqnSpec(child)?);
+                }
+                Rule::SortSpec => {
+                    sort_declarations.append(&mut Mcrl2Parser::SortSpec(child)?);
+                }
+                Rule::ActSpec => {
+                    action_declarations.append(&mut Mcrl2Parser::ActSpec(child)?);
+                }
+                Rule::StateFrm => {
+                    if form_spec.is_some() {
+                        return Err(Error::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: "Multiple state formula specifications are not allowed".to_string(),
+                            },
+                            child.as_span(),
+                        ));
+                    }
+                    form_spec = Some(Mcrl2Parser::StateFrm(child)?);
+                }
+                Rule::FormSpec => {
+                    if form_spec.is_some() {
+                        return Err(Error::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: "Multiple state formula specifications are not allowed".to_string(),
+                            },
+                            child.as_span(),
+                        ));
+                    }
+                    form_spec = Some(Mcrl2Parser::FormSpec(child)?);
+                }
+                Rule::EOI => {
+                    // End of input
+                    break;
+                }
+                _ => {
+                    unimplemented!("Unexpected rule: {:?}", child.as_rule());
+                }
+            }
+        }
+
+        let data_specification = UntypedDataSpecification {
+            map_declarations,
+            equation_declarations,
+            constructor_declarations,
+            sort_declarations,
+        };
+
+        Ok(UntypedStateFrmSpec {
+            data_specification,
+            action_declarations,
+            formula: form_spec.ok_or(
+                        Error::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: "No state formula found in the state formula specification".to_string(),
+                            },
+                            span,
+                        ))?
+        })
     }
 
     pub(crate) fn PbesExprForall(input: ParseNode) -> ParseResult<Vec<VarDecl>> {
@@ -1246,6 +1314,38 @@ impl Mcrl2Parser {
 
     fn ActionRenameRuleSpec(spec: ParseNode) -> ParseResult<ActionRenameDecl> {
         unimplemented!();
+    }
+
+    fn FormSpec(input: ParseNode) -> ParseResult<StateFrm> {        
+        match_nodes!(input.into_children();
+            [StateFrm(formula)] => {
+                Ok(formula)
+            },
+        )
+    }
+
+    pub(crate) fn StateFrmSup(input: ParseNode) -> ParseResult<Vec<VarDecl>> {
+        match_nodes!(input.into_children();
+            [VarsDeclList(variables)] => {
+                Ok(variables)
+            },
+        )
+    }
+
+    pub(crate) fn StateFrmInf(input: ParseNode) -> ParseResult<Vec<VarDecl>> {
+        match_nodes!(input.into_children();
+            [VarsDeclList(variables)] => {
+                Ok(variables)
+            },
+        )
+    }
+
+    pub(crate) fn StateFrmSum(input: ParseNode) -> ParseResult<Vec<VarDecl>> {
+        match_nodes!(input.into_children();
+            [VarsDeclList(variables)] => {
+                Ok(variables)
+            },
+        )
     }
 
     fn EOI(_input: ParseNode) -> ParseResult<()> {
