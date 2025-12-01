@@ -245,9 +245,6 @@ Action = { Id ~ ( "(" ~ DataExprList ~ ")" )? }
 /// Action set        
 ActIdSet = { "{" ~ IdList ~ "}" }                                               
 
-/// List of actions
-MultiAct = { Action ~ ( "|" ~ Action )* }                            
-
 /// Multi-action label
 MultActId = { Id ~ ( "|" ~ Id )* }                                      
 

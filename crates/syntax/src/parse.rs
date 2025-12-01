@@ -56,7 +56,7 @@ impl DataExpr {
 
 impl MultiAction {
     pub fn parse(spec: &str) -> Result<MultiAction, MercError> {
-        let mut result = Mcrl2Parser::parse(Rule::MultiAct, spec).map_err(extend_parser_error)?;
+        let mut result = Mcrl2Parser::parse(Rule::MultAct, spec).map_err(extend_parser_error)?;
         let root = result
             .next()
             .expect("Could not parse mCRL2 multi-action");
