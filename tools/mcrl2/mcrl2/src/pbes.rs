@@ -1,12 +1,19 @@
-use std::marker::PhantomData;
+use std::fmt;
 
 use mcrl2_sys::cxx::UniquePtr;
 use mcrl2_sys::pbes::ffi::mcrl2_pbes_stategraph_local_algorithm_run;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equation_variable;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_to_pbes;
 use mcrl2_sys::pbes::ffi::mcrl2_unify_parameters;
 use mcrl2_sys::pbes::ffi::pbes;
+use mcrl2_sys::pbes::ffi::srf_equation;
 use mcrl2_sys::pbes::ffi::srf_pbes;
 use mcrl2_sys::pbes::ffi::stategraph_algorithm;
 use merc_utilities::MercError;
+
+use crate::Mcrl2ATerm;
+use crate::Mcrl2AtermList;
+use crate::Mcrl2PropositionVariable;
 
 pub struct Pbes {
     pbes: UniquePtr<pbes>,
@@ -21,21 +28,24 @@ impl Pbes {
     }
 }
 
-impl From<Pbes> for PbesSrf {
-    fn from(pbes: Pbes) -> Self {
-        PbesSrf::from(&pbes).unwrap()
+impl From<PbesSrf> for Pbes {
+    fn from(pbes: PbesSrf) -> Self {
+        Self {
+            pbes: mcrl2_srf_pbes_to_pbes(pbes.srf_pbes.as_ref().unwrap()).unwrap(),
+        }
     }
 }
 
 impl fmt::Display for Pbes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.pbes.as_ref().unwrap())
+        // write!(f, "{}", self.pbes.as_ref().unwrap())
+        Ok(())
     }
 }
 
 pub struct PbesStategraph {
     algorithm: UniquePtr<stategraph_algorithm>,
-    control_flow_graphs: Vec<ControlFlowGraph>,
+    control_flow_graphs: Vec<PbesStategraphControlFlowGraph>,
 }
 
 impl PbesStategraph {
@@ -89,11 +99,16 @@ impl PbesSrf {
     }
 }
 
-pub struct PbesSrfEquation {}
+pub struct PbesSrfEquation {
+    equation: *const srf_equation,
+}
 
 impl PbesSrfEquation {
     /// Returns the parameters of the equation.
-    pub fn parameters(&self) -> Vec<Mcrl2AtermList<Mcrl2ATerm>> {
+    pub fn variable(&self) -> Mcrl2PropositionVariable {
         unimplemented!()
+        // Mcrl2PropositionVariable::new(Mcrl2ATerm::new(
+        //     mcrl2_srf_pbes_equation_variable(self.index).expect("mcrl2_srf_pbes_equation_variable thrown an error"),
+        // ))
     }
 }

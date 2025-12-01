@@ -1,5 +1,3 @@
-use merc_tools::verbosity::Verbosity;
-
 #[cxx::bridge(namespace = "mcrl2::log")]
 pub mod ffi {
     unsafe extern "C++" {

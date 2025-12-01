@@ -17,6 +17,9 @@
 namespace mcrl2::pbes_system
 {
 
+/// Alias for templated type.
+using srf_equation = detail::pre_srf_equation<false>;
+
 std::unique_ptr<pbes> mcrl2_load_pbes_from_file(rust::Str filename)
 {
   pbes result;
@@ -83,5 +86,9 @@ std::unique_ptr<pbes> mcrl2_srf_pbes_to_pbes(const srf_pbes& p)
   return std::make_unique<pbes>(p.to_pbes());
 }
 
+std::unique_ptr<atermpp::aterm> mcrl2_srf_pbes_equation_variable(const srf_pbes& p, std::size_t index)
+{
+  return std::make_unique<atermpp::aterm>(p.equations()[index].variable());
+}
 
 } // namespace mcrl2::pbes_system

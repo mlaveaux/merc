@@ -12,8 +12,10 @@ use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
+use merc_vpg::FeatureDiagram;
 use merc_vpg::ParityGameFormat;
 use merc_vpg::guess_format_from_extension;
+use merc_vpg::read_fts;
 use merc_vpg::read_pg;
 use merc_vpg::read_vpg;
 use merc_vpg::solve_zielonka;
@@ -59,7 +61,7 @@ struct ReachableArgs {
 /// Arguments for encoding a feature transition system into a variability parity game
 #[derive(clap::Args, Debug)]
 struct EncodeArgs {
-    formula_filename: String,
+    feature_diagram_filename: String,
     fts_filename: String,
     vpg_filename: String,
 }
@@ -127,8 +129,11 @@ fn main() -> Result<ExitCode, MercError> {
             Commands::Encode(args) => {
                 let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
 
-                let mut file = File::open(&args.fts_filename)?;
-                // let fts = read_fts(&mut file)?;
+                let mut feature_diagram_file = File::open(&args.feature_diagram_filename)?;
+                let feature_diagram = FeatureDiagram::from_reader(&manager_ref, &mut feature_diagram_file)?;
+
+                let mut fts_file = File::open(&args.fts_filename)?;
+                let _fts = read_fts(&manager_ref, &mut fts_file, &feature_diagram)?;
 
 
 

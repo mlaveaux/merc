@@ -12,6 +12,8 @@ use merc_tools::VersionFlag;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
+use crate::symmetry::SymmetryAlgorithm;
+
 mod permutation;
 mod symmetry;
 
@@ -66,7 +68,7 @@ fn main() -> Result<ExitCode, MercError> {
     if let Some(Commands::Symmetry(args)) = cli.commands {
         let pbes = Pbes::from_file(&args.filename)?;
 
-        let symmetries = SymmetryAlgorithm::new(&pbes).run()?;
+        let symmetries = SymmetryAlgorithm::new(&pbes)?.run();
     }
 
     if cli.timings {

@@ -16,7 +16,7 @@ obtained by passing --release. Note that it is necessary to run `git submodule
 update` after switching branches or pulling from the remote whenever any of the
 modules have been changed.
 
-# Setup
+# Overview
 
 This workspace uses the crate `cxx` in `mcrl2-sys` to set up a `C`-like FFI
 between the Rust code and C++ code, with static assertions and some helpers for
@@ -29,6 +29,13 @@ the resulting functionality.
 The `cc` crate used to build the mCRL2 toolset unfortunately does not generate a 
 `compile_commands.json` that IDEs typically use to provide IDE support for C++ 
 programs. There is a third-party tool called `bear` that can produce such a file
-for Rust projects, including ones that build internal `C` libraries.
+for Rust projects, including ones that build internal `C` libraries. From a fresh
+`cargo clean` it can generate the necessary file by running the following command
+from this directory:
 
     bear -- cargo build
+
+Moving the resulting `compile_commands.json` to the root directory should also
+allow you to get IDE support in the `3rd-party/mCRL2` source code. Furthermore,
+it is also convenient to open this directory directly in `vscode` since opening
+the root directory can make it confused by the different workspaces somehow.

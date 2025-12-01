@@ -1,5 +1,3 @@
-use cxx::CxxVector;
-
 #[cxx::bridge(namespace = "mcrl2::pbes_system")]
 pub mod ffi {
     unsafe extern "C++" {
@@ -23,6 +21,8 @@ pub mod ffi {
 
         type srf_pbes;
 
+        type srf_equation;
+
         /// Convert a PBES to an SRF PBES.
         fn mcrl2_pbes_to_srf_pbes(input: &pbes) -> Result<UniquePtr<srf_pbes>>;
 
@@ -33,5 +33,10 @@ pub mod ffi {
         /// related to counter example information. Finally, if reset is true, reset the
         /// newly introduced parameters to a default value.
         fn mcrl2_unify_parameters(input: Pin<&mut srf_pbes>, ignore_ce_equations: bool, reset: bool) -> Result<()>;
+
+        #[namespace = "atermpp"]
+        type aterm = crate::atermpp::ffi::aterm;
+
+        fn mcrl2_srf_pbes_equation_variable(input: &srf_pbes, index: usize) -> Result<UniquePtr<aterm>>;
     }
 }
