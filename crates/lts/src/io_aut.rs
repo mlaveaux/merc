@@ -1,3 +1,4 @@
+use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
 
@@ -49,14 +50,15 @@ fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
     Some((from, label, to))
 }
 
-/// Loads a labelled transition system in the Aldebaran format from the given reader.
+/// Loads a labelled transition system in the Aldebaran format from the given
+/// reader. Note that the reader has a buffer in the form of  `BufReader``
+/// internally.
 ///
-/// The Aldebaran format consists of a header:
-///     `des (<initial>: Nat, <num_of_transitions>: Nat, <num_of_states>: Nat)`
+/// The Aldebaran format consists of a header: `des (<initial>: Nat,
+///     <num_of_transitions>: Nat, <num_of_states>: Nat)`
 ///     
-/// And one line for every transition:
-///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
-///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+/// And one line for every transition: `(<from>: Nat, "<label>": Str, <to>:
+///     Nat)` `(<from>: Nat, <label>: Str, <to>: Nat)`
 pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
     info!("Reading LTS in .aut format...");
 
@@ -105,8 +107,11 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     Ok(builder.finish(initial_state, false))
 }
 
-/// Write a labelled transition system in plain text in Aldebaran format to the given writer.
+/// Write a labelled transition system in plain text in Aldebaran format to the
+/// given writer. Note that the writer is buffered internally using a
+/// `BufWriter`.
 pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercError> {
+    let mut writer = BufWriter::new(writer);
     writeln!(
         writer,
         "des ({}, {}, {})",
@@ -141,8 +146,11 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
 
 #[cfg(test)]
 mod tests {
+    use crate::random_lts;
+
     use super::*;
 
+    use merc_utilities::random_test;
     use test_log::test;
 
     #[test]
@@ -197,5 +205,30 @@ mod tests {
 
         assert!(lts.num_of_states() == lts_original.num_of_states());
         assert!(lts.num_of_labels() == lts_original.num_of_labels());
+        assert!(lts.num_of_transitions() == lts_original.num_of_transitions());
+    }
+
+    #[test]
+    fn test_random_aut_io() {
+        random_test(100, |rng| {
+            let lts = random_lts(rng, 100, 200, 20);
+
+            let mut buffer: Vec<u8> = Vec::new();
+            write_aut(&mut buffer, &lts).unwrap();
+
+            let lts_read = read_aut(&buffer[0..], vec![]).unwrap();
+
+            assert!(lts.num_of_states() == lts_read.num_of_states());
+            assert!(lts.num_of_labels() == lts_read.num_of_labels());
+            assert!(lts.num_of_transitions() == lts_read.num_of_transitions());       
+
+            // Check that all the outgoing transitions are the same.
+            for state_index in lts.iter_states() {
+                let transitions: Vec<_> = lts.outgoing_transitions(state_index).collect();
+                let transitions_read: Vec<_> = lts_read.outgoing_transitions(state_index).collect();
+
+                assert_eq!(transitions, transitions_read);
+            } 
+        })
     }
 }
