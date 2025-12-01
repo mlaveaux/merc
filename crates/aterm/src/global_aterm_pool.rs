@@ -478,7 +478,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)]
     // Test uses crossbeam, which is not supported by miri
     #[cfg_attr(miri, ignore)]
     fn test_parallel_iterator() {
