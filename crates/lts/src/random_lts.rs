@@ -13,6 +13,8 @@ pub fn random_lts(
     num_of_labels: u32,
     outdegree: usize,
 ) -> LabelledTransitionSystem {
+    assert!(num_of_labels < 26, "Too many labels requested, we only support alphabetic labels.");
+
     // Introduce lower case letters for the labels.
     let mut labels: Vec<String> = Vec::new();
     for i in 0..num_of_labels {
