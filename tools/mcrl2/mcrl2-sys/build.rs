@@ -60,7 +60,7 @@ fn main() {
         "data_specification.cpp",
         "machine_word.cpp",
         "typecheck.cpp",
-        //"detail/prover/smt_lib_solver.cpp",
+        "detail/prover/smt_lib_solver.cpp",
         "detail/rewrite/jitty.cpp",
         "detail/rewrite/rewrite.cpp",
         "detail/rewrite/strategy.cpp",

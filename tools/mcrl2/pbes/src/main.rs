@@ -53,6 +53,8 @@ fn main() -> Result<ExitCode, MercError> {
 
     if let Some(Commands::Symmetry(args)) = cli.commands {
         let pbes = mcrl2_sys::pbes::ffi::load_pbes_from_file(&args.filename)?;
+
+        let result = mcrl2_sys::pbes::ffi::run_stategraph_local_algorithm(&pbes)?;
     }
 
     
