@@ -127,6 +127,7 @@ mod tests {
     use crate::LTS;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_read_lts() {
         let lts = read_lts(include_bytes!("../../../examples/lts/abp.lts").as_ref(), vec![]).unwrap();
 

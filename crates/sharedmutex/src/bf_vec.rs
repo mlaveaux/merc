@@ -181,6 +181,7 @@ mod tests {
 
     // These are just simple tests.
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_push() {
         let mut threads = vec![];
 

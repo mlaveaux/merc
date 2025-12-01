@@ -459,6 +459,7 @@ mod tests {
     use crate::random_term;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_maximal_sharing() {
         random_test(100, |rng| {
             let mut terms = HashMap::new();
@@ -477,6 +478,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     // Test uses crossbeam, which is not supported by miri
     #[cfg_attr(miri, ignore)]
     fn test_parallel_iterator() {

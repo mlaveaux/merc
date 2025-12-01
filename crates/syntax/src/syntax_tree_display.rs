@@ -432,7 +432,7 @@ impl fmt::Display for StateFrm {
             }
             StateFrm::Delay(expr) => write!(f, "delay@({expr})"),
             StateFrm::Yaled(expr) => write!(f, "yaled@({expr})"),
-            StateFrm::DataValExprMult(value, expr) => write!(f, "({value} * {expr})"),
+            StateFrm::DataValExprLeftMult(value, expr) => write!(f, "({value} * {expr})"),
             StateFrm::DataValExprRightMult(expr, value) => write!(f, "({expr} * {value})"),
         }
     }

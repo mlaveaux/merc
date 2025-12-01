@@ -239,6 +239,7 @@ mod tests {
     use crate::test_logger;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_random_protection_set() {
         random_test(100, |rng| {
             let mut protection_set = ProtectionSet::<usize>::new();

@@ -190,6 +190,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_binary_ldd_stream() {
         random_test(1, |rng| {
             let mut storage = Storage::new();

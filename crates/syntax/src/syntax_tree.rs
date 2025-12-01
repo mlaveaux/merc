@@ -375,7 +375,7 @@ pub enum StateFrm {
     Delay(DataExpr),
     Yaled(DataExpr),
     Id(String, Vec<DataExpr>),
-    DataValExprMult(DataExpr, Box<StateFrm>),
+    DataValExprLeftMult(DataExpr, Box<StateFrm>),
     DataValExprRightMult(Box<StateFrm>, DataExpr),
     DataValExpr(DataExpr),
     Modality {

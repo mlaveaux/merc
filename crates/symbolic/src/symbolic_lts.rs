@@ -117,6 +117,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_wms_sym() {
         let input = include_bytes!("../../../examples/lts/WMS.sym");
 

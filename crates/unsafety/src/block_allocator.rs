@@ -200,6 +200,7 @@ mod tests {
     use merc_utilities::random_test;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_block_allocator() {
         random_test(100, |rng| {
             let mut allocator: BlockAllocator<u64, 256> = BlockAllocator::new();
