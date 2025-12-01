@@ -407,7 +407,6 @@ StateFrmPrimary = _{
     | StateFrmDelay
     | StateFrmYaled
     | StateFrmId
-    | StateFrmDataValExprMult
     | StateFrmDataValExpr
 }
     StateFrmBrackets = { "(" ~ StateFrm ~ ")" }
@@ -416,8 +415,7 @@ StateFrmPrimary = _{
     StateFrmDelay = { "delay" ~ ( "@" ~ DataExpr )? }
     StateFrmYaled = { "yaled" ~ ( "@" ~ DataExpr )? }
     StateFrmId = { Id ~ ( "(" ~ DataExprList ~ ")" )? }                             // Instantiated fixpoint variable
-    StateFrmDataValExprMult = { DataValExpr ~ "*" ~ StateFrm }                      // Multiplication with a positive constant
-    StateFrmDataValExpr = { DataValExpr }                                           // Boolean or real data expression
+    StateFrmDataValExpr = { DataValExpr }
 
 StateFrmPrefix = _{
     | StateFrmUnaryMinus
@@ -444,7 +442,7 @@ StateFrmPrefix = _{
     StateFrmDiamond = { "<" ~ RegFrm ~ ">" }                             // Diamond modality
     StateFrmUnaryMinus = { "-" }                                         // Unary minus
     StateFrmNegation = { "!" }                                           // Negation
-    StateFrmLeftConstantMultiply = { "*" }
+    StateFrmLeftConstantMultiply = { DataValExpr ~ "*" }
     
 
 StateFrmInfix = _{
@@ -454,7 +452,6 @@ StateFrmInfix = _{
     | StateFrmConjunction
 }
     StateFrmAddition = { "+" }
-    StateFrmLeftConstantMultiply = { "*" }
     StateFrmImplication = { "=>" }
     StateFrmDisjunction = { "||" }                                                   // Disjunction, and max
     StateFrmConjunction = { "&&" }                                                   // Conjunction, and min

@@ -483,7 +483,7 @@ pub fn parse_statefrm(pairs: Pairs<Rule>) -> ParseResult<StateFrm> {
                 Rule::StateFrmDelay => Mcrl2Parser::StateFrmDelay(Node::new(primary)),
                 Rule::StateFrmYaled => Mcrl2Parser::StateFrmYaled(Node::new(primary)),
                 Rule::StateFrmNegation => Mcrl2Parser::StateFrmNegation(Node::new(primary)),
-                Rule::StateFrmDataValExpr => Mcrl2Parser::StateFrmDataValExpr(Node::new(primary)),
+                Rule::StateFrmDataValExpr => Ok(StateFrm::DataValExpr(Mcrl2Parser::DataValExpr(Node::new(primary))?)),
                 Rule::StateFrmBrackets => {
                     // Handle parentheses by recursively parsing the inner expression
                     let inner = primary
@@ -496,8 +496,8 @@ pub fn parse_statefrm(pairs: Pairs<Rule>) -> ParseResult<StateFrm> {
             }
         })
         .map_prefix(|prefix, expr| match prefix.as_rule() {
-            Rule::StateFrmDataValExprMult => Ok(StateFrm::DataValExprMult(
-                Mcrl2Parser::StateFrmDataValExprMult(Node::new(prefix))?,
+            Rule::StateFrmLeftConstantMultiply => Ok(StateFrm::DataValExprLeftMult(
+                Mcrl2Parser::StateFrmLeftConstantMultiply(Node::new(prefix))?,
                 Box::new(expr?),
             )),
             Rule::StateFrmDiamond => Ok(StateFrm::Modality {

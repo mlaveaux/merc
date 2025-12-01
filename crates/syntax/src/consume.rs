@@ -1089,9 +1089,9 @@ impl Mcrl2Parser {
         )
     }
 
-    pub(crate) fn StateFrmDataValExprMult(input: ParseNode) -> ParseResult<DataExpr> {
+    pub(crate) fn StateFrmLeftConstantMultiply(input: ParseNode) -> ParseResult<DataExpr> {
         match_nodes!(input.into_children();
-            [DataExpr(expr)] => {
+            [DataValExpr(expr)] => {
                 Ok(expr)
             },
         )
@@ -1099,20 +1099,12 @@ impl Mcrl2Parser {
 
     pub(crate) fn StateFrmRightConstantMultiply(input: ParseNode) -> ParseResult<DataExpr> {
         match_nodes!(input.into_children();
-            [ DataExpr(expr)] => {
+            [DataValExpr(expr)] => {
                 Ok(expr)
             },
         )
     }
-
-    pub(crate) fn StateFrmDataValExpr(input: ParseNode) -> ParseResult<StateFrm> {
-        match_nodes!(input.into_children();
-            [DataExpr(expr)] => {
-                Ok(StateFrm::DataValExpr(expr))
-            },
-        )
-    }
-
+    
     pub(crate) fn StateFrmDiamond(input: ParseNode) -> ParseResult<RegFrm> {
         match_nodes!(input.into_children();
             [RegFrm(formula)] => {
