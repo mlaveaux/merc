@@ -1,3 +1,5 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use core::fmt;
 
 use merc_utilities::TagIndex;

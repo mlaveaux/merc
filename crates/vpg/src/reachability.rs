@@ -1,3 +1,5 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use std::collections::VecDeque;
 
 use bitvec::bitvec;

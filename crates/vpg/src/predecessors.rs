@@ -1,3 +1,5 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::bytevec;
 

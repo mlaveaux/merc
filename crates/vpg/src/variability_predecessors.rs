@@ -1,3 +1,5 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use oxidd::BooleanFunction;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
@@ -20,7 +22,8 @@ impl VariabilityPredecessors {
     /// Creates the predecessors structure for the given parity game.
     pub fn new(manager_ref: &BDDManagerRef, game: &VariabilityParityGame) -> Self {
         let mut edges_from = bytevec![VertexIndex::new(0); game.num_of_edges()];
-        let mut edges_configuration = manager_ref.with_manager_shared(|manager| vec![BDDFunction::f(manager); game.num_of_edges()]);
+        let mut edges_configuration =
+            manager_ref.with_manager_shared(|manager| vec![BDDFunction::f(manager); game.num_of_edges()]);
         let mut state2incoming = bytevec![0; game.num_of_vertices()];
 
         // Count the number of incoming transitions for each state
