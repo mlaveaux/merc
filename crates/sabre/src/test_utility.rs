@@ -18,7 +18,7 @@ pub fn create_rewrite_rule(lhs: &str, rhs: &str, variables: &[&str]) -> Result<R
 
     Ok(Rule {
         conditions: vec![],
-        lhs: to_untyped_data_expression(&lhs, Some(&vars)).into(),
-        rhs: to_untyped_data_expression(&rhs, Some(&vars)).into(),
+        lhs: to_untyped_data_expression(lhs, Some(&vars)).into(),
+        rhs: to_untyped_data_expression(rhs, Some(&vars)).into(),
     })
 }

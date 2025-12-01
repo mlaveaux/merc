@@ -318,7 +318,7 @@ mod tests {
 
         random_test(100, |rng| {
             let term = random_term(rng, &[("f".to_string(), 2)], &["a".to_string(), "b".to_string()], 5);
-            let term = to_untyped_data_expression(&term, None);
+            let term = to_untyped_data_expression(term.clone(), None);
 
             assert_eq!(
                 inner.rewrite(&term),
