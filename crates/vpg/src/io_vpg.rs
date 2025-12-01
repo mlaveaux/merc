@@ -1,7 +1,8 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use std::io::Read;
 use std::io::Write;
 
-use itertools::Itertools;
 use log::info;
 use log::trace;
 use oxidd::BooleanFunction;
@@ -23,6 +24,7 @@ use crate::VariabilityParityGame;
 use crate::VertexIndex;
 
 /// Reads a variability parity game from the given reader.
+/// Note that the reader is buffered internally using a `BufReader`.
 ///
 /// # Details
 ///
@@ -53,7 +55,9 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
 
     let (_, [num_of_vertices_txt]) = header_regex
         .captures(header)
-        .ok_or(IOError::InvalidHeader("header does not match parity <num_of_vertices>;"))?
+        .ok_or(IOError::InvalidHeader(
+            "header does not match parity <num_of_vertices>;",
+        ))?
         .extract();
 
     let num_of_vertices: usize = num_of_vertices_txt.parse()?;
@@ -106,7 +110,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
                 let parts: Vec<&str> = successor.trim().split('|').collect();
                 let successor_index: usize = parts[0].trim().parse()?;
                 edges_to.push(VertexIndex::new(successor_index));
-                
+
                 if parts.len() > 1 {
                     let config = parse_configuration_set(manager, &variables, parts[1].trim())?;
                     edges_configuration.push(config);
@@ -197,25 +201,23 @@ fn parse_configuration_set(
 }
 
 /// Writes the given parity game to the given writer in .pg format.
-pub fn write_vpg(manager: &BDDManagerRef, mut writer: impl Write, game: &VariabilityParityGame) -> Result<(), MercError> {
-    writeln!(writer, "parity {};", game.num_of_vertices())?;
+pub fn write_vpg(
+    _manager: &BDDManagerRef,
+    _writer: &mut impl Write,
+    _game: &VariabilityParityGame,
+) -> Result<(), MercError> {
+    // How to iterate over the satisfying assignments and write them as a string.
+    unimplemented!();
+}
 
-    for v in game.iter_vertices() {
-        let prio = game.priority(v);
-        let owner = game.owner(v).to_index();
-
-        write!(writer, "{} {} {} ", v.value(), prio.value(), owner)?;
-        write!(
-            writer,
-            "{}",
-            game.outgoing_edges(v).map(|edge| {
-                edge.to().value()
-            }).format(", ")
-        )?;
-        writeln!(writer, ";")?;
-    }
-
-    Ok(())
+/// Write a configuration set to its string representation.
+fn write_configuration_set(
+    _manager: &BDDManagerRef,
+    _variables: &Vec<BDDFunction>,
+    _config: &BDDFunction,
+) -> Result<String, MercError> {
+    // How to iterate over the satisfying assignments and write them as a string.
+    unimplemented!();
 }
 
 #[cfg(test)]

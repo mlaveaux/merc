@@ -1,4 +1,5 @@
-use std::{ffi::OsStr, path::Path};
+use std::ffi::OsStr;
+use std::path::Path;
 
 use clap::ValueEnum;
 

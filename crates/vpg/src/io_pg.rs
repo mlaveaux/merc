@@ -1,3 +1,5 @@
+//! Authors: Maurice Laveaux and Sjef van Loo
+
 use std::io::Read;
 use std::io::Write;
 
@@ -26,7 +28,7 @@ pub enum IOError {
     InvalidLine(&'static str),
 }
 
-/// Reads a parity game from the given reader.
+/// Reads a parity game in textual `.pg` format from the given reader.
 ///
 /// # Details
 ///
