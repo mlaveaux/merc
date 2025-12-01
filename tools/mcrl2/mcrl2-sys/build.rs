@@ -120,7 +120,7 @@ fn main() {
     build_dparser.compile("dparser");
 
     // These are the files for which we need to call cxxbuild to produce the bridge code.
-    let mut build = cxx_build::bridges(["src/pbes.rs", "src/log.rs"]);
+    let mut build = cxx_build::bridges(["src/atermpp.rs", "src/pbes.rs", "src/log.rs"]);
 
     // Additional files needed to compile the bridge, basically to build mCRL2 itself.
     build
@@ -216,6 +216,7 @@ fn main() {
     build.compile("mcrl2-sys");
 
     // These files should trigger a rebuild.
+    rerun_if_changed!("cpp/atermpp.h");
     rerun_if_changed!("cpp/pbes.h");
     rerun_if_changed!("cpp/log.h");
 }

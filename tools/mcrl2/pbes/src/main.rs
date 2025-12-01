@@ -3,18 +3,23 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
-use mcrl2_sys::log::ffi::mcrl2_set_reporting_level;
-use mcrl2_sys::log::verbosity_to_log_level_t;
-use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_file;
-use mcrl2_sys::pbes::ffi::mcrl2_run_stategraph_local_algorithm;
+use mcrl2::Pbes;
+use mcrl2::set_reporting_level;
+use mcrl2::verbosity_to_log_level_t;
 use merc_tools::VerbosityFlag;
 use merc_tools::Version;
 use merc_tools::VersionFlag;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
+mod permutation;
+mod symmetry;
+
 #[derive(clap::Parser, Debug)]
-#[command(about = "A command line tool for variability parity games", arg_required_else_help = true)]
+#[command(
+    about = "A command line tool for variability parity games",
+    arg_required_else_help = true
+)]
 struct Cli {
     #[command(flatten)]
     version: VersionFlag,
@@ -49,7 +54,7 @@ fn main() -> Result<ExitCode, MercError> {
         .init();
 
     // Enable logging on the mCRL2 side
-    mcrl2_set_reporting_level(verbosity_to_log_level_t(cli.verbosity.verbosity()));
+    set_reporting_level(verbosity_to_log_level_t(cli.verbosity.verbosity()));
 
     if cli.version.into() {
         eprintln!("{}", Version);
@@ -59,12 +64,11 @@ fn main() -> Result<ExitCode, MercError> {
     let mut timing = Timing::new();
 
     if let Some(Commands::Symmetry(args)) = cli.commands {
-        let pbes = mcrl2_load_pbes_from_file(&args.filename)?;
+        let pbes = Pbes::from_file(&args.filename)?;
 
-        let result = mcrl2_run_stategraph_local_algorithm(&pbes)?;
+        let symmetries = SymmetryAlgorithm::new(&pbes).run()?;
     }
 
-    
     if cli.timings {
         timing.print();
     }

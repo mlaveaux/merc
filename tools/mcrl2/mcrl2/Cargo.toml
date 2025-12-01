@@ -1,0 +1,11 @@
+[package]
+name = "mcrl2"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mcrl2-sys.workspace = true
+merc_tools.workspace = true
+merc_utilities.workspace = true

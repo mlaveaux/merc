@@ -9,12 +9,3 @@ pub mod ffi {
         fn mcrl2_set_reporting_level(level: usize);
     }
 }
-
-pub fn verbosity_to_log_level_t(verbosity: Verbosity) -> usize {
-    match verbosity {
-        Verbosity::Quiet => 0,
-        Verbosity::Verbose => 5,
-        Verbosity::Debug => 6,
-        Verbosity::Trace => 7,
-    }
-}

@@ -1,3 +1,5 @@
+/// Wrapper around the log library of the mCRL2 toolset.
+
 #pragma once
 #include <memory>
 #include <string>

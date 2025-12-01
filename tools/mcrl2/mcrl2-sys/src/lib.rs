@@ -5,7 +5,13 @@
 //! Every module mirrors the corresponding library of the mCRL2 toolset. Within
 //! it a foreign function interface (FFI) is defined using the
 //! [cxx](https://cxx.rs/) crate.
+//!
+//! # Details
+//!
+//! Every type in a `ffi` module identifies a C++ type of the mCRL2 toolset.
+//! Functions defined in the `ffi` module are wrappers around C++ functions.
 
+pub mod atermpp;
 pub mod log;
 pub mod pbes;
 

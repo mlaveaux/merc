@@ -6,10 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-mcrl2-sys.workspace = true
+mcrl2.workspace = true
 merc_tools.workspace = true
 merc_utilities.workspace = true
 
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
+itertools.workspace = true
