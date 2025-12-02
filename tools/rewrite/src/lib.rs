@@ -9,7 +9,6 @@ use merc_sabre::InnermostRewriter;
 use merc_sabre::NaiveRewriter;
 use merc_sabre::RewriteEngine;
 use merc_sabre::SabreRewriter;
-use merc_sabre_compiling::SabreCompilingRewriter;
 use merc_utilities::MercError;
 
 /// Selects the rewriter to use.
@@ -18,7 +17,6 @@ pub enum Rewriter {
     Naive,
     Innermost,
     Sabre,
-    SabreCompiling,
 }
 
 /// Rewrites the given REC specification.
@@ -66,19 +64,6 @@ pub fn rewrite_rec(rewriter: Rewriter, filename_specification: &str, output: boo
                 }
             }
             println!("Sabre rewrite took {} ms", now.elapsed().as_millis());
-        }
-        Rewriter::SabreCompiling => {
-            let mut sa = SabreCompilingRewriter::new(&spec, true, true)?;
-
-            let now = Instant::now();
-            for term in &syntax_terms {
-                let term = to_untyped_data_expression(term.clone(), None);
-                let result = sa.rewrite(&term);
-                if output {
-                    println!("{}", result)
-                }
-            }
-            println!("Compiling sabre rewrite took {} ms", now.elapsed().as_millis());
         }
     }
 

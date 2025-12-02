@@ -9,7 +9,6 @@ rust-version.workspace = true
 merc_aterm.workspace = true
 merc_data.workspace = true
 merc_rec-tests.workspace = true
-merc_sabre-compiling.workspace = true
 merc_sabre.workspace = true
 merc_tools.workspace = true
 merc_unsafety.workspace = true

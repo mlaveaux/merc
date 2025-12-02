@@ -31,8 +31,6 @@ members = [
     "crates/number",
     "crates/rec-tests",
     "crates/reduction",
-    "crates/sabre_compiling",
-    "crates/sabre_compiling/sabre_ffi",
     "crates/sabre",
     "crates/sabre/benchmarks",
     "crates/sharedmutex",

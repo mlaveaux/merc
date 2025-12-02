@@ -543,12 +543,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastrand"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -771,16 +765,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
-name = "libloading"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
-dependencies = [
- "cfg-if",
- "windows-link",
-]
-
-[[package]]
 name = "libmimalloc-sys"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -866,7 +850,6 @@ dependencies = [
  "merc_data",
  "merc_rec-tests",
  "merc_sabre",
- "merc_sabre-compiling",
  "merc_tools",
  "merc_unsafety",
  "merc_utilities",
@@ -1050,37 +1033,6 @@ dependencies = [
  "smallvec",
  "test-case",
  "test-log",
-]
-
-[[package]]
-name = "merc_sabre-compiling"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "duct",
- "env_logger",
- "indoc",
- "libloading",
- "log",
- "merc_aterm",
- "merc_data",
- "merc_rec-tests",
- "merc_sabre",
- "merc_sabre-ffi",
- "merc_utilities",
- "tempfile",
- "test-log",
- "toml",
-]
-
-[[package]]
-name = "merc_sabre-ffi"
-version = "1.0.0"
-dependencies = [
- "merc_aterm",
- "merc_data",
- "merc_unsafety",
- "merc_utilities",
 ]
 
 [[package]]
@@ -2042,19 +1994,6 @@ name = "target-triple"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "591ef38edfb78ca4771ee32cf494cb8771944bee237a9b91fc9c1424ac4b777b"
-
-[[package]]
-name = "tempfile"
-version = "3.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16"
-dependencies = [
- "fastrand",
- "getrandom",
- "once_cell",
- "rustix",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "termcolor"
