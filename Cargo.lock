@@ -917,13 +917,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "merc_aterm-ffi"
-version = "1.0.0"
-dependencies = [
- "merc_aterm",
-]
-
-[[package]]
 name = "merc_data"
 version = "1.0.0"
 dependencies = [
