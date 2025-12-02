@@ -288,6 +288,9 @@ where
         // Blocks above this number are new in this iteration.
         let num_blocks = partition.num_of_blocks();
 
+        // This is a workaround for a data race in bumpalo for zero-sized slices.
+        let empty_slice: &[(LabelIndex, BlockIndex)] = &[];
+
         for new_block_index in
             partition.partition_marked_with(block_index, &mut split_builder, |state_index, partition| {
                 signature(state_index, partition, &state_to_key, &mut builder);
@@ -299,7 +302,7 @@ where
                     if let Some((_, index)) = id.get_key_value(&Signature::new(&builder)) {
                         *index
                     } else {
-                        let slice = arena.alloc_slice_copy(&builder);
+                        let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
                         let number = BlockIndex::new(key_to_signature.len());
                         id.insert(Signature::new(slice), number);
                         key_to_signature.push(Signature::new(slice));
@@ -397,6 +400,9 @@ where
         5,
     );
 
+    // This is a workaround for a data race in bumpalo for zero-sized slices.
+    let empty_slice: &[(LabelIndex, BlockIndex)] = &[];
+
     while old_count != id.len() {
         old_count = id.len();
         progress.print((iteration, old_count));
@@ -415,7 +421,7 @@ where
                 trace!("State {state_index} signature {:?}", builder);
 
                 // Keep track of the index for every state, either use the arena to allocate space or simply borrow the value.
-                let slice = arena.alloc_slice_copy(&builder);
+                let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
                 state_to_signature[state_index] = Signature::new(slice);
             }
         }
@@ -432,7 +438,7 @@ where
                 state_to_signature[state_index] = Signature::new(signature.as_slice());
                 new_id = *index;
             } else {
-                let slice = arena.alloc_slice_copy(&builder);
+                let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
                 id.insert(Signature::new(slice), new_id);
 
                 // (branching) Keep track of the signature for every block in the next partition.
