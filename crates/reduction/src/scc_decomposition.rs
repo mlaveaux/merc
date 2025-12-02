@@ -5,6 +5,7 @@ use log::trace;
 use merc_lts::LTS;
 use merc_lts::LabelIndex;
 use merc_lts::StateIndex;
+use merc_utilities::LargeFormatter;
 
 use crate::BlockIndex;
 use crate::IndexedPartition;
@@ -61,7 +62,7 @@ where
     }
 
     trace!("SCC partition {partition}");
-    debug!("Found {} strongly connected components", partition.num_of_blocks());
+    debug!("Found {} strongly connected components", LargeFormatter(partition.num_of_blocks()));
     partition
 }
 
