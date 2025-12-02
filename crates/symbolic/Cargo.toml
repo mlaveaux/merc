@@ -1,0 +1,15 @@
+[package]
+name = "merc_symbolic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+merc_aterm.workspace = true
+merc_data.workspace = true
+merc_io.workspace = true
+merc_ldd.workspace = true
+merc_utilities.workspace = true
+
+oxidd.workspace = true
