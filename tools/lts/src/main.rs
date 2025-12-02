@@ -16,7 +16,6 @@ use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
 use merc_reduction::Equivalence;
 use merc_reduction::reduce;
-use merc_symbolic::read_symbolic_lts;
 use merc_tools::Version;
 use merc_tools::VersionFlag;
 use merc_tools::verbosity::VerbosityFlag;
@@ -99,7 +98,6 @@ fn main() -> Result<ExitCode, MercError> {
         match command {
             Commands::Info(args) => {
                 let path = Path::new(&args.filename);
-                let file = File::open(path)?;
 
                 let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
                 if format != LtsType::Sym {
@@ -110,9 +108,7 @@ fn main() -> Result<ExitCode, MercError> {
                         LargeFormatter(lts.num_of_transitions())
                     );
                 } else {
-                    let mut storage = Storage::new();
-                    let lts = read_symbolic_lts(&file, &mut storage)?;
-                    println!("Number of states: {}", merc_ldd::len(&mut storage, lts.states()))
+                    return Err("Unsupported file format for info.".into());
                 }
             }
             Commands::Reduce(args) => {

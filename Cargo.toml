@@ -35,7 +35,6 @@ members = [
     "crates/sabre/benchmarks",
     "crates/sharedmutex",
     "crates/sharedmutex/benchmarks",
-    "crates/symbolic",
     "crates/syntax",
     "crates/tools",
     "crates/unsafety",
@@ -71,7 +70,6 @@ rayon = "1.11"
 regex = "1.12"
 rustc-hash = "2.1"
 smallvec = "1.15"
-tempfile = "3.23"
 thiserror = "2.0"
 toml = "0.9"
 winapi = { version = "0.3", features = ["consoleapi"] }
@@ -80,7 +78,6 @@ winapi = { version = "0.3", features = ["consoleapi"] }
 allocator-api2 =  "0.3"
 backtrace = "0.3"
 crossbeam-utils = "0.8"
-libloading = "0.9"
 mimalloc = "0.1"
 streaming-iterator = "0.1"
 tikv-jemallocator = "0.6"
@@ -121,10 +118,7 @@ merc_number = { path = "crates/number" }
 merc_rec-tests = { path = "crates/rec-tests" }
 merc_reduction = { path = "crates/reduction" }
 merc_sabre = { path = "crates/sabre" }
-merc_sabre-compiling = { path = "crates/sabre_compiling" }
-merc_sabre-ffi = { path = "crates/sabre_compiling/sabre_ffi" }
 merc_sharedmutex = { path = "crates/sharedmutex" }
-merc_symbolic = { path = "crates/symbolic" }
 merc_syntax = { path = "crates/syntax" }
 merc_tools = { path = "crates/tools" }
 merc_unsafety = { path = "crates/unsafety" }
