@@ -2,6 +2,7 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("mcrl2-sys/cpp/atermpp.h");
+        include!("mcrl2-sys/cpp/exception.h");
 
         type aterm;
 

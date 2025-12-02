@@ -1,6 +1,6 @@
 use cargo_emit::{rerun_if_changed, rustc_link_lib, rustc_link_search};
-use cmake::Config;
 use cc::Build;
+use cmake::Config;
 
 /// \returns A vector of strings where prefix is prepended to every string slice in paths.
 fn add_prefix(prefix: String, paths: &[&str]) -> Vec<String> {
@@ -43,9 +43,7 @@ fn add_compile_flags(build: &mut Build, mcrl2_path: String) {
 }
 
 fn main() {
-    
-    if cfg!(feature = "mcrl2_cpptrace")
-    {
+    if cfg!(feature = "mcrl2_cpptrace") {
         // Build cpptrace with a fairly complicated cmake setup so we use `cmake`
         // crate directly.
         let mut dst = Config::new("../../../3rd-party/cpptrace")
@@ -241,6 +239,7 @@ fn main() {
 
     // These files should trigger a rebuild.
     rerun_if_changed!("cpp/atermpp.h");
+    rerun_if_changed!("cpp/exception.h");
     rerun_if_changed!("cpp/pbes.h");
     rerun_if_changed!("cpp/log.h");
 }
