@@ -12,11 +12,14 @@
 //! Functions defined in the `ffi` module are wrappers around C++ functions.
 
 pub mod atermpp;
+pub mod data;
 pub mod log;
 pub mod pbes;
 
 // Reexport the cxx types that we use
 pub mod cxx {
+    pub use cxx::CxxString;
+    pub use cxx::CxxVector;
     pub use cxx::Exception;
     pub use cxx::UniquePtr;
 }

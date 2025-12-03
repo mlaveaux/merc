@@ -13,8 +13,8 @@ components of the mCRL2 toolset, which can take some time.
 
 By default this will build in dev or debug mode, and a release build can be
 obtained by passing --release. Note that it is necessary to run `git submodule
-update` after switching branches or pulling from the remote whenever any of the
-modules have been changed.
+update --init` after switching branches or pulling from the remote whenever any
+of the modules have been changed.
 
 # Overview
 

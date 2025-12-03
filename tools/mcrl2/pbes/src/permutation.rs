@@ -1,33 +1,37 @@
-use std::collections::HashMap;
+use itertools::Itertools;
+use std::collections::HashSet;
 use std::fmt;
 
 use merc_utilities::MercError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Permutation {
-    /// We represent a permutation by a (sorted) mapping from old indices to new indices.
-    mapping: Vec<usize>,
+    /// We represent a permutation as an explicit list of (domain -> image) pairs,
+    /// sorted by domain.
+    mapping: Vec<(usize, usize)>,
 }
 
 impl Permutation {
-    /// Create a permutation from a given mapping (does not assume anything about the mapping).
-    pub fn from_mapping(mapping: Vec<usize>) -> Self {
-        // Check that all indices are present.
-        for value in &mapping {
-            debug_assert!(*value < mapping.len(), "Invalid permutation mapping: {}", value);
-        }
-
+    /// Create a permutation from a given mapping of (domain -> image) pairs.
+    /// The function validates that:
+    /// - domain entries are unique,
+    /// - images are exactly a permutation of the domain entries,
+    /// - internal representation is sorted by domain.
+    pub fn from_mapping(mut mapping: Vec<(usize, usize)>) -> Self {
+        // Validate lengths and uniqueness in debug builds.
         if cfg!(debug_assertions) {
-            let mut seen = vec![false; mapping.len()];
-            for value in &mapping {
+            let mut seen_domain = HashSet::new();
+            for (d, _) in &mapping {
                 debug_assert!(
-                    !seen[*value],
+                    seen_domain.insert(*d),
                     "Invalid permutation mapping: multiple mappings for {}",
-                    value
+                    d
                 );
-                seen[*value] = true;
             }
         }
+
+        // Sort by domain for deterministic representation.
+        mapping.sort_unstable_by_key(|(d, _)| *d);
 
         Permutation { mapping }
     }
@@ -43,9 +47,14 @@ impl Permutation {
                 return Err("Permutation must be enclosed in brackets []".into());
             };
 
-        // Parse all the commas.
-        let mut mapping = HashMap::new();
+        // Parse all the comma-separated tokens into (from, to) pairs.
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
         for token in input_no_brackets.split(',') {
+            let token = token.trim();
+            if token.is_empty() {
+                continue;
+            }
+
             let arrow_pos = token
                 .find("->")
                 .ok_or_else(|| MercError::from(format!("Invalid permutation format: {}", token)))?;
@@ -60,28 +69,25 @@ impl Permutation {
                 .parse()
                 .map_err(|_| MercError::from(format!("Invalid number: {}", to_str)))?;
 
-            if mapping.contains_key(&from) {
+            if pairs.iter().any(|(f, _)| *f == from) {
                 return Err(MercError::from(format!(
                     "Invalid permutation: multiple mappings for {}",
                     from
                 )));
             }
 
-            mapping.insert(from, to);
+            pairs.push((from, to));
         }
 
-        // Convert HashMap to sorted Vec
-        let mut mapping_vec: Vec<_> = mapping.into_iter().collect();
-        mapping_vec.sort_by_key(|(k, _)| *k);
-        let mapping = mapping_vec.into_iter().map(|(_, v)| v).collect();
-
-        Ok(Permutation { mapping })
+        Ok(Permutation::from_mapping(pairs))
     }
 
     /// Construct a new permutation by concatenating two (disjoint) permutations.
     pub fn concat(self, other: &Permutation) -> Permutation {
         debug_assert!(
-            self.mapping.iter().all(|x| !other.mapping.contains(x)),
+            self.mapping
+                .iter()
+                .all(|(left, _)| !other.mapping.iter().any(|(right, _)| right == left)),
             "There should be no overlap between the two permutations being concatenated."
         );
 
@@ -90,18 +96,35 @@ impl Permutation {
 
         Permutation::from_mapping(mapping)
     }
+
+    /// Returns the value of the permutation at the given key.
+    fn value(&self, key: usize) -> usize {
+        for (d, v) in &self.mapping {
+            if *d == key {
+                return *v;
+            }
+        }
+
+        key // It is the identity on unspecified elements.
+    }
 }
 
+/// Display the permutation in cycle notation.
+///
+/// Cycle notation is a standard way to present permutations, where each cycle
+/// is represented by parentheses. For example, the permutation that maps 0->2,
+/// 1->0, 2->1 would be represented as (0 2 1). Cycles containing a single
+/// element (fixed points) are omitted for brevity.
 impl fmt::Display for Permutation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
         let mut visited = vec![false; self.mapping.len()];
         let mut first_cycle = true;
 
-        for start in 0..self.mapping.len() {
-            if visited[start] || self.mapping[start] == start {
+        for (start, value) in &self.mapping {
+            if visited[*value] || self.value(*start) == *value {
                 // We have already visited this element, or it is a fixed point.
-                visited[start] = true;
+                visited[*value] = true;
                 continue;
             }
 
@@ -112,7 +135,7 @@ impl fmt::Display for Permutation {
             first_cycle = false;
 
             write!(f, "(")?;
-            let mut current = start;
+            let mut current = *start;
             let mut first_in_cycle = true;
 
             loop {
@@ -124,9 +147,9 @@ impl fmt::Display for Permutation {
 
                 write!(f, "{}", current)?;
                 visited[current] = true;
-                current = self.mapping[current];
+                current = self.value(current);
 
-                if current == start {
+                if current == *start {
                     break;
                 }
                 assert!(!visited[current], "This is not a valid permutation!");
@@ -143,6 +166,32 @@ impl fmt::Display for Permutation {
     }
 }
 
+/// Given a set of indices, generate the permutation group on these indices.
+///
+/// For the variables {0, 3, 4} this would generate the permutations in cycle notation:
+/// - Identity: (0)(3)(4)
+/// - (0 3)
+/// - (0 4)
+/// - (3 4)
+/// - (0 3 4)
+/// - (0 4 3)
+pub fn permutation_group(indices: &Vec<usize>) -> impl Iterator<Item = Permutation> {
+    indices.iter().permutations(indices.len()).map(move |perm| {
+        let mapping: Vec<(usize, usize)> = indices
+            .iter()
+            .cloned()
+            .zip(perm.into_iter())
+            .map(|(a, b)| (a, *b))
+            .collect();
+        Permutation::from_mapping(mapping)
+    })
+}
+
+/// Returns the number of permutations in a given group.
+pub fn permutation_group_size(n: usize) -> usize {
+    (1..=n).product()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,7 +200,7 @@ mod tests {
     fn test_permutation_from_input() {
         let permutation = Permutation::from_input("[0->   2, 1   ->0, 2->1]").unwrap();
 
-        assert!(permutation.mapping == vec![2, 0, 1]);
+        assert!(permutation.mapping == vec![(0, 2), (1, 0), (2, 1)]);
     }
 
     #[test]
@@ -159,5 +208,12 @@ mod tests {
         let permutation = Permutation::from_input("[0->2, 1->0, 2->1, 3->4, 4->3]").unwrap();
 
         assert_eq!(permutation.to_string(), "((0 2 1) (3 4))");
+    }
+
+    #[test]
+    fn test_permutation_group() {
+        let indices = vec![0, 3, 5];
+        let perms: Vec<Permutation> = permutation_group(&indices).collect();
+        assert_eq!(perms.len(), permutation_group_size(indices.len()));
     }
 }

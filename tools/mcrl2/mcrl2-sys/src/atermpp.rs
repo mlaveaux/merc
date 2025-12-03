@@ -11,5 +11,8 @@ pub mod ffi {
 
         /// Returns the `index` argument of the term.
         fn mcrl2_aterm_argument(input: &aterm, index: usize) -> UniquePtr<aterm>;
+
+        /// Converts the given aterm to a string.
+        fn mcrl2_aterm_to_string(input: &aterm) -> Result<String>;
     }
 }

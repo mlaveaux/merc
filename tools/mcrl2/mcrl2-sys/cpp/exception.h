@@ -2,7 +2,6 @@
 #include <cpptrace/from_current.hpp>
 
 #include <iostream>
-#include <stdexcept>
 
 namespace rust::behavior {
 

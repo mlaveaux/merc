@@ -1,4 +1,6 @@
-use cargo_emit::{rerun_if_changed, rustc_link_lib, rustc_link_search};
+use cargo_emit::rerun_if_changed;
+use cargo_emit::rustc_link_lib;
+use cargo_emit::rustc_link_search;
 use cc::Build;
 use cmake::Config;
 
@@ -141,7 +143,7 @@ fn main() {
     build_dparser.compile("dparser");
 
     // These are the files for which we need to call cxxbuild to produce the bridge code.
-    let mut build = cxx_build::bridges(["src/atermpp.rs", "src/pbes.rs", "src/log.rs"]);
+    let mut build = cxx_build::bridges(["src/atermpp.rs", "src/data.rs", "src/pbes.rs", "src/log.rs"]);
 
     // Additional files needed to compile the bridge, basically to build mCRL2 itself.
     build
@@ -240,6 +242,7 @@ fn main() {
     // These files should trigger a rebuild.
     rerun_if_changed!("cpp/atermpp.h");
     rerun_if_changed!("cpp/exception.h");
+    rerun_if_changed!("cpp/data.h");
     rerun_if_changed!("cpp/pbes.h");
     rerun_if_changed!("cpp/log.h");
 }
