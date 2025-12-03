@@ -63,8 +63,16 @@ fn data_expr_to_bdd(manager_ref: &BDDManagerRef, expr: &DataExpr) -> Result<BDDF
                 }
                 _ => unimplemented!("Conversion of data expression to BDD not implemented for this function"),
             }
+        },
+        DataExpr::Id(name) => {
+            // Deal with the base cases.
+            match name.as_str() {
+                "tt" => Ok(manager_ref.with_manager_shared(|manager| BDDFunction::t(manager))),
+                "ff" => Ok(manager_ref.with_manager_shared(|manager| BDDFunction::f(manager))),
+                _ => unimplemented!("Cannot convert data expression \"{expr}\" to BDD"),
+            }
         }
-        _ => unimplemented!("Conversion of data expression to BDD not implemented for this expression"),
+        _ => unimplemented!("Cannot convert data expression \"{expr}\" to BDD"),
     }
 }
 
