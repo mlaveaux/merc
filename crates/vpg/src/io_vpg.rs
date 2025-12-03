@@ -1,15 +1,18 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
 
+use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
 
+use itertools::Itertools;
 use log::info;
 use log::trace;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
+use oxidd::util::OptBool;
 use oxidd::BooleanFunction;
 use oxidd::Manager;
 use oxidd::ManagerRef;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 
@@ -87,12 +90,14 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
             .next()
             .ok_or(IOError::InvalidLine("Expected at least <index> <priority> ...;"))?
             .parse()?;
-        let vertex_owner = Player::from_index(parts
-            .next()
-            .ok_or(IOError::InvalidLine(
-                "Expected at least <index> <priority> <owner> ...;",
-            ))?
-            .parse()?);
+        let vertex_owner = Player::from_index(
+            parts
+                .next()
+                .ok_or(IOError::InvalidLine(
+                    "Expected at least <index> <priority> <owner> ...;",
+                ))?
+                .parse()?,
+        );
 
         owner[index] = vertex_owner;
         priority[index] = Priority::new(vertex_priority);
@@ -173,7 +178,7 @@ fn parse_configuration_set(
     variables: &[BDDFunction],
     config: &str,
 ) -> Result<BDDFunction, MercError> {
-    manager_ref.with_manager_shared(|manager| {
+    manager_ref.with_manager_shared(|manager| -> Result<BDDFunction, MercError> {
         let mut result = BDDFunction::f(manager);
 
         for part in config.split('+') {
@@ -200,24 +205,57 @@ fn parse_configuration_set(
     })
 }
 
-/// Writes the given parity game to the given writer in .pg format.
+/// Writes the given parity game to the given writer in .vpg format.
+/// Note that the reader is buffered internally using a `BufWriter`.
 pub fn write_vpg(
-    _manager: &BDDManagerRef,
-    _writer: &mut impl Write,
-    _game: &VariabilityParityGame,
+    manager: &BDDManagerRef,
+    writer: &mut impl Write,
+    game: &VariabilityParityGame,
 ) -> Result<(), MercError> {
-    // How to iterate over the satisfying assignments and write them as a string.
-    unimplemented!();
+    let mut writer = BufWriter::new(writer);
+
+    writeln!(writer, "parity {};", game.num_of_vertices())?;
+
+    for v in game.iter_vertices() {
+        let prio = game.priority(v);
+        let owner = game.owner(v).to_index();
+
+        write!(writer, "{} {} {} ", v.value(), prio.value(), owner)?;
+        // write!(writer, "{}", game.outgoing_edges(v).format_with(", ", |fmt| {
+        //     write_configuration_set(manager_ref, write, variables, config)
+        // })
+
+        // .map(|to| {
+        //     to.value()
+        // }).format(", "))?;
+        writeln!(writer, ";")?;
+    }
+
+    Ok(())
 }
 
 /// Write a configuration set to its string representation.
 fn write_configuration_set(
-    _manager: &BDDManagerRef,
-    _variables: &Vec<BDDFunction>,
-    _config: &BDDFunction,
-) -> Result<String, MercError> {
-    // How to iterate over the satisfying assignments and write them as a string.
-    unimplemented!();
+    manager_ref: &BDDManagerRef,
+    write: &mut impl Write,
+    variables: &Vec<BDDFunction>,
+    config: &BDDFunction,
+) -> Result<(), MercError> {
+    manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+        let mut choices = Vec::new();
+
+        while let Some(cube) = config.pick_cube(|manager, edge, index| choices[index as usize]) {
+            for value in cube {
+                match value {
+                    OptBool::True => write!(write, "1")?,
+                    OptBool::False => write!(write, "0")?,
+                    OptBool::None => write!(write, "-")?,
+                }
+            }
+        }
+
+        Ok(())
+    })
 }
 
 #[cfg(test)]

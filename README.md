@@ -6,10 +6,10 @@ This repository contains a re-implementation of the core functionality of the [m
 
 Compilation requires at least rustc version 1.85.0 and we use 2024 edition rust. Then the toolset can be build using `cargo build`, by default this will build in `dev` or debug mode, and a release build can be obtained by passing `--release`. Several tools will be build that can be found in the `target/{debug, release}` directory. The `GUI` tools have to be build separatedly by running the build from the `tools/gui` directory.
 
-## Features
+## Tools
 
  - merc-lts implement various bisimulation reductions.
- - merc-ltsgraph is a GUI
+ - merc-ltsgraph is a GUI to visualize LTSs.
 
 ## Related Work
 
