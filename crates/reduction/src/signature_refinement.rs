@@ -245,7 +245,7 @@ where
     let mut split_builder = BlockPartitionBuilder::default();
 
     // Put all the states in the initial partition { S }.
-    let mut id: FxHashMap<Signature, BlockIndex> = FxHashMap::default();
+    let mut id: FxHashMap<Signature<'_>, BlockIndex> = FxHashMap::default();
 
     // Assigns the signature to each state.
     let mut partition = BlockPartition::new(lts.num_of_states());
@@ -273,6 +273,11 @@ where
 
         // Removes the existing signatures.
         key_to_signature.clear();
+
+        // Safety: The current signatures have been removed, so it safe to reuse the memory.
+        let id: &'_ mut FxHashMap<Signature<'_>, BlockIndex> = unsafe { std::mem::transmute(&mut id) };
+        let key_to_signature: &'_ mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut key_to_signature) };
+
         arena.reset();
 
         let block = partition.block(block_index);
@@ -373,7 +378,7 @@ where
 /// current partition, the signatures per state for the next partition.
 fn signature_refinement_naive<F, L, const WEAK: bool>(lts: &L, mut signature: F) -> IndexedPartition
 where
-    F: FnMut(StateIndex, &IndexedPartition, &Vec<Signature>, &mut SignatureBuilder),
+    F: FnMut(StateIndex, &IndexedPartition, &Vec<Signature<'_>>, &mut SignatureBuilder),
     L: LTS + fmt::Debug,
 {
     // Avoids reallocations when computing the signature.
@@ -381,12 +386,12 @@ where
     let mut builder = SignatureBuilder::default();
 
     // Put all the states in the initial partition { S }.
-    let mut id: FxHashMap<Signature, BlockIndex> = FxHashMap::default();
+    let mut id: FxHashMap<Signature<'_>, BlockIndex> = FxHashMap::default();
 
     // Assigns the signature to each state.
     let mut partition = IndexedPartition::new(lts.num_of_states());
     let mut next_partition = IndexedPartition::new(lts.num_of_states());
-    let mut state_to_signature: Vec<Signature> = Vec::new();
+    let mut state_to_signature: Vec<Signature<'_>> = Vec::new();
     state_to_signature.resize_with(lts.num_of_states(), Signature::default);
 
     // Refine partitions until stable.
@@ -410,6 +415,13 @@ where
 
         // Clear the current partition to start the next blocks.
         id.clear();
+
+        state_to_signature.clear();
+        state_to_signature.resize_with(lts.num_of_states(), Signature::default);
+
+        // Safety: The current signatures have been removed, so it safe to reuse the memory.
+        let id: &'_ mut FxHashMap<Signature<'_>, BlockIndex> = unsafe { std::mem::transmute(&mut id) };
+        let state_to_signature: &mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut state_to_signature) };
 
         // Remove the current signatures.
         arena.reset();
