@@ -1,2 +1,2 @@
-P,EC,TTF,O,Ex
-tt
+C,Ct,Cp,M,Ma,Mq,L,Ll,Ln,Lh
+node(C, node(Ct, node(M, node(Ma, node(L, tt, ff), node(Mq, node(L, tt, ff), ff)), node(Ma, ff, node(Mq, ff, node(L, tt, ff)))), node(Cp, node(M, node(Ma, node(L, tt, ff), node(Mq, node(L, tt, ff), ff)), node(Ma, ff, node(Mq, ff, node(L, tt, ff)))), ff)), node(Ct, ff, node(Cp, ff, node(M, node(Ma, node(L, tt, ff), node(Mq, node(L, tt, ff), ff)), node(Ma, ff, node(Mq, ff, node(L, tt, ff)))))))

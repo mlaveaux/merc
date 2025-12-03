@@ -1,18 +1,21 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
 
+use std::collections::HashMap;
+use std::fmt;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 
+use log::debug;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
 use oxidd::BooleanFunction;
 use oxidd::Manager;
 use oxidd::ManagerRef;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
 
-use merc_lts::LTS;
-use merc_lts::LabelledTransitionSystem;
 use merc_lts::read_aut;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::LTS;
 use merc_syntax::DataExpr;
 use merc_syntax::MultiAction;
 use merc_utilities::MercError;
@@ -31,32 +34,57 @@ pub fn read_fts(
     // Read the underlying LTS, where the labels are in plain text
     let aut = read_aut(reader, Vec::new())?;
 
+    debug!("Using feature diagram {feature_diagram:?}");
+
     // Parse the labels as data expressions
     let mut feature_labels = Vec::new();
     for label in aut.labels() {
         let action = MultiAction::parse(label)?;
 
-        println!("Parsed action: {}", action);
-        feature_labels.push(action)
+        debug!("Parsed action: {}", action);
+        if action.actions.len() > 1 {
+            return Err(MercError::from(format!(
+                "Cannot read feature transition system: action \"{}\" has multiple actions",
+                label
+            )));
+        }
+
+        if let Some(action) = action.actions.first() {
+            if let Some(arg) = action.args.first() {
+                feature_labels.push(data_expr_to_bdd(manager_ref, &feature_diagram.variables, &arg)?);
+            } else {
+                feature_labels.push(manager_ref.with_manager_shared(|manager| BDDFunction::t(manager)));
+            }
+        } else {
+            // This is the tau action, is always enabled.
+            feature_labels.push(manager_ref.with_manager_shared(|manager| BDDFunction::t(manager)));
+        }
     }
 
     Ok(FeatureTransitionSystem::new(manager_ref, aut, feature_labels))
 }
 
 /// Converts the given data expression into a BDD function.
-fn data_expr_to_bdd(manager_ref: &BDDManagerRef, expr: &DataExpr) -> Result<BDDFunction, OutOfMemory> {
+///
+/// The input should be a data expression of the shape: expr = node(var, expr, expr) | tt | ff.
+fn data_expr_to_bdd(
+    manager_ref: &BDDManagerRef,
+    variables: &HashMap<String, BDDFunction>,
+    expr: &DataExpr,
+) -> Result<BDDFunction, OutOfMemory> {
     match expr {
         DataExpr::Application { function, arguments } => {
             match function.as_ref() {
                 // A node must be of the shape 'node(var, true_branch, false_branch)'
                 DataExpr::Id(name) => {
                     if name == "node" {
-                        let _true_branch = data_expr_to_bdd(manager_ref, &arguments[0])?;
-                        let _false_branch = data_expr_to_bdd(manager_ref, &arguments[1])?;
-                        unimplemented!();
-                        // manager_ref.with_manager_shared(|manager| {
-                        //     BDDFunction::ite(manager., &true_branch, &false_branch)
-                        // })
+                        let variable = format!("{}", arguments[0]);
+                        let then_branch = data_expr_to_bdd(manager_ref, variables, &arguments[1])?;
+                        let else_branch = data_expr_to_bdd(manager_ref, variables, &arguments[2])?;
+                        variables
+                            .get(&variable)
+                            .expect(&format!("Variable {variable} not found"))
+                            .ite(&then_branch, &else_branch)
                     } else {
                         unimplemented!("Conversion of data expression to BDD not implemented for this function");
                     }
@@ -77,9 +105,10 @@ fn data_expr_to_bdd(manager_ref: &BDDManagerRef, expr: &DataExpr) -> Result<BDDF
 }
 
 pub struct FeatureDiagram {
-    /// The variable names
-    variables: Vec<BDDFunction>,
+    /// The mapping from variable names to their var representation.
+    variables: HashMap<String, BDDFunction>,
 
+    /// Stores the initial configuration as a BDD function.
     initial_configuration: BDDFunction,
 }
 
@@ -95,23 +124,30 @@ impl FeatureDiagram {
         let mut line_iter = input.lines();
         let first_line = line_iter.next().ok_or("Expected variable names line")??;
 
-        let variable_names = first_line.split(',').map(|s| s.trim().to_string());
-
-        let variables = manager_ref.with_manager_exclusive(|manager| {
-            manager
-                .add_named_vars(variable_names)
-                .expect("The input should not have duplicated variable names") // TODO: This should be returned as an error, but that can only have OutOfMemory.
+        let variable_names: Vec<String> = first_line.split(',').map(|s| s.trim().to_string()).collect();
+        let variables = manager_ref.with_manager_exclusive(|manager| -> Result<Vec<BDDFunction>, MercError> {
+            Ok(manager
+                .add_named_vars(variable_names.iter())
+                .map_err(|e| format!("{}", e))?
                 .map(|i| BDDFunction::var(manager, i))
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<Vec<_>, _>>()?)
         })?;
 
+        let variables = HashMap::from_iter(variable_names.into_iter().zip(variables.into_iter()));
+
         let second_line = line_iter.next().ok_or("Expected initial configuration line")??;
-        let initial_configuration = data_expr_to_bdd(manager_ref, &DataExpr::parse(&second_line)?)?;
+        let initial_configuration = data_expr_to_bdd(manager_ref, &variables, &DataExpr::parse(&second_line)?)?;
 
         Ok(Self {
             variables,
             initial_configuration,
         })
+    }
+}
+
+impl fmt::Debug for FeatureDiagram {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "variables = {:?}", self.variables.keys())        
     }
 }
 
@@ -122,13 +158,13 @@ pub struct FeatureTransitionSystem {
     lts: LabelledTransitionSystem,
 
     /// The feature expression associated with each label.
-    feature_label: Vec<MultiAction>,
+    feature_labels: Vec<BDDFunction>,
 }
 
 impl FeatureTransitionSystem {
     /// Creates a new feature transition system.
-    pub fn new(manager: &BDDManagerRef, lts: LabelledTransitionSystem, feature_label: Vec<MultiAction>) -> Self {
-        Self { lts, feature_label }
+    pub fn new(manager: &BDDManagerRef, lts: LabelledTransitionSystem, feature_labels: Vec<BDDFunction>) -> Self {
+        Self { lts, feature_labels }
     }
 }
 
