@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use itertools::Itertools;
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::CompressedEntry;
 

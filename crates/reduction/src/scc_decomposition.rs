@@ -14,9 +14,7 @@ use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.
-pub fn tau_scc_decomposition<L>(lts: &L) -> IndexedPartition
-where
-    L: LTS + fmt::Debug,
+pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition
 {
     let partition = scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index));
     if cfg!(debug_assertions) {
@@ -27,10 +25,9 @@ where
 }
 
 /// Computes the strongly connected component partitioning of the given LTS.
-pub fn scc_decomposition<F, L>(lts: &L, filter: &F) -> IndexedPartition
+pub fn scc_decomposition<F>(lts: &impl LTS, filter: &F) -> IndexedPartition
 where
     F: Fn(StateIndex, LabelIndex, StateIndex) -> bool,
-    L: LTS + fmt::Debug,
 {
     let mut partition = IndexedPartition::new(lts.num_of_states());
 
