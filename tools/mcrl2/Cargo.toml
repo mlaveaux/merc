@@ -20,6 +20,7 @@ members = [
     "mcrl2-sys",
     "mcrl2",
     "pbes",
+    "xtask",
 ]
 
 [workspace.dependencies]
@@ -34,6 +35,9 @@ cxx = "1.0"
 cxx-build = { version = "1.0", features = ["parallel"] }
 cc = "1.0"
 cargo-emit = "0.2"
+
+# Dependencies used in xtask
+duct = "1.1"
 
 # The workspace libraries.
 mcrl2 = { path = "mcrl2" }
