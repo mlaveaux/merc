@@ -49,3 +49,9 @@ jobs:
       run: cargo bench -p benchmarks_sharedmutex
       env:
         RUSTC_WRAPPER: sccache
+        
+    - name: Run GUI Benchmarks
+      run: cargo bench -p benchmarks_ltsgraph
+      working-directory: tools/gui/
+      env:
+        RUSTC_WRAPPER: sccache

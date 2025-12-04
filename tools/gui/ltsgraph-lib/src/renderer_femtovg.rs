@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_femtovg_renderer() {
-        let file = include_str!("../../../../../examples/lts/abp.aut");
+        let file = include_str!("../../../../examples/lts/abp.aut");
         let lts = Arc::new(read_aut(file.as_bytes(), vec![]).unwrap());
 
         let mut canvas = Canvas::new(Void).unwrap();

@@ -20,7 +20,8 @@ split-debuginfo= "packed"
 resolver = "2"
 members = [
     "ltsgraph",
-    "ltsgraph-lib"
+    "ltsgraph-lib",
+    "ltsgraph-lib/benchmarks/"
 ]
 
 [workspace.dependencies]
@@ -37,6 +38,9 @@ tiny-skia = "0.11"
 tokio = { version = "1.48", features = ["rt", "macros"] }
 wgpu = "27.0"
 rand = "0.9"
+
+# Used for benchmarks
+criterion = "0.8"
 
 # The workspace libraries.
 merc_ltsgraph-lib = { path = "ltsgraph-lib" }
