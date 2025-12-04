@@ -1,0 +1,9 @@
+pbes nu Y(c1 : Pos, d1 : Bool, c2 : Pos, d2 : Bool) =
+       (val(!(c1 == 1)) || Y(2, !d1, c2, d2))
+       &&
+       (val(!(c1 == 1)) || Y(2, !d1, c2, d1))
+       && 
+       (val(!(c2 == 1)) || Y(c1, d1, 2, !d2))
+       ;
+
+init Y(1, true, 1, true);

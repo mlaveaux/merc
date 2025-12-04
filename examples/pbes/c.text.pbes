@@ -1,0 +1,16 @@
+pbes nu X(c1 : Bool, d1 : Int, c2 : Bool, d2 : Int) =
+       (val(c1) && Y(c1, 1, c2, d2))
+       || 
+       (val(c2) && Y(c1, d1, c2, 1))
+       ;
+     mu Y(c1 : Bool, d1 : Int, c2 : Bool, d2 : Int) =
+       (val(c1) && Y(!c1, 2, c2, d2))
+       || 
+       (val(c2) && Y(c1, d1, !c2, 2))
+       || 
+       (val(!c1 && !c2 && (d1 + d2 >= 4)) && X(!c1, d1-d2, !c2, d2-d1))
+       || 
+       (val(!c2 && !c1 && (d2 + d1 >= 4)) && X(!c1, d1-d2, !c2, d2-d1))
+       ;
+
+init X(true, 0, true, 0);
