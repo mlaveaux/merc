@@ -1,5 +1,12 @@
 #[cxx::bridge(namespace = "mcrl2::pbes_system")]
 pub mod ffi {
+
+    /// A helper struct for std::pair<const local_control_flow_graph_vertex*, UniquePtr<CxxVector<usize>>>
+    struct vertex_outgoing_edge {
+        vertex: *const local_control_flow_graph_vertex,
+        edges: UniquePtr<CxxVector<usize>>,
+    }
+
     unsafe extern "C++" {
         include!("mcrl2-sys/cpp/pbes.h");
         include!("mcrl2-sys/cpp/exception.h");
@@ -28,6 +35,36 @@ pub mod ffi {
             input: &stategraph_algorithm,
         );
 
+        
+        #[namespace = "mcrl2::pbes_system::detail"]
+        type stategraph_equation;
+
+        fn mcrl2_stategraph_local_algorithm_equations(
+            result: Pin<&mut CxxVector<stategraph_equation>>,
+            input: &stategraph_algorithm,
+        );
+
+
+        #[namespace = "mcrl2::pbes_system::detail"]
+        type predicate_variable;
+
+        /// Returns the predicate variables of a stategraph equation.
+        fn mcrl2_stategraph_equation_predicate_variables(
+            result: Pin<&mut CxxVector<predicate_variable>>,
+            input: &stategraph_equation,
+        );
+        
+        /// Returns the propositional variable of a pbes equation
+        fn mcrl2_stategraph_equation_variable(
+            equation: &stategraph_equation,
+        ) -> UniquePtr<aterm>;
+
+        /// Returns the used set of a predicate variable.
+        fn mcrl2_predicate_variable_used(input: &predicate_variable) -> Vec<usize>;
+
+        /// Returns the changed set of a predicate variable.
+        fn mcrl2_predicate_variable_changed(input: &predicate_variable) -> Vec<usize>;
+
         #[namespace = "mcrl2::pbes_system::detail"]
         type local_control_flow_graph_vertex;
 
@@ -52,6 +89,18 @@ pub mod ffi {
             vertex: *const local_control_flow_graph_vertex,
         ) -> UniquePtr<aterm>;
 
+        /// Obtain the outgoing edges of the vertex.
+        unsafe fn mcrl2_local_control_flow_graph_vertex_outgoing_edges(
+            result: Pin<&mut CxxVector<vertex_outgoing_edge>>,
+            input: *const local_control_flow_graph_vertex,
+        );
+
+        /// Obtain the outgoing edges of the vertex.
+        unsafe fn mcrl2_local_control_flow_graph_vertex_incoming_edges(
+            result: Pin<&mut CxxVector<vertex_outgoing_edge>>,
+            input: *const local_control_flow_graph_vertex,
+        );
+
         type srf_pbes;
 
         type srf_equation;
@@ -73,8 +122,6 @@ pub mod ffi {
         #[namespace = "atermpp"]
         type aterm = crate::atermpp::ffi::aterm;
 
-        type propositional_variable;
-
         /// Returns the equations of the given srf_pbes.
         fn mcrl2_srf_pbes_equations(result: Pin<&mut CxxVector<srf_equation>>, input: &srf_pbes);
 
@@ -83,8 +130,7 @@ pub mod ffi {
             input: *const srf_equation,
         ) -> UniquePtr<aterm>;
 
-        #[namespace = "mcrl2::data"]
-        type variable = crate::data::ffi::variable;
+        fn mcrl2_propositional_variable_name(input: &aterm) -> UniquePtr<aterm>;
 
         /// Returns an aterm_list<variable>
         fn mcrl2_propositional_variable_parameters(input: &aterm) -> UniquePtr<aterm>;

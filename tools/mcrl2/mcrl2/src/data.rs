@@ -1,5 +1,6 @@
 use std::fmt;
 
+use mcrl2_sys::data::ffi::mcrl2_data_expression_to_string;
 use mcrl2_sys::data::ffi::mcrl2_variable_name;
 use mcrl2_sys::data::ffi::mcrl2_variable_sort;
 
@@ -32,7 +33,7 @@ impl DataVariable {
 
 impl fmt::Debug for DataVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.name())
+        write!(f, "{:?}: {:?}", self.name(), self.sort())
     }
 }
 
@@ -75,5 +76,11 @@ impl DataExpression {
         DataExpression {
             term,
         }
+    }
+}
+
+impl fmt::Debug for DataExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", mcrl2_data_expression_to_string(self.term.get()))
     }
 }

@@ -5,6 +5,7 @@
 #include "mcrl2/atermpp/aterm.h"
 #include "mcrl2/core/identifier_string.h"
 #include "mcrl2/pbes/detail/stategraph_local_algorithm.h"
+#include "mcrl2/pbes/detail/stategraph_pbes.h"
 #include "mcrl2/pbes/io.h"
 #include "mcrl2/pbes/pbes.h"
 #include "mcrl2/pbes/propositional_variable.h"
@@ -13,6 +14,7 @@
 
 #include "rust/cxx.h"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +24,8 @@ namespace mcrl2::pbes_system
 
 /// Alias for templated type.
 using srf_equation = detail::pre_srf_equation<false>;
+
+struct vertex_outgoing_edge;
 
 // mcrl2::pbes_system::pbes
 
@@ -88,6 +92,11 @@ public:
   {
     return m_local_control_flow_graphs;
   }
+
+  const std::vector<detail::stategraph_equation>& equations() const
+  {
+    return m_pbes.equations();
+  }
 };
 
 inline
@@ -131,6 +140,13 @@ std::unique_ptr<atermpp::aterm> mcrl2_local_control_flow_graph_vertex_value(
   return std::make_unique<atermpp::aterm>(vertex->value());
 }
 
+void mcrl2_local_control_flow_graph_vertex_outgoing_edges(std::vector<vertex_outgoing_edge>& result,
+    const detail::local_control_flow_graph_vertex* vertex);
+
+void mcrl2_local_control_flow_graph_vertex_incoming_edges(std::vector<vertex_outgoing_edge>& result,
+    const detail::local_control_flow_graph_vertex* vertex);
+
+
 inline
 void mcrl2_stategraph_local_algorithm_cfgs(std::vector<detail::local_control_flow_graph>& result,
     const stategraph_algorithm& algorithm)
@@ -142,6 +158,23 @@ void mcrl2_stategraph_local_algorithm_cfgs(std::vector<detail::local_control_flo
 }
 
 inline
+void mcrl2_stategraph_local_algorithm_equations(std::vector<detail::stategraph_equation>& result,
+    const stategraph_algorithm& algorithm)
+{
+  for (const auto& eqn : algorithm.equations())
+  {
+    result.push_back(eqn);
+  }
+}
+
+inline
+std::unique_ptr<atermpp::aterm> mcrl2_stategraph_equation_variable(const detail::stategraph_equation& equation)
+{
+  return std::make_unique<atermpp::aterm>(equation.variable());
+}
+
+
+inline
 std::unique_ptr<srf_pbes> mcrl2_to_srf_pbes(const pbes& p)
 {
   return std::make_unique<srf_pbes>(pbes2srf(p));
@@ -151,6 +184,40 @@ inline
 void mcrl2_unify_parameters(srf_pbes& p, bool ignore_ce_equations, bool reset)
 {
   unify_parameters(p, ignore_ce_equations, reset);
+}
+
+// mcrl2::pbes_system::detail::predicate_variable
+
+inline
+void mcrl2_stategraph_equation_predicate_variables(std::vector<detail::predicate_variable>& result,
+    const detail::stategraph_equation& eqn)
+{
+  for (const auto& v : eqn.predicate_variables())
+  {
+    result.push_back(v);
+  }
+}
+
+inline
+rust::Vec<std::size_t> mcrl2_predicate_variable_used(const detail::predicate_variable& v)
+{
+  rust::Vec<std::size_t> result;
+  for (const auto& index : v.used())
+  {
+    result.push_back(index);
+  }
+  return result;
+}
+
+inline
+rust::Vec<std::size_t> mcrl2_predicate_variable_changed(const detail::predicate_variable& v)
+{
+  rust::Vec<std::size_t> result;
+  for (const auto& index : v.changed())
+  {
+    result.push_back(index);
+  }
+  return result;
 }
 
 // mcrl2::pbes_system::srf_pbes
@@ -179,6 +246,13 @@ std::unique_ptr<atermpp::aterm> mcrl2_srf_pbes_equation_variable(const srf_equat
 }
 
 // mcrl2::pbes_system::propositional_variable
+
+inline
+std::unique_ptr<atermpp::aterm> mcrl2_propositional_variable_name(const atermpp::aterm& variable)
+{
+  assert(pbes_system::is_propositional_variable(variable));
+  return std::make_unique<atermpp::aterm>(atermpp::down_cast<propositional_variable>(variable).name());
+}
 
 inline
 std::unique_ptr<atermpp::aterm> mcrl2_propositional_variable_parameters(const atermpp::aterm& variable)

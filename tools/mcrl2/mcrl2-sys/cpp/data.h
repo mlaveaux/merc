@@ -23,6 +23,17 @@ rust::String mcrl2_variable_to_string(const atermpp::aterm& variable)
 }
 
 inline
+rust::String mcrl2_data_expression_to_string(const atermpp::aterm& variable)
+{
+  assert(data::is_data_expression(variable));
+    std::stringstream ss;
+    ss << atermpp::down_cast<data::data_expression>(variable);
+    return ss.str();
+}
+
+
+
+inline
 std::unique_ptr<atermpp::aterm> mcrl2_variable_sort(const atermpp::aterm& variable)
 {
   assert(data::is_variable(variable));

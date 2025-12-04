@@ -1,8 +1,7 @@
 /// Authors: Menno Bartels and Maurice Laveaux
-
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::{fmt, iter};
+use std::fmt;
 
 use merc_utilities::MercError;
 
@@ -120,12 +119,7 @@ impl Permutation {
 impl fmt::Display for Permutation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Determine the maximum value in the permutation mapping.
-        let max_value = self
-            .mapping
-            .iter()
-            .map(|(d, _)| *d + 1)
-            .max()
-            .unwrap_or(0);
+        let max_value = self.mapping.iter().map(|(d, _)| *d + 1).max().unwrap_or(0);
 
         let mut visited = vec![false; max_value];
         let mut identity = true;
@@ -181,18 +175,16 @@ impl fmt::Display for Permutation {
 /// - (0 4 3)
 pub fn permutation_group(indices: Vec<usize>) -> impl Iterator<Item = Permutation> + Clone {
     let n = indices.len();
-    let indices2 =  indices.clone();
-    indices.into_iter()
-        .permutations(n)
-        .map(move |perm| {
-            let mapping: Vec<(usize, usize)> = indices2
-                .iter()
-                .cloned()
-                .zip(perm.into_iter())
-                .map(|(a, b)| (a, b))
-                .collect();
-            Permutation::from_mapping(mapping)
-        })
+    let indices2 = indices.clone();
+    indices.into_iter().permutations(n).map(move |perm| {
+        let mapping: Vec<(usize, usize)> = indices2
+            .iter()
+            .cloned()
+            .zip(perm.into_iter())
+            .map(|(a, b)| (a, b))
+            .collect();
+        Permutation::from_mapping(mapping)
+    })
 }
 
 /// Returns the number of permutations in a given group.

@@ -4,14 +4,14 @@ pub mod ffi {
         include!("mcrl2-sys/cpp/data.h");
         include!("mcrl2-sys/cpp/exception.h");
 
-        type variable;
-
         /// Returns the variable in string form.
         fn mcrl2_variable_to_string(input: &aterm) -> String;
 
         fn mcrl2_variable_name(input: &aterm) -> UniquePtr<aterm>;
 
         fn mcrl2_variable_sort(input: &aterm) -> UniquePtr<aterm>;
+
+        fn mcrl2_data_expression_to_string(input: &aterm) -> String;
 
         #[namespace = "atermpp"]
         type aterm = crate::atermpp::ffi::aterm;
