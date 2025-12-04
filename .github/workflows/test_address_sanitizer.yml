@@ -26,14 +26,6 @@ jobs:
         packages: llvm, libfontconfig1-dev, libfreetype6-dev
         version: 1.0
       if: matrix.os == 'ubuntu-latest'
-   
-
-    - name: Install MacOS Dependencies
-      run: |
-        brew update
-        brew install llvm || echo "This step will fail because of python@3.11 so we force link and ignore the error"
-        brew link --overwrite python@3.11
-      if: matrix.os == 'macos-latest'  
 
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.9
@@ -51,8 +43,16 @@ jobs:
       with:
         submodules: true
 
-    - name: Run address-sanitizer tests
+    - name: Run tests
       run: cargo +nightly xtask address-sanitizer nextest run --no-fail-fast
+      env:
+        RUST_BACKTRACE: full
+        RUST_LOG: debug
+        RUSTC_WRAPPER: sccache
+        
+    - name: Run mCRL2 tests
+      run: cargo +nightly xtask address-sanitizer nextest run --no-fail-fast
+      working-directory: tools/mcrl2
       env:
         RUST_BACKTRACE: full
         RUST_LOG: debug

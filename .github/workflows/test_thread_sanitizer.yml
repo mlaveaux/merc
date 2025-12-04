@@ -29,13 +29,6 @@ jobs:
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.9
 
-    - name: Install MacOS Dependencies
-      run: |
-        brew update
-        brew install llvm || echo "This step will fail because of python@3.11 so we force link and ignore the error"
-        brew link --overwrite python@3.11
-      if: matrix.os == 'macos-latest'  
-
     - name: Install nightly rust
       uses: dtolnay/rust-toolchain@nightly
       with:
@@ -46,8 +39,16 @@ jobs:
       with:
         submodules: true
 
-    - name: Run thread-sanitizer tests
+    - name: Run tests
       run: cargo +nightly xtask thread-sanitizer test --no-fail-fast
+      env:
+        RUST_BACKTRACE: full
+        RUST_LOG: debug
+        RUSTC_WRAPPER: sccache
+        
+    - name: Run mCRL2 tests
+      run: cargo +nightly xtask thread-sanitizer test --no-fail-fast
+      working-directory: tools/mcrl2
       env:
         RUST_BACKTRACE: full
         RUST_LOG: debug

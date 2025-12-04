@@ -64,16 +64,14 @@ jobs:
         RUST_MIN_STACK: 104857600
 
     - name: Build mCRL2 Release
-      run: 
-        cd tools/mcrl2
-        cargo build --release
+      run: cargo build --release
+      working-directory: tools/mcrl2
       env:        
         RUSTC_WRAPPER: sccache
         
     - name: Run GUI tests
-      run: 
-        cd tools/gui
-        cargo nextest run --release --no-fail-fast -- --include-ignored
+      run: cargo nextest run --release --no-fail-fast -- --include-ignored
+      working-directory: tools/gui
       env:
         RUST_BACKTRACE: full
         RUST_LOG: debug

@@ -48,18 +48,16 @@ jobs:
         RUSTC_WRAPPER: sccache
 
     - name: Run mCRL2 tests
-      run: |
-        cd tools/mcrl2
-        cargo nextest run --no-fail-fast -- --include-ignored
+      run: cargo nextest run --no-fail-fast -- --include-ignored
+      working-directory: tools/mcrl2
       env:
         RUST_BACKTRACE: full
         RUST_LOG: debug
         RUSTC_WRAPPER: sccache
       
     - name: Run GUI tests
-      run: |
-        cd tools/gui
-        cargo nextest run --no-fail-fast -- --include-ignored
+      run: cargo nextest run --no-fail-fast -- --include-ignored
+      working-directory: tools/gui
       env:
         RUST_BACKTRACE: full
         RUST_LOG: debug
