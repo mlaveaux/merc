@@ -1,28 +1,33 @@
 # Readme 
 
 This is an experiment of mixing Rust code with the mCRL2 toolset directly. First
-the submodules must initialised to obtain the 3rd-party libraries. Furthermore,
-we need a C++ compiler to build the mCRL2 toolset. This can be Visual Studio on
-Windows, AppleClang on MacOS or either GCC or Clang on Linux. In the latter case
-it uses whatever compiler is provided by the CXX environment variable. After
-that the cargo workspace can be build. This will also build the necessary
-components of the mCRL2 toolset, which can take some time.
+the submodules must initialised to obtain the 3rd-party libraries, as shown
+below. Furthermore, we need a C++ compiler to build the mCRL2 toolset. This can
+be Visual Studio on Windows, AppleClang on MacOS or either GCC or Clang on
+Linux. In the latter case it uses whatever compiler is provided by the `CC` and
+`CXX` environment variables.
 
     git submodule update --init --recursive
     cargo build
 
 By default this will build in dev or debug mode, and a release build can be
-obtained by passing --release. Note that it is necessary to run `git submodule
-update --init` after switching branches or pulling from the remote whenever any
+obtained by passing --release. Note that it is necessary to run `git submodule update --init` 
+after switching branches or pulling from the remote whenever any
 of the modules have been changed.
 
 # Overview
 
-This workspace uses the crate `cxx` in `mcrl2-sys` to set up a `C`-like FFI
-between the Rust code and C++ code, with static assertions to ensure that the
-FFI matches and some helpers for standard functionality such as
-`std::unique_ptr`. The resulting interface is generally unpleasant to work with
-so the crate `mcrl2` has Rust wrappers around the resulting functionality.
+The `mcrl2-sys` crate uses `cxx` to set up a `C`-like FFI between the Rust code
+and C++ code, with static assertions to ensure that the FFI matches and some
+helpers for standard functionality such as `std::unique_ptr`. The resulting
+interface is generally unpleasant to work with so the crate `mcrl2` has Rust
+wrappers around the resulting functionality.
+
+# Stack traces
+
+The `mcrl2_cpptrace` feature can be enabled to provide stack traces on
+exceptions and assertions in the mCRL2 code. This requires `cmake` to be
+found on `PATH` to build the necessary components.
 
 # IDEs
 

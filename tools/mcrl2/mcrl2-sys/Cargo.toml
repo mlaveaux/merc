@@ -8,6 +8,7 @@ edition.workspace = true
 [dependencies]
 merc_tools.workspace = true
 cxx.workspace = true
+zlib-rs = { optional = true, workspace = true }
 
 [build-dependencies]
 cxx-build.workspace = true
@@ -20,8 +21,9 @@ cargo-emit.workspace = true
 # If it turns out that cpptrace doesn't work properly on all platforms, we can disable it by default.
 default = ["mcrl2_cpptrace"]
 
-# Enables the compiling cpptrace option for mCRL2, this gives proper backtraces on exceptions.
-mcrl2_cpptrace = []
+# Enables the compiling cpptrace option for mCRL2, this gives proper backtraces on exceptions. The cpptrace
+# library depends on zlib, so we need to enable that as well.
+mcrl2_cpptrace = ["dep:zlib-rs"]
 
 # Enables the compiling rewriter option for mCRL2.
 mcrl2_jittyc = []

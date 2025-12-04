@@ -57,10 +57,6 @@ fn main() {
         rustc_link_lib!("cpptrace" => "static");
         rustc_link_lib!("dwarf" => "static");
         rustc_link_lib!("zstd" => "static");
-
-        // TODO: I think these have to be preinstalled, so mention it in the README.
-        rustc_link_search!("/lib/x86_64-linux-gnu/" => "native");
-        rustc_link_lib!("z" => "static");
     }
 
     // The mCRL2 source files that we need to build for our Rust wrapper.
