@@ -35,16 +35,13 @@ use crate::weak_bisim_signature_sorted;
 use crate::weak_bisim_signature_sorted_taus;
 
 /// Computes a strong bisimulation partitioning using signature refinement
-pub fn strong_bisim_sigref<L>(lts: L, timing: &mut Timing) -> (L, BlockPartition)
-where
-    L: LTS + Clone + fmt::Debug,
-{
+pub fn strong_bisim_sigref<L: LTS>(lts: L, timing: &mut Timing) -> (L, BlockPartition) {
     let mut timepre = timing.start("preprocess");
     let incoming = IncomingTransitions::new(&lts);
     timepre.finish();
 
     let mut time = timing.start("reduction");
-    let partition = signature_refinement::<_, _, _, false>(
+    let partition = signature_refinement::<_, _, false>(
         &lts,
         &incoming,
         |state_index, partition, _, builder| {
@@ -52,22 +49,13 @@ where
         },
         |_, _| None,
     );
-
-    debug_assert_eq!(
-        partition,
-        strong_bisim_sigref_naive(lts.clone(), timing).1,
-        "The resulting partition is not a valid strong bisimulation partition."
-    );
-
     time.finish();
+
     (lts, partition)
 }
 
 /// Computes a strong bisimulation partitioning using signature refinement
-pub fn strong_bisim_sigref_naive<L>(lts: L, timing: &mut Timing) -> (L, IndexedPartition)
-where
-    L: LTS + fmt::Debug,
-{
+pub fn strong_bisim_sigref_naive<L: LTS>(lts: L, timing: &mut Timing) -> (L, IndexedPartition) {
     let mut time = timing.start("reduction");
     let partition = signature_refinement_naive::<_, _, false>(&lts, |state_index, partition, _, builder| {
         strong_bisim_signature(state_index, &lts, partition, builder);
@@ -78,10 +66,7 @@ where
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement
-pub fn branching_bisim_sigref<L>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, BlockPartition)
-where
-    L: LTS + fmt::Debug,
-{
+pub fn branching_bisim_sigref<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, BlockPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     let incoming = IncomingTransitions::new(&preprocessed_lts);
@@ -92,7 +77,7 @@ where
     let mut visited = FxHashSet::default();
     let mut stack = Vec::new();
 
-    let partition = signature_refinement::<_, _, _, true>(
+    let partition = signature_refinement::<_, _, true>(
         &preprocessed_lts,
         &incoming,
         |state_index, partition, state_to_key, builder| {
@@ -136,20 +121,6 @@ where
         },
     );
 
-    debug_assert_eq!(
-        partition,
-        signature_refinement_naive::<_, _, false>(&preprocessed_lts, |state_index, partition, _, builder| {
-            branching_bisim_signature(
-                state_index,
-                &preprocessed_lts,
-                partition,
-                builder,
-                &mut visited,
-                &mut stack,
-            );
-        }),
-        "The resulting partition is not a branching bisimulation partition."
-    );
     time.finish();
 
     // Combine the SCC partition with the branching bisimulation partition.
@@ -157,10 +128,10 @@ where
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn branching_bisim_sigref_naive<L>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition)
-where
-    L: LTS + fmt::Debug,
-{
+pub fn branching_bisim_sigref_naive<L: LTS>(
+    lts: L,
+    timing: &mut Timing,
+) -> (LabelledTransitionSystem, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
@@ -202,10 +173,7 @@ where
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn weak_bisim_sigref_naive<L>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition)
-where
-    L: LTS + fmt::Debug,
-{
+pub fn weak_bisim_sigref_naive(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
@@ -228,8 +196,8 @@ where
 /// The signature function is called for each state and should fill the
 /// signature builder with the signature of the state. It consists of the
 /// current partition, the signatures per state for the next partition.
-fn signature_refinement<F, G, L, const BRANCHING: bool>(
-    lts: &L,
+fn signature_refinement<F, G, const BRANCHING: bool>(
+    lts: &impl LTS,
     incoming: &IncomingTransitions,
     mut signature: F,
     mut renumber: G,
@@ -237,7 +205,6 @@ fn signature_refinement<F, G, L, const BRANCHING: bool>(
 where
     F: FnMut(StateIndex, &BlockPartition, &[BlockIndex], &mut SignatureBuilder),
     G: FnMut(&[(LabelIndex, BlockIndex)], &Vec<Signature>) -> Option<BlockIndex>,
-    L: LTS + fmt::Debug,
 {
     // Avoids reallocations when computing the signature.
     let mut arena = Bump::new();
@@ -307,7 +274,11 @@ where
                     if let Some((_, index)) = id.get_key_value(&Signature::new(&builder)) {
                         *index
                     } else {
-                        let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
+                        let slice = if builder.len() == 0 {
+                            empty_slice
+                        } else {
+                            arena.alloc_slice_copy(&builder)
+                        };
                         let number = BlockIndex::new(key_to_signature.len());
                         id.insert(Signature::new(slice), number);
                         key_to_signature.push(Signature::new(slice));
@@ -376,10 +347,9 @@ where
 /// The signature function is called for each state and should fill the
 /// signature builder with the signature of the state. It consists of the
 /// current partition, the signatures per state for the next partition.
-fn signature_refinement_naive<F, L, const WEAK: bool>(lts: &L, mut signature: F) -> IndexedPartition
+fn signature_refinement_naive<F, L: LTS, const WEAK: bool>(lts: &L, mut signature: F) -> IndexedPartition
 where
     F: FnMut(StateIndex, &IndexedPartition, &Vec<Signature<'_>>, &mut SignatureBuilder),
-    L: LTS + fmt::Debug,
 {
     // Avoids reallocations when computing the signature.
     let mut arena = Bump::new();
@@ -433,14 +403,16 @@ where
                 trace!("State {state_index} signature {:?}", builder);
 
                 // Keep track of the index for every state, either use the arena to allocate space or simply borrow the value.
-                let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
+                let slice = if builder.len() == 0 {
+                    empty_slice
+                } else {
+                    arena.alloc_slice_copy(&builder)
+                };
                 state_to_signature[state_index] = Signature::new(slice);
             }
         }
 
         for state_index in lts.iter_states() {
-
-            
             // Compute the signature of a single state
             signature(state_index, &partition, &state_to_signature, &mut builder);
 
@@ -453,7 +425,11 @@ where
                 state_to_signature[state_index] = unsafe { std::mem::transmute(Signature::new(signature.as_slice())) };
                 new_id = *index;
             } else {
-                let slice = if builder.len() == 0 { empty_slice } else { arena.alloc_slice_copy(&builder) };
+                let slice = if builder.len() == 0 {
+                    empty_slice
+                } else {
+                    arena.alloc_slice_copy(&builder)
+                };
                 id.insert(Signature::new(slice), new_id);
 
                 // (branching) Keep track of the signature for every block in the next partition.
@@ -546,13 +522,74 @@ mod tests {
     use merc_utilities::Timing;
     use merc_utilities::random_test;
 
+    /// Returns true iff the partitions are equal, runs in O(n^2). Should only be used in debug builds.
+    pub fn equal_partitions(left: &impl Partition, right: &impl Partition) -> bool {
+        // Check that states in the same block, have a single (unique) number in
+        // the other partition.
+        for block_index in (0..left.num_of_blocks()).map(BlockIndex::new) {
+            let mut other_block_index = None;
+
+            for state_index in (0..left.len())
+                .map(StateIndex::new)
+                .filter(|&state_index| left.block_number(state_index) == block_index)
+            {
+                match other_block_index {
+                    None => other_block_index = Some(right.block_number(state_index)),
+                    Some(other_block_index) => {
+                        if right.block_number(state_index) != other_block_index {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        for block_index in (0..right.num_of_blocks()).map(BlockIndex::new) {
+            let mut other_block_index = None;
+
+            for state_index in (0..left.len())
+                .map(StateIndex::new)
+                .filter(|&state_index| right.block_number(state_index) == block_index)
+            {
+                match other_block_index {
+                    None => other_block_index = Some(left.block_number(state_index)),
+                    Some(other_block_index) => {
+                        if left.block_number(state_index) != other_block_index {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
     #[test]
     fn test_random_strong_bisim_sigref() {
         random_test(100, |rng| {
             let lts = random_lts(rng, 10, 3, 3);
             let mut timing = Timing::new();
 
-            strong_bisim_sigref(lts, &mut timing);
+            let (_result_lts, result_partition) = strong_bisim_sigref(lts.clone(), &mut timing);
+            let (_expected_lts, expected_partition) = strong_bisim_sigref_naive(lts, &mut timing);
+
+            // There is no preprocessing so this works.
+            assert!(equal_partitions(&result_partition, &expected_partition));
+        });
+    }
+
+    #[test]
+    fn test_random_branching_bisim_sigref() {
+        random_test(100, |rng| {
+            let lts = random_lts(rng, 10, 3, 3);
+            let mut timing = Timing::new();
+
+            let (_result_lts, result_partition) = branching_bisim_sigref(lts.clone(), &mut timing);
+            let (_expected_lts, expected_partition) = branching_bisim_sigref_naive(lts, &mut timing);
+
+            // There is no preprocessing so this works.
+            assert!(equal_partitions(&result_partition, &expected_partition));
         });
     }
 
@@ -575,18 +612,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn test_random_branching_bisim_sigref() {
-        random_test(100, |rng| {
-            let lts = random_lts(rng, 10, 3, 3);
-            let mut timing = Timing::new();
-
-            let (preprocessed_lts, branching_partition) = branching_bisim_sigref(lts, &mut timing);
-            let strong_partition = strong_bisim_sigref(preprocessed_lts.clone(), &mut timing).1;
-            is_refinement(&preprocessed_lts, &strong_partition, &branching_partition);
-        });
     }
 
     #[test]

@@ -7,7 +7,6 @@ use itertools::Itertools;
 use merc_lts::IncomingTransitions;
 use merc_lts::StateIndex;
 
-use super::IndexedPartition;
 use super::Partition;
 use crate::BlockIndex;
 
@@ -382,12 +381,6 @@ impl Partition for BlockPartition {
 
     fn len(&self) -> usize {
         self.elements.len()
-    }
-}
-
-impl PartialEq<IndexedPartition> for BlockPartition {
-    fn eq(&self, other: &IndexedPartition) -> bool {
-        self.equal(other)
     }
 }
 

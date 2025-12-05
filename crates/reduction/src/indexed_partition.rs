@@ -72,12 +72,6 @@ where
     new_partition
 }
 
-impl PartialEq for IndexedPartition {
-    fn eq(&self, other: &Self) -> bool {
-        self.equal(other)
-    }
-}
-
 impl fmt::Display for IndexedPartition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{ ")?;

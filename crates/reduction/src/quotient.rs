@@ -33,49 +33,6 @@ pub trait Partition {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
-    /// Returns true iff the partitions are equal, runs in O(n^2)
-    fn equal(&self, other: &impl Partition) -> bool {
-        // Check that states in the same block, have a single (unique) number in
-        // the other partition.
-        for block_index in (0..self.num_of_blocks()).map(BlockIndex::new) {
-            let mut other_block_index = None;
-
-            for state_index in (0..self.len())
-                .map(StateIndex::new)
-                .filter(|&state_index| self.block_number(state_index) == block_index)
-            {
-                match other_block_index {
-                    None => other_block_index = Some(other.block_number(state_index)),
-                    Some(other_block_index) => {
-                        if other.block_number(state_index) != other_block_index {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        for block_index in (0..other.num_of_blocks()).map(BlockIndex::new) {
-            let mut other_block_index = None;
-
-            for state_index in (0..self.len())
-                .map(StateIndex::new)
-                .filter(|&state_index| other.block_number(state_index) == block_index)
-            {
-                match other_block_index {
-                    None => other_block_index = Some(self.block_number(state_index)),
-                    Some(other_block_index) => {
-                        if self.block_number(state_index) != other_block_index {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        true
-    }
 }
 
 /// Returns a new LTS based on the given partition.

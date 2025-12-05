@@ -14,8 +14,7 @@ use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.
-pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition
-{
+pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition {
     let partition = scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index));
     if cfg!(debug_assertions) {
         let quotient_lts = quotient_lts_naive(lts, &partition, true);
