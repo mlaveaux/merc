@@ -10,17 +10,11 @@ use merc_utilities::LargeFormatter;
 use crate::BlockIndex;
 use crate::IndexedPartition;
 use crate::Partition;
-use crate::quotient_lts_naive;
 use crate::sort_topological;
 
 /// Computes the strongly connected tau component partitioning of the given LTS.
 pub fn tau_scc_decomposition(lts: &impl LTS) -> IndexedPartition {
-    let partition = scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index));
-    if cfg!(debug_assertions) {
-        let quotient_lts = quotient_lts_naive(lts, &partition, true);
-        debug_assert!(!has_tau_loop(&quotient_lts), "The SCC decomposition contains tau-loops");
-    }
-    partition
+    scc_decomposition(lts, &|_, label_index, _| lts.is_hidden_label(label_index))
 }
 
 /// Computes the strongly connected component partitioning of the given LTS.
@@ -191,6 +185,7 @@ mod tests {
     use test_log::test;
 
     use crate::Partition;
+    use crate::quotient_lts_naive;
 
     use super::*;
 
@@ -228,6 +223,7 @@ mod tests {
             let lts = random_lts(rng, 10, 3, 3);
             let partitioning = tau_scc_decomposition(&lts);
             let reduction = quotient_lts_naive(&lts, &partitioning, true);
+            assert!(!has_tau_loop(&reduction), "The SCC decomposition contains tau-loops");
 
             // Check that states in a strongly connected component are reachable from each other.
             for state_index in lts.iter_states() {

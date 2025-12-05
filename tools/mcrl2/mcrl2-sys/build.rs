@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use cargo_emit::rerun_if_changed;
 use cargo_emit::rustc_link_lib;
 use cargo_emit::rustc_link_search;
@@ -56,7 +58,16 @@ fn main() {
         // Link the required libraries for cpptrace (Can this be derived from the cmake somehow?)
         rustc_link_lib!("cpptrace" => "static");
         rustc_link_lib!("dwarf" => "static");
-        rustc_link_lib!("zstd" => "static");
+        rustc_link_lib!("zstd" => "static");   
+
+        If /usr/lib/x86_64-linux-gnu/libz.a exists, link it statically.
+        #[cfg(target_os = "linux")]
+        {
+            if Path::new("/usr/lib/x86_64-linux-gnu/libz.a").exists() {
+                rustc_link_lib!("z" => "static");
+                rustc_link_search!("/usr/lib/x86_64-linux-gnu/" => "native");
+            }
+        }
     }
 
     // The mCRL2 source files that we need to build for our Rust wrapper.

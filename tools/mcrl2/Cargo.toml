@@ -31,7 +31,6 @@ cxx = "1.0"
 cxx-build = { version = "1.0", features = ["parallel"] }
 cc = "1.0"
 cargo-emit = "0.2"
-zlib-rs = "0.5"
 
 # Dependencies used in xtask
 duct = "1.1"

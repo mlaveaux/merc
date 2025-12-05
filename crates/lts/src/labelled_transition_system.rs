@@ -164,6 +164,8 @@ impl LabelledTransitionSystem {
 
         // Remove the sentinel state temporarily
         let total_number_of_states = self.num_of_states() + other.num_of_states();
+
+        // Reserve space for the right LTS.
         self.states
             .reserve(other.num_of_states(), total_number_of_states.bytes_required());
         self.transition_labels
@@ -188,6 +190,8 @@ impl LabelledTransitionSystem {
                     .push(*label_indices.get(label_name).expect("Label should exist in all_labels"));
             }
         }
+        
+        debug_assert_eq!(self.num_of_states(), total_number_of_states);
 
         // Add back the sentinel state
         self.states.push(self.num_of_transitions());
