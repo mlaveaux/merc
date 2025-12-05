@@ -7,15 +7,15 @@ use std::io::BufReader;
 use std::io::Read;
 
 use log::debug;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
 use oxidd::BooleanFunction;
 use oxidd::Manager;
 use oxidd::ManagerRef;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
 
-use merc_lts::read_aut;
-use merc_lts::LabelledTransitionSystem;
 use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::read_aut;
 use merc_syntax::DataExpr;
 use merc_syntax::MultiAction;
 use merc_utilities::MercError;
@@ -25,7 +25,7 @@ use oxidd::util::OutOfMemory;
 ///
 /// # Details
 ///
-/// The action labels of a feature transition sytstem are annotated with a special `BDD` struct that is defined as `struct BDD = node(var, true, false) | tt | ff`.
+/// The action labels of a feature transition system are annotated with a special `BDD` struct that is defined as `struct BDD = node(var, true, false) | tt | ff`.
 pub fn read_fts(
     manager_ref: &BDDManagerRef,
     reader: impl Read,
@@ -91,7 +91,7 @@ fn data_expr_to_bdd(
                 }
                 _ => unimplemented!("Conversion of data expression to BDD not implemented for this function"),
             }
-        },
+        }
         DataExpr::Id(name) => {
             // Deal with the base cases.
             match name.as_str() {
@@ -147,7 +147,7 @@ impl FeatureDiagram {
 
 impl fmt::Debug for FeatureDiagram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "variables = {:?}", self.variables.keys())        
+        write!(f, "variables = {:?}", self.variables.keys())
     }
 }
 

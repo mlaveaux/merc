@@ -4,15 +4,14 @@ use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
 
-use itertools::Itertools;
 use log::info;
 use log::trace;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
-use oxidd::util::OptBool;
 use oxidd::BooleanFunction;
 use oxidd::Manager;
 use oxidd::ManagerRef;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
+use oxidd::util::OptBool;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 
