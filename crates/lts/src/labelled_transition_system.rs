@@ -187,7 +187,6 @@ impl LabelledTransitionSystem {
                 .map(|(i, label)| (label.clone(), LabelIndex::new(i))),
         );
 
-        // Remove the sentinel state temporarily
         let total_number_of_states = self.num_of_states() + other.num_of_states();
 
         // Reserve space for the right LTS.
@@ -199,6 +198,8 @@ impl LabelledTransitionSystem {
             .reserve(other.num_of_transitions(), total_number_of_states.bytes_required());
 
         let offset = self.num_of_states();
+        
+        // Remove the sentinel state temporarily. This breaks the state invariant, but we will add it back later.
         self.states.pop();
 
         // Add vertices for the other LTS that are offset by the number of states in self
@@ -228,7 +229,7 @@ impl LabelledTransitionSystem {
                 transition_labels: self.transition_labels,
                 transition_to: self.transition_to,
             },
-            StateIndex::new(offset),
+            StateIndex::new(offset + other.initial_state_index().value()),
         )
     }
 
