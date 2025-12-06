@@ -16,12 +16,12 @@ cmake.workspace = true
 cargo-emit.workspace = true
 
 [features]
-
-# If it turns out that cpptrace doesn't work properly on all platforms, we can disable it by default.
-default = ["mcrl2_cpptrace"]
-
 # Enables the compiling cpptrace option for mCRL2, this gives proper backtraces on exceptions.
 mcrl2_cpptrace = []
 
 # Enables the compiling rewriter option for mCRL2.
 mcrl2_jittyc = []
+
+# On Windows to compile `cpptrace` we need to use the `Naive Tools Command Prompt`, which is not commonly used.
+[target.'cfg(target_os = "linux")'.features]
+default = ["mcrl2_cpptrace"]

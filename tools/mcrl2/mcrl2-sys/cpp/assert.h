@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cpptrace/basic.hpp>
-
 // Figure out the function signature macro.
 #if defined(__clang__) || defined(__GNUC__)
   #define MCRL2_FUNCTION_SIGNATURE __PRETTY_FUNCTION__
@@ -13,6 +11,8 @@
 
 // Special assertion macro that prints a stack trace when the assertion fails.
 #if defined(MCRL2_ENABLE_CPPTRACE) && !defined(NDEBUG)
+  #include <cpptrace/basic.hpp>
+
   #define MCRL2_ASSERT(x) do { \
     if (!(x)) { \
       fprintf(stderr, "%s: %s: Assertion '%s' failed\n", __FILE__, MCRL2_FUNCTION_SIGNATURE, #x); \
