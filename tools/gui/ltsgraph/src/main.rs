@@ -19,6 +19,8 @@ use femtovg::Canvas;
 use femtovg::renderer::WGPURenderer;
 use log::debug;
 use log::info;
+use merc_lts::guess_format_from_extension;
+use merc_lts::read_explicit_lts;
 use slint::Image;
 use slint::Rgba8Pixel;
 use slint::SharedPixelBuffer;
@@ -30,7 +32,6 @@ use wgpu::TextureUsages;
 
 use merc_lts::LabelledTransitionSystem;
 use merc_lts::LTS;
-use merc_lts::read_aut;
 use merc_ltsgraph_lib::FemtovgRenderer;
 use merc_ltsgraph_lib::GraphLayout;
 use merc_ltsgraph_lib::SkiaRenderer;
@@ -74,6 +75,8 @@ pub struct Cli {
 
     #[arg(value_name = "FILE")]
     labelled_transition_system: Option<String>,
+
+    lts_format: Option<LtsFormat>,
 
     #[arg(default_value_t = ViewerType::Cpu, value_enum)]
     viewer: ViewerType,
@@ -478,38 +481,32 @@ async fn main() -> Result<ExitCode, MercError> {
         let layout_handle = layout_handle.clone();
         let render_handle = render_handle.clone();
 
-        move |path: &Path| {
+        move |path: &Path, format: LtsFormat| {
             debug!("Loading LTS {} ...", path.to_string_lossy());
 
-            match File::open(path) {
-                Ok(file) => {
-                    match read_aut(&file, vec![]) {
-                        Ok(lts) => {
-                            let lts = Arc::new(lts);
-                            info!("Loaded lts with {} states and {} transitions", LargeFormatter(lts.num_of_states()), LargeFormatter(lts.num_of_transitions()));
+            let format = guess_format_from_extension(path, format);
+            match read_explicit_lts(&path, format, vec![]) {
+                Ok(lts) => {
+                    let lts = Arc::new(lts);
+                    info!("Loaded lts with {} states and {} transitions", LargeFormatter(lts.num_of_states()), LargeFormatter(lts.num_of_transitions()));
 
-                            // Create the layout and viewer separately to make the initial state sensible.
-                            let layout = GraphLayout::new(lts.clone());
-                            let mut viewer = Viewer::new(lts.clone());
+                    // Create the layout and viewer separately to make the initial state sensible.
+                    let layout = GraphLayout::new(lts.clone());
+                    let mut viewer = Viewer::new(lts.clone());
 
-                            // Update view to the initial layout.
-                            viewer.update(&layout);
+                    // Update view to the initial layout.
+                    viewer.update(&layout);
 
-                            state.viewer.lock().unwrap().replace(viewer);
-                            state.graph_layout.lock().unwrap().replace(layout);
+                    state.viewer.lock().unwrap().replace(viewer);
+                    state.graph_layout.lock().unwrap().replace(layout);
 
-                            // Indicate that the LTS has been loaded such that the rendering thread can be updated.
-                            state.lts.lock().unwrap().replace(lts);
-                            state.reload_lts.store(true, Ordering::Relaxed);
+                    // Indicate that the LTS has been loaded such that the rendering thread can be updated.
+                    state.lts.lock().unwrap().replace(lts);
+                    state.reload_lts.store(true, Ordering::Relaxed);
 
-                            // Enable the layout and rendering threads.
-                            layout_handle.resume();
-                            render_handle.resume();
-                        }
-                        Err(x) => {
-                            show_error_dialog("Failed to load LTS!", &format!("{x}"));
-                        }
-                    }
+                    // Enable the layout and rendering threads.
+                    layout_handle.resume();
+                    render_handle.resume();
                 }
                 Err(x) => {
                     show_error_dialog("Failed to load LTS!", &format!("{x}"));

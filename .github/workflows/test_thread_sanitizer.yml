@@ -1,6 +1,8 @@
 name: Test Thread Sanitizer
+
 permissions:
   contents: read  
+  
 on:
   push:
     branches: [ main ]
