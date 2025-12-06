@@ -5,7 +5,7 @@ use std::hash::Hash;
 use merc_unsafety::AllocBlock;
 use merc_unsafety::StablePointer;
 use merc_unsafety::StablePointerSet;
-use equivalent::Equivalent;
+use papaya::Equivalent;
 use rustc_hash::FxBuildHasher;
 
 use crate::ATermIndex;
