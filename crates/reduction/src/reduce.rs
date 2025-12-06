@@ -11,6 +11,7 @@ use crate::quotient_lts_naive;
 use crate::strong_bisim_sigref;
 use crate::strong_bisim_sigref_naive;
 use crate::weak_bisim_sigref_naive;
+use crate::weak_bisimulation;
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Equivalence {
@@ -28,7 +29,9 @@ pub enum Equivalence {
 pub fn reduce_lts(lts: impl LTS, equivalence: Equivalence, timing: &mut Timing) -> LabelledTransitionSystem {
     let (result, mut timer) = match equivalence {
         Equivalence::WeakBisim => {
-            unimplemented!();
+            let (lts, partition) = weak_bisimulation(lts, timing);
+            let quotient_time = timing.start("quotient");
+            (quotient_lts_naive(&lts, &partition, true), quotient_time)
         }
         Equivalence::WeakBisimSigref => {
             let (lts, partition) = weak_bisim_sigref_naive(lts, timing);
