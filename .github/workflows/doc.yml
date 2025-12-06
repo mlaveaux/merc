@@ -69,14 +69,13 @@ jobs:
       - name: Build Documentation
         run: |
           cargo doc --no-deps
-          rm target/doc/.lock
           cp -r target/coverage/html target/doc/coverage/
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=mcrl2\">" > target/doc/index.html
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=merc\">" > target/doc/index.html
         env:
           RUSTC_WRAPPER: sccache
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           # Upload the documentation directory
           path: 'target/doc/'
