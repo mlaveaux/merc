@@ -1,5 +1,15 @@
 name: Cargo Clippy
-on: [push, pull_request]
+permissions:
+  contents: read
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+env:
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: on
+
 jobs:
   clippy:
     runs-on: ubuntu-latest
