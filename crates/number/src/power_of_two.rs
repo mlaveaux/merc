@@ -14,7 +14,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use number::round_up_to_power_of_two;
+/// use merc_number::round_up_to_power_of_two;
 ///
 /// assert_eq!(round_up_to_power_of_two(3u32), 4);
 /// assert_eq!(round_up_to_power_of_two(4u32), 4);

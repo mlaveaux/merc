@@ -14,7 +14,7 @@ pub enum ParseNumberError {
 ///
 /// # Examples
 /// ```
-/// use utilities::parse_natural_number;
+/// use merc_io::parse_natural_number;
 ///
 /// assert_eq!(parse_natural_number("42").unwrap(), 42);
 /// assert_eq!(parse_natural_number("  123  ").unwrap(), 123);
@@ -39,7 +39,7 @@ pub fn parse_natural_number(text: &str) -> Result<usize, ParseNumberError> {
 ///
 /// # Examples
 /// ```
-/// use utilities::parse_natural_number_sequence;
+/// use merc_io::parse_natural_number_sequence;
 ///
 /// assert_eq!(parse_natural_number_sequence("1 2 3").unwrap(), vec![1, 2, 3]);
 /// assert_eq!(parse_natural_number_sequence("  42  123  ").unwrap(), vec![42, 123]);
