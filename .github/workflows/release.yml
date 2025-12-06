@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: on
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:      
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Install stable rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Setup sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Checkout the repository
+      uses: actions/checkout@v6
+      with:
+        submodules: true
+
+    - name: Run package task
+      run: cargo xtask package
+      env:        
+        RUSTC_WRAPPER: sccache
+
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v5
+      with:
+        name: package-${{ matrix.os }}
+        path: package
+        if-no-files-found: warn
