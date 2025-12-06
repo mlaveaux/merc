@@ -6,9 +6,7 @@
 mod bitstream;
 mod line_iterator;
 mod progress;
-mod text_utility;
 
 pub use bitstream::*;
 pub use line_iterator::*;
 pub use progress::*;
-pub use text_utility::*;

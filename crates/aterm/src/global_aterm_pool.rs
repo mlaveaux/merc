@@ -4,6 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
+use std::time::Instant;
 
 use log::debug;
 
@@ -12,7 +13,6 @@ use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use merc_utilities::LargeFormatter;
 use merc_utilities::ProtectionSet;
-use merc_utilities::SimpleTimer;
 use merc_utilities::debug_trace;
 
 use crate::ATermIndex;
@@ -246,7 +246,7 @@ impl GlobalTermPool {
             stack: &mut self.stack,
         };
 
-        let mark_time = SimpleTimer::new();
+        let mark_time = Instant::now();
 
         // Loop through all protection sets and mark the terms.
         for pool in self.thread_pools.iter().flatten() {
@@ -271,7 +271,8 @@ impl GlobalTermPool {
             }
         }
 
-        let collect_time = SimpleTimer::new();
+        let mark_time_elapsed = mark_time.elapsed();
+        let collect_time = Instant::now();
 
         let num_of_terms = self.len();
         let num_of_symbols = self.symbol_pool.len();
@@ -307,7 +308,7 @@ impl GlobalTermPool {
 
         debug!(
             "Garbage collection: marking took {}ms, collection took {}ms, {} terms and {} symbols removed",
-            mark_time.elapsed().as_millis(),
+            mark_time_elapsed.as_millis(),
             collect_time.elapsed().as_millis(),
             num_of_terms - self.len(),
             num_of_symbols - self.symbol_pool.len()
