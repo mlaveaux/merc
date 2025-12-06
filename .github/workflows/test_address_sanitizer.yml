@@ -39,7 +39,7 @@ jobs:
       uses: taiki-e/install-action@nextest   
 
     - name: Checkout the repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         submodules: true
 

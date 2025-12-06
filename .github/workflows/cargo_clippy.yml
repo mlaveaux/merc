@@ -15,7 +15,9 @@ jobs:
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.9
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        submodules: true
 
     - uses: dtolnay/rust-toolchain@nightly
       with:
