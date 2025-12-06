@@ -22,8 +22,6 @@ pub fn compare_lts(
     let (merged, rhs_initial) = left.merge(right);
     time_merge.finish();
 
-    println!("{merged:?}");
-
     // Reduce the merged LTS modulo the given equivalence and return the partition
     match equivalence {
         Equivalence::WeakBisim => {

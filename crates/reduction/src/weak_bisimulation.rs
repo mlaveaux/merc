@@ -1,4 +1,3 @@
-#![allow(unused)]
 //! Authors: Maurice Laveaux, Eduardo Costa Martins
 //!
 //! Implements the weak bisimulation algorithm by Eduardo Costa Martins.
@@ -113,7 +112,7 @@ fn compute_weak_act(
 
         for transition in lts.outgoing_transitions(s) {
             if transition.label == label {
-                // s.act_mark := true iff a != tau && !tau_mark[t]
+                // s.act_mark := true iff a != tau && tau_mark[t]
                 if !lts.is_hidden_label(transition.label) && tau_mark[*transition.to] {
                     act_mark.set(
                         *s,

@@ -42,7 +42,7 @@ impl SimpleBlockPartition {
     /// predicate holds for all or none of the elements, no split occurs.
     pub fn split_block(&mut self, block_index: BlockIndex, predicate: impl Fn(StateIndex) -> bool) -> Option<BlockIndex>{
 
-        // U_size of the new block.
+        // Size of the new block.
         let mut size = 0usize;
 
         for state in self.blocks[block_index].begin..self.blocks[block_index].end {
@@ -52,7 +52,7 @@ impl SimpleBlockPartition {
             }
         }
 
-        // The original block care now the first [begin, begin + U_size) elements
+        // The original block are now the first [begin, begin + size) elements
         if size == 0 || size == self.blocks[block_index].len() {
             // No split occurred
             return None;
@@ -183,7 +183,7 @@ impl SimpleBlock {
         self.stable
     }
 
-    /// Returns true iff the block is stable.
+    /// Marks the block as stable.
     pub fn mark_stable(&mut self) {
         self.stable = true
     }
