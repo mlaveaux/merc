@@ -11,7 +11,7 @@
 #include "mcrl2/pbes/srf_pbes.h"
 #include "mcrl2/pbes/unify_parameters.h"
 
-#include "mcrl2-sys/cpp/exception.h"
+#include "mcrl2-sys/cpp/assert.h"
 #include "rust/cxx.h"
 
 #include <cstddef>

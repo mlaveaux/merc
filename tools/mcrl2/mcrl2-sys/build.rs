@@ -6,51 +6,18 @@ use cargo_emit::rustc_link_search;
 use cc::Build;
 use cmake::Config;
 
-/// \returns A vector of strings where prefix is prepended to every string slice in paths.
-fn add_prefix(prefix: String, paths: &[&str]) -> Vec<String> {
-    let mut result: Vec<String> = vec![];
-
-    for path in paths {
-        result.push(prefix.clone() + path);
-    }
-
-    result
-}
-
-/// Add platform specific compile flags and definitions.
-#[allow(unused_variables)]
-fn add_compile_flags(build: &mut Build, mcrl2_path: String) {
-    #[cfg(unix)]
-    build
-        .flag_if_supported("-Wno-unused-parameter") // I don't care about unused parameters in mCRL2 code.
-        .flag_if_supported("-pipe")
-        .flag_if_supported("-pedantic")
-        .flag_if_supported("c++");
-
-    #[cfg(windows)]
-    build
-        .include(mcrl2_path + "build/workarounds/msvc") // These are MSVC workarounds that mCRL2 relies on for compilation.
-        .flag("/EHs")
-        .flag("/bigobj")
-        .flag("/MP")
-        .flag("/Zc:inline")
-        .flag("/permissive-")
-        .define("WIN32", "1")
-        .define("WIN32_LEAN_AND_MEAN", "1")
-        .define("NOMINMAX", "1")
-        .define("_USE_MATH_DEFINES", "1")
-        .define("_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES", "1")
-        .define("_CRT_SECURE_NO_WARNINGS", "1")
-        .define("BOOST_ALL_NO_LIB", "1");
-}
-
 fn main() {
     if cfg!(feature = "mcrl2_cpptrace") {
-        // Build cpptrace with a fairly complicated cmake setup so we use `cmake`
-        // crate directly.
+
+        // The debug flags must be set on all the standard libraries used.
+        let mut debug_build = Build::new();
+        add_debug_defines(&mut debug_build);
+
+        // Use the `cmake` crate to build cpptrace.
         let mut dst = Config::new("../../../3rd-party/cpptrace")
             .define("BUILD_SHARED_LIBS", "OFF") // Build a static library.
             .define("CPPTRACE_USE_EXTERNAL_LIBDWARF", "OFF") // Compile libdwarf as part of cpptrace.
+            .init_cxx_cfg(debug_build)
             .build();
         dst.push("lib");
 
@@ -58,9 +25,9 @@ fn main() {
         // Link the required libraries for cpptrace (Can this be derived from the cmake somehow?)
         rustc_link_lib!("cpptrace" => "static");
         rustc_link_lib!("dwarf" => "static");
-        rustc_link_lib!("zstd" => "static");   
+        rustc_link_lib!("zstd" => "static");
 
-        If /usr/lib/x86_64-linux-gnu/libz.a exists, link it statically.
+        // If /usr/lib/x86_64-linux-gnu/libz.a exists, link it statically. (This is not yet portable)
         #[cfg(target_os = "linux")]
         {
             if Path::new("/usr/lib/x86_64-linux-gnu/libz.a").exists() {
@@ -157,7 +124,6 @@ fn main() {
         .define("MCRL2_NO_RECURSIVE_SOUNDNESS_CHECKS", "1") // These checks overflow the stack, and are extremely slow.
         .define("LPS_NO_RECURSIVE_SOUNDNESS_CHECKS", "1")
         .define("MERC_MCRL2_VERSION", "<internal_merc_build>") // Sets the mCRL2 version to something recognized as our internal build.
-        .define("assert", "MCRL2_ASSERT") // Use our custom assertion macro. This might be a stupid idea, but gives us stack traces through assertions of the mCRL2 toolset.
         .includes(add_prefix(
             mcrl2_path.clone(),
             &[
@@ -215,10 +181,33 @@ fn main() {
 
     #[cfg(feature = "mcrl2_jittyc")]
     build.define("MCRL2_ENABLE_JITTYC", "1");
-    
+
     #[cfg(feature = "mcrl2_cpptrace")]
     build.define("MCRL2_ENABLE_CPPTRACE", "1");
 
+    // Enable thread safety since Rust executes its tests at least by default, and allow threading in general.
+    build.define("MCRL2_ENABLE_MULTITHREADING", "1");
+
+    // Disable machine numbers since their changes are not compatible with Sabre yet
+    build.define("MCRL2_ENABLE_MACHINENUMBERS", "1");
+
+    add_compile_flags(&mut build, mcrl2_path);
+    add_debug_defines(&mut build);
+
+    build.compile("mcrl2-sys");
+
+    // These files should trigger a rebuild.
+    rerun_if_changed!("cpp/assert.h");
+    rerun_if_changed!("cpp/atermpp.h");
+    rerun_if_changed!("cpp/exception.h");
+    rerun_if_changed!("cpp/data.h");
+    rerun_if_changed!("cpp/pbes.h");
+    rerun_if_changed!("cpp/pbes.cpp");
+    rerun_if_changed!("cpp/log.h");
+}
+
+// Enable various additional debug defines based on the current profile.
+fn add_debug_defines(build: &mut Build) {
     // Disable assertions and other checks in release mode.
     let profile = std::env::var("PROFILE").expect("cargo should always set this variable");
     match profile.as_str() {
@@ -227,13 +216,13 @@ fn main() {
             build.define("_LIBCPP_DEBUG", "1");
             build.define("_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS", "1");
             build.define("_LIBCPP_HARDENING_MODE", "_LIBCPP_HARDENING_MODE_DEBUG");
-            build.define("_LIBCPP_ABI_BOUNDED_ITERATORS ", "1");
+            build.define("_LIBCPP_ABI_BOUNDED_ITERATORS", "1");
             build.define("_LIBCPP_ABI_BOUNDED_ITERATORS_IN_STRING", "1");
             build.define("_LIBCPP_ABI_BOUNDED_ITERATORS_IN_VECTOR", "1");
             build.define("_LIBCPP_ABI_BOUNDED_UNIQUE_PTR", "1");
             build.define("_LIBCPP_ABI_BOUNDED_ITERATORS_IN_STD_ARRAY", "1");
 
-            // Debug mode for libstdc++ (the GNU standard library)
+            // // Debug mode for libstdc++ (the GNU standard library)
             build.define("_GLIBCXX_DEBUG", "1");
             build.define("_GLIBCXX_DEBUG_PEDANTIC", "1");
             build.define("_GLIBCXX_ASSERTIONS", "1");
@@ -245,22 +234,42 @@ fn main() {
             panic!("Unsupported profile {}", profile);
         }
     }
+}
 
-    // Enable thread safety since Rust executes its tests at least by default, and allow threading in general.
-    build.define("MCRL2_ENABLE_MULTITHREADING", "1");
+/// Add platform specific compile flags and definitions.
+#[allow(unused_variables)]
+fn add_compile_flags(build: &mut Build, mcrl2_path: String) {
+    #[cfg(unix)]
+    build
+        .flag_if_supported("-Wno-unused-parameter") // I don't care about unused parameters in mCRL2 code.
+        .flag_if_supported("-pipe")
+        .flag_if_supported("-pedantic")
+        .flag_if_supported("c++");
 
-    // Disable machine numbers since their changes are not compatible with Sabre yet
-    build.define("MCRL2_ENABLE_MACHINENUMBERS", "1");
+    #[cfg(windows)]
+    build
+        .include(mcrl2_path + "build/workarounds/msvc") // These are MSVC workarounds that mCRL2 relies on for compilation.
+        .flag("/EHs")
+        .flag("/bigobj")
+        .flag("/MP")
+        .flag("/Zc:inline")
+        .flag("/permissive-")
+        .define("WIN32", "1")
+        .define("WIN32_LEAN_AND_MEAN", "1")
+        .define("NOMINMAX", "1")
+        .define("_USE_MATH_DEFINES", "1")
+        .define("_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES", "1")
+        .define("_CRT_SECURE_NO_WARNINGS", "1")
+        .define("BOOST_ALL_NO_LIB", "1");
+}
 
-    add_compile_flags(&mut build, mcrl2_path);
+/// \returns A vector of strings where prefix is prepended to every string slice in paths.
+fn add_prefix(prefix: String, paths: &[&str]) -> Vec<String> {
+    let mut result: Vec<String> = vec![];
 
-    build.compile("mcrl2-sys");
+    for path in paths {
+        result.push(prefix.clone() + path);
+    }
 
-    // These files should trigger a rebuild.
-    rerun_if_changed!("cpp/atermpp.h");
-    rerun_if_changed!("cpp/exception.h");
-    rerun_if_changed!("cpp/data.h");
-    rerun_if_changed!("cpp/pbes.h");
-    rerun_if_changed!("cpp/pbes.cpp");
-    rerun_if_changed!("cpp/log.h");
+    result
 }

@@ -8,7 +8,7 @@
 #include "mcrl2/data/sort_expression.h"
 #include "mcrl2/data/variable.h"
 
-#include "mcrl2-sys/cpp/exception.h"
+#include "mcrl2-sys/cpp/assert.h"
 
 #include "rust/cxx.h"
 
