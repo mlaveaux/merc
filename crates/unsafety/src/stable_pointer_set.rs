@@ -13,9 +13,8 @@ use std::sync::Arc;
 use allocator_api2::alloc::Allocator;
 use allocator_api2::alloc::Global;
 use allocator_api2::alloc::Layout;
+use dashmap::DashSet;
 use equivalent::Equivalent;
-use papaya::HashSet;
-use papaya::ResizeMode;
 
 use crate::AllocatorDst;
 use crate::SliceDst;
@@ -68,7 +67,7 @@ impl<T: ?Sized> StablePointer<T> {
     }
 
     /// Returns public access to the underlying pointer.
-    pub fn ptr(&self) -> NonNull<T> {
+    pub fn ptr(&self) ->  NonNull<T> {
         self.ptr
     }
 }
@@ -157,7 +156,7 @@ where
     S: BuildHasher + Clone,
     A: Allocator + AllocatorDst,
 {
-    index: HashSet<Entry<T>, S>,
+    index: DashSet<Entry<T>, S>,
 
     allocator: A,
 }
@@ -178,7 +177,7 @@ where
     /// Creates an empty StablePointerSet with the default hasher and global allocator.
     pub fn new() -> Self {
         Self {
-            index: HashSet::builder().resize_mode(ResizeMode::Blocking).build(),
+            index: DashSet::default(),
             allocator: Global,
         }
     }
@@ -186,11 +185,7 @@ where
     /// Creates an empty StablePointerSet with the specified capacity, default hasher, and global allocator.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            index: HashSet::builder()
-                .capacity(capacity)
-                .hasher(RandomState::new())
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_capacity_and_hasher(capacity, RandomState::new()),
             allocator: Global,
         }
     }
@@ -204,10 +199,7 @@ where
     /// Creates an empty StablePointerSet with the specified hasher and global allocator.
     pub fn with_hasher(hasher: S) -> Self {
         Self {
-            index: HashSet::builder()
-                .hasher(hasher)
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_hasher(hasher),
             allocator: Global,
         }
     }
@@ -215,11 +207,7 @@ where
     /// Creates an empty StablePointerSet with the specified capacity, hasher, and global allocator.
     pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self {
         Self {
-            index: HashSet::builder()
-                .capacity(capacity)
-                .hasher(hasher)
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_capacity_and_hasher(capacity, hasher),
             allocator: Global,
         }
     }
@@ -237,10 +225,7 @@ where
         S: Default,
     {
         Self {
-            index: HashSet::builder()
-                .hasher(S::default())
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_hasher(S::default()),
             allocator,
         }
     }
@@ -251,11 +236,7 @@ where
         S: Default,
     {
         Self {
-            index: HashSet::builder()
-                .capacity(capacity)
-                .hasher(S::default())
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_capacity_and_hasher(capacity, S::default()),
             allocator,
         }
     }
@@ -263,10 +244,7 @@ where
     /// Creates an empty StablePointerSet with the specified hasher and allocator.
     pub fn with_hasher_in(hasher: S, allocator: A) -> Self {
         Self {
-            index: HashSet::builder()
-                .hasher(hasher)
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_hasher(hasher),
             allocator,
         }
     }
@@ -274,11 +252,7 @@ where
     /// Creates an empty StablePointerSet with the specified capacity, hasher, and allocator.
     pub fn with_capacity_and_hasher_in(capacity: usize, hasher: S, allocator: A) -> Self {
         Self {
-            index: HashSet::builder()
-                .capacity(capacity)
-                .hasher(hasher)
-                .resize_mode(ResizeMode::Blocking)
-                .build(),
+            index: DashSet::with_capacity_and_hasher(capacity, hasher),
             allocator,
         }
     }
@@ -295,7 +269,7 @@ where
 
     /// Returns the capacity of the set.
     pub fn capacity(&self) -> usize {
-        69
+        self.index.capacity()
     }
 
     /// Inserts an element into the set using an equivalent value.
@@ -332,13 +306,14 @@ where
         let result = StablePointer::from_entry(&entry);
 
         // First add to storage, then to index
-        let inserted = self.index.pin().insert(entry);
+        let inserted = self.index.insert(entry);
         if !inserted {
             let entry = Entry::new(ptr);
-            let pin = self.index.pin();
-
-            let element = pin.get(&entry).expect("Insertion failed, so entry must be in the set");
-            return (StablePointer::from_entry(element), false);
+            let element = self
+                .index
+                .get(&entry)
+                .expect("Insertion failed, so entry must be in the set");
+            return (StablePointer::from_entry(&element), false);
         }
 
         // Insertion succeeded.
@@ -364,24 +339,16 @@ where
         Q: ?Sized + Hash + Equivalent<T>,
     {
         // Find the boxed element that contains an equivalent value
-        let pin = self.index.pin();
-        let boxed = pin.get(&LookUp(value))?;
+        let boxed = self.index.get(&LookUp(value))?;
 
         // SAFETY: The pointer is valid as long as the set is valid.
-        let ptr = StablePointer::from_entry(boxed);
+        let ptr = StablePointer::from_entry(boxed.key());
         Some(ptr)
     }
 
     /// Returns an iterator over the elements of the set.
-    pub fn iter<F>(&self, mut apply: F)
-    where
-        F: FnMut(&StablePointer<T>),
-    {
-        let pin = self.index.pin();
-        for boxed in pin.iter() {
-            let ptr = StablePointer::from_entry(boxed);
-            apply(&ptr);
-        }
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.index.iter().map(|boxed| unsafe { boxed.ptr.as_ref() })
     }
 
     /// Removes an element from the set using its stable pointer.
@@ -395,12 +362,12 @@ where
 
         // SAFETY: This is the last reference to the element, so it is safe to remove it.
         let t = pointer.deref();
-        let result = self.index.pin().remove(&LookUp(t));
+        let result = self.index.remove(&LookUp(t));
 
-        if result {
+        if let Some(ptr) = result {
             // SAFETY: We have exclusive access during drop and the pointer is valid
             unsafe {
-                self.drop_and_deallocate_entry(pointer.ptr);
+                self.drop_and_deallocate_entry(ptr.ptr);
             }
             true
         } else {
@@ -421,7 +388,7 @@ where
         F: FnMut(&StablePointer<T>) -> bool,
     {
         // First pass: determine what to keep/remove without modifying the collection
-        self.index.pin().retain(|element| {
+        self.index.retain(|element| {
             let ptr = StablePointer::from_entry(element);
 
             if !predicate(&ptr) {
@@ -470,22 +437,19 @@ where
     pub fn clear(&self) {
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.index
-                .pin()
-                .iter()
-                .all(|x| Arc::strong_count(&x.reference_counter) == 1),
+            self.index.iter().all(|x| Arc::strong_count(&x.reference_counter) == 1),
             "All pointers must be the last reference to the element"
         );
 
         // Manually deallocate all entries before clearing
-        for entry in self.index.pin().iter() {
+        for entry in self.index.iter() {
             // SAFETY: We have exclusive access during drop and the pointer is valid
             unsafe {
                 self.drop_and_deallocate_entry(entry.ptr);
             }
         }
 
-        self.index.pin().clear();
+        self.index.clear();
         debug_assert!(self.index.is_empty(), "Index should be empty after clearing");
     }
 
@@ -532,10 +496,10 @@ where
             let entry = Entry::new(ptr);
             let ptr = StablePointer::from_entry(&entry);
 
-            if !self.index.pin().insert(entry) {
-                // It could be at this point that the entry was inserted by another
-                // thread. So this insertion might actually fail, in which case we
-                // should clean up the created entry and return the old pointer.
+        let inserted = self.index.insert(entry);
+        if !inserted {
+            // Add the result to the storage, it could be at this point that the entry was inserted by another thread. So
+            // this insertion might actually fail, in which case we should clean up the created entry and return the old pointer.
 
                 // TODO: I suppose this can go wrong with begin_insert(x); insert(x); remove(x); end_insert(x) chain.
                 if let Some(existing_ptr) = self.get(value) {
@@ -590,7 +554,7 @@ where
         let ptr = StablePointer::from_entry(&entry);
 
         // First add to storage, then to index
-        let inserted = self.index.pin().insert(entry);
+        let inserted = self.index.insert(entry);
 
         debug_assert!(inserted, "Value should not already exist in the index");
 
@@ -607,15 +571,12 @@ where
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.index
-                .pin()
-                .iter()
-                .all(|x| Arc::strong_count(&x.reference_counter) == 1),
+            self.index.iter().all(|x| Arc::strong_count(&x.reference_counter) == 1),
             "All pointers must be the last reference to the element"
         );
 
         // Manually drop and deallocate all entries
-        for entry in self.index.pin().iter() {
+        for entry in self.index.iter() {
             unsafe {
                 self.drop_and_deallocate_entry(entry.ptr);
             }
@@ -746,10 +707,10 @@ mod tests {
         set.insert(2);
         set.insert(3);
 
-        // let mut values: Vec<i32> = set.index.pin().iter().cloned().collect();
-        // values.sort();
+        let mut values: Vec<i32> = set.iter().copied().collect();
+        values.sort();
 
-        // assert_eq!(values, vec![1, 2, 3]);
+        assert_eq!(values, vec![1, 2, 3]);
     }
 
     #[test]

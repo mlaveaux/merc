@@ -114,6 +114,7 @@ impl ThreadTermPool {
         }
 
         let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+
         let (index, inserted) = guard.create_term_array(symbol, &arguments);
 
         if inserted {

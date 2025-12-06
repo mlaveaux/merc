@@ -23,10 +23,10 @@ merc_debug = ["tikv-jemallocator?/debug"]
 merc_utilities.workspace = true
 
 allocator-api2.workspace = true
+dashmap.workspace = true
 equivalent.workspace = true
 itertools.workspace = true
 log.workspace = true
-papaya.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
 
