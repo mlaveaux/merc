@@ -20,7 +20,9 @@ pub type LabelIndex = TagIndex<usize, LabelTag>;
 /// The index for a state.
 pub type StateIndex = TagIndex<usize, StateTag>;
 
-pub trait LTS {
+pub trait LTS 
+    where Self: Sized
+{
     /// Returns the index of the initial state
     fn initial_state_index(&self) -> StateIndex;
 
@@ -48,7 +50,7 @@ pub trait LTS {
     /// Consumes the current LTS and merges it with another one, returning the
     /// disjoint merged LTS and the initial state of the other LTS in the merged
     /// LTS.
-    fn merge_disjoint(self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex);
+    fn merge_disjoint(self, other: &Self) -> (Self, StateIndex);
 }
 
 /// Represents a labelled transition system consisting of states with directed
@@ -320,7 +322,7 @@ impl LTS for LabelledTransitionSystem {
         label_index.value() == 0
     }
 
-    fn merge_disjoint(self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex) {
+    fn merge_disjoint(self, other: &Self) -> (Self, StateIndex) {
         self.merge_disjoint_impl(other)
     }
 }

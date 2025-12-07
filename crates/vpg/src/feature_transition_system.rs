@@ -182,6 +182,13 @@ impl FeatureTransitionSystem {
 }
 
 impl LTS for FeatureTransitionSystem {
+    fn merge_disjoint(mut self, other: &Self) -> (Self, StateIndex) {
+        let (lts, initial_state) = self.lts.merge_disjoint(&other.lts);
+        self.lts = lts;
+        self.feature_labels.extend_from_slice(&other.feature_labels);
+        (self, initial_state)
+    }
+
     delegate::delegate! {
         to self.lts {
             fn initial_state_index(&self) -> StateIndex;

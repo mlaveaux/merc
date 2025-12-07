@@ -1,5 +1,4 @@
 use merc_lts::LTS;
-use merc_lts::LabelledTransitionSystem;
 use merc_utilities::Timing;
 
 use crate::Equivalence;
@@ -11,10 +10,10 @@ use crate::strong_bisim_sigref_naive;
 use crate::weak_bisim_sigref_naive;
 
 // Compare two LTSs for equivalence using the given algorithm.
-pub fn compare_lts(
+pub fn compare_lts<L: LTS>(
     equivalence: Equivalence,
-    left: LabelledTransitionSystem,
-    right: impl LTS,
+    left: L,
+    right: L,
     timing: &mut Timing,
 ) -> bool {
     let mut time_merge = timing.start("merge lts");
