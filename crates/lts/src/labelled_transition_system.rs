@@ -44,14 +44,19 @@ pub trait LTS {
 
     /// Returns true iff the given label index is a hidden label.
     fn is_hidden_label(&self, label_index: LabelIndex) -> bool;
+
+    /// Consumes the current LTS and merges it with another one, returning the
+    /// disjoint merged LTS and the initial state of the other LTS in the merged
+    /// LTS.
+    fn merge_disjoint(self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex);
 }
 
 /// Represents a labelled transition system consisting of states with directed
 /// labelled transitions between them.
-/// 
+///
 /// # Details
-/// 
-/// This LTS uses (dense) indices to refer to states and labels. The state indices 
+///
+/// This LTS uses (dense) indices to refer to states and labels. The state indices
 /// are represented as `StateIndex`, and the label indices as `LabelIndex`.
 #[derive(PartialEq, Eq, Clone)]
 pub struct LabelledTransitionSystem {
@@ -151,7 +156,7 @@ impl LabelledTransitionSystem {
             initial_state,
             states.len() - 1
         );
-        
+
         // Add the sentinel state.
         states.push(transition_labels.len());
 
@@ -171,7 +176,7 @@ impl LabelledTransitionSystem {
     /// Internally this works by offsetting the state indices of the other LTS by the number of states
     /// in the current LTS, and combining the action labels. The offset is returned such that
     /// can find the states of the other LTS in the merged LTS as the initial state of the other LTS.
-    pub fn merge(mut self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex) {
+    fn merge_disjoint_impl(mut self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex) {
         // Determine the combination of action labels
         let mut all_labels = self.labels().to_vec();
         for label in other.labels() {
@@ -198,7 +203,7 @@ impl LabelledTransitionSystem {
             .reserve(other.num_of_transitions(), total_number_of_states.bytes_required());
 
         let offset = self.num_of_states();
-        
+
         // Remove the sentinel state temporarily. This breaks the state invariant, but we will add it back later.
         self.states.pop();
 
@@ -218,7 +223,7 @@ impl LabelledTransitionSystem {
         }
 
         // Add back the sentinel state
-        self.states.push(self.num_of_transitions());        
+        self.states.push(self.num_of_transitions());
         debug_assert_eq!(self.num_of_states(), total_number_of_states);
 
         (
@@ -314,6 +319,10 @@ impl LTS for LabelledTransitionSystem {
     fn is_hidden_label(&self, label_index: LabelIndex) -> bool {
         label_index.value() == 0
     }
+
+    fn merge_disjoint(self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex) {
+        self.merge_disjoint_impl(other)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -390,7 +399,7 @@ mod tests {
 
             println!("Left LTS:\n{:?}", left);
             println!("Right LTS:\n{:?}", right);
-            let (merged, _offset) = left.clone().merge(&right);
+            let (merged, _offset) = left.clone().merge_disjoint_impl(&right);
 
             println!("Merged LTS:\n{:?}", merged);
         })

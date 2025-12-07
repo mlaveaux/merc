@@ -189,7 +189,7 @@ fn main() -> Result<ExitCode, MercError> {
 
                     print_allocator_metrics();
 
-                    let equivalent = merc_reduction::compare_lts(args.equivalence, left_lts, &right_lts, &mut timing);
+                    let equivalent = merc_reduction::compare_lts(args.equivalence, left_lts, right_lts, &mut timing);
                     if equivalent {
                         println!("true");
                     } else {

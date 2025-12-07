@@ -14,11 +14,12 @@ use crate::weak_bisim_sigref_naive;
 pub fn compare_lts(
     equivalence: Equivalence,
     left: LabelledTransitionSystem,
-    right: &impl LTS,
+    right: impl LTS,
     timing: &mut Timing,
 ) -> bool {
     let mut time_merge = timing.start("merge lts");
-    let (merged, rhs_initial) = left.merge(right);
+    let (merged, rhs_initial) = left.merge_disjoint(&right);
+    drop(right); // No longer needed.
     time_merge.finish();
 
     // Reduce the merged LTS modulo the given equivalence and return the partition
