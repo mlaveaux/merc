@@ -10,15 +10,15 @@ use log::debug;
 use merc_lts::LabelIndex;
 use merc_lts::StateIndex;
 use merc_lts::Transition;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
 use oxidd::BooleanFunction;
 use oxidd::Manager;
 use oxidd::ManagerRef;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
 
-use merc_lts::read_aut;
-use merc_lts::LabelledTransitionSystem;
 use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
+use merc_lts::read_aut;
 use merc_syntax::DataExpr;
 use merc_syntax::MultiAction;
 use merc_utilities::MercError;
@@ -32,7 +32,7 @@ use oxidd::util::OutOfMemory;
 pub fn read_fts(
     manager_ref: &BDDManagerRef,
     reader: impl Read,
-    feature_diagram: &FeatureDiagram,
+    feature_diagram: FeatureDiagram,
 ) -> Result<FeatureTransitionSystem, MercError> {
     // Read the underlying LTS, where the labels are in plain text
     let aut = read_aut(reader, Vec::new())?;
@@ -64,7 +64,7 @@ pub fn read_fts(
         }
     }
 
-    Ok(FeatureTransitionSystem::new(aut, feature_labels))
+    Ok(FeatureTransitionSystem::new(aut, feature_labels, feature_diagram))
 }
 
 /// Converts the given data expression into a BDD function.
@@ -112,7 +112,7 @@ pub struct FeatureDiagram {
     variables: HashMap<String, BDDFunction>,
 
     /// Stores the initial configuration as a BDD function.
-    initial_configuration: BDDFunction,
+    configuration: BDDFunction,
 }
 
 impl FeatureDiagram {
@@ -143,13 +143,13 @@ impl FeatureDiagram {
 
         Ok(Self {
             variables,
-            initial_configuration,
+            configuration: initial_configuration,
         })
     }
 
     /// Returns the configuration of the feature diagram.
     pub fn configuration(&self) -> &BDDFunction {
-        &self.initial_configuration
+        &self.configuration
     }
 }
 
@@ -167,22 +167,39 @@ pub struct FeatureTransitionSystem {
 
     /// The feature expression associated with each label.
     feature_labels: Vec<BDDFunction>,
+
+    /// The feature diagram for this FTS.
+    feature_diagram: FeatureDiagram,
 }
 
 impl FeatureTransitionSystem {
     /// Creates a new feature transition system.
-    pub fn new(lts: LabelledTransitionSystem, feature_labels: Vec<BDDFunction>) -> Self {
-        Self { lts, feature_labels }
+    pub fn new(
+        lts: LabelledTransitionSystem,
+        feature_labels: Vec<BDDFunction>,
+        feature_diagram: FeatureDiagram,
+    ) -> Self {
+        Self {
+            lts,
+            feature_labels,
+            feature_diagram,
+        }
     }
 
     /// Returns the underlying labelled transition system.
     pub fn feature_label(&self, label_index: usize) -> &BDDFunction {
         &self.feature_labels[label_index]
     }
+
+    /// Returns the feature configuration of the feature transition system.
+    pub fn configuration(&self) -> &BDDFunction {
+        self.feature_diagram.configuration()
+    }
 }
 
 impl LTS for FeatureTransitionSystem {
     fn merge_disjoint(mut self, other: &Self) -> (Self, StateIndex) {
+        // Combine the underlying LTSs, and then extend the feature labels.
         let (lts, initial_state) = self.lts.merge_disjoint(&other.lts);
         self.lts = lts;
         self.feature_labels.extend_from_slice(&other.feature_labels);
@@ -223,7 +240,7 @@ mod tests {
         let _result = read_fts(
             &manager_ref,
             include_bytes!("../../../examples/vpg/minepump_fts.aut") as &[u8],
-            &feature_diagram,
+            feature_diagram,
         )
         .unwrap();
     }
