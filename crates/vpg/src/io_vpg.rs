@@ -135,13 +135,9 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     vertices.push(edges_configuration.len());
 
     Ok(VariabilityParityGame::new(
-        VertexIndex::new(0),
+        ParityGame::new(VertexIndex::new(0), owner, priority, vertices, edges_to),
         configurations,
-        owner,
-        priority,
-        vertices,
         edges_configuration,
-        edges_to,
     ))
 }
 
