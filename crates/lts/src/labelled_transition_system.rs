@@ -97,6 +97,11 @@ impl LabelledTransitionSystem {
         let mut states = ByteCompressedVec::new();
         if let Some(num_of_states) = num_of_states {
             states.resize_with(num_of_states, Default::default);
+            debug_assert!(
+                initial_state.value() < num_of_states,
+                "Initial vertex index {} out of bounds {num_of_states}",
+                initial_state.value()
+            );
         }
 
         // Count the number of transitions for every state
