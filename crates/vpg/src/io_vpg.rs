@@ -22,6 +22,7 @@ use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
 use crate::IOError;
+use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
@@ -204,14 +205,10 @@ fn parse_configuration_set(
 
 /// Writes the given parity game to the given writer in .vpg format.
 /// Note that the reader is buffered internally using a `BufWriter`.
-pub fn write_vpg(
-    manager_ref: &BDDManagerRef,
-    writer: &mut impl Write,
-    game: &VariabilityParityGame,
-) -> Result<(), MercError> {
+pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Result<(), MercError> {
     let mut writer = BufWriter::new(writer);
 
-    writeln!(writer, "confs {};", FormatConfigSet::new(manager_ref, game.configuration()))?;
+    writeln!(writer, "confs {};", FormatConfigSet(game.configuration()))?;
     writeln!(writer, "parity {};", game.num_of_vertices())?;
 
     for v in game.iter_vertices() {
@@ -219,9 +216,12 @@ pub fn write_vpg(
         let owner = game.owner(v).to_index();
 
         write!(writer, "{} {} {} ", v.value(), prio.value(), owner)?;
-        write!(writer, "{}", game.outgoing_edges(v).format_with(", ", |edge, fmt| {
-            fmt(&FormatConfigSet::new(manager_ref, edge.configuration()))
-        }))?;
+        write!(
+            writer,
+            "{}",
+            game.outgoing_edges(v)
+                .format_with(", ", |edge, fmt| { fmt(&FormatConfigSet(edge.configuration())) })
+        )?;
 
         writeln!(writer, ";")?;
     }
@@ -230,45 +230,84 @@ pub fn write_vpg(
 }
 
 /// A helper structure to format configuration sets for output.
-struct FormatConfigSet<'a> {
-    manager_ref: &'a BDDManagerRef, 
-    config: &'a BDDFunction,
-}
-
-impl FormatConfigSet<'_> {
-    /// Creates a new FormatConfigSet for the given manager, variables, and configuration.
-    fn new<'a>(
-        manager_ref: &'a BDDManagerRef,
-        config: &'a BDDFunction,
-    ) -> FormatConfigSet<'a> {
-        FormatConfigSet {
-            manager_ref,
-            config,
-        }
-    }
-}
+struct FormatConfigSet<'a>(&'a BDDFunction);
 
 impl fmt::Display for FormatConfigSet<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut choices: Vec<OptBool> = Vec::new();
+        let mut last_index = 0;
+        let mut first = true;
+        let mut stop_condition = false;
 
-        // Use oxidd to iterate over the cubes in the BDD
-        self.manager_ref.with_manager_shared(|_manager| -> fmt::Result {
-            let choices = Vec::new();
+        // Use pick_cube to iterate over all cubes in the BDD
+        while !stop_condition
+            && let Some(cube) = self.0.pick_cube(|_manager, _edge, index| {
+                // Ensure that the choices vector is large enough, initialize with don't care
+                let mut resized = false;
+                if index as usize >= choices.len() {
+                    resized = true;
+                    choices.resize(index as usize + 1, OptBool::None);
+                }
 
-            while let Some(cube) = self.config.pick_cube(|manager, edge, index| {
-                choices[index as usize]
-            }) {
-                for value in cube {
-                    match value {
-                        OptBool::True => write!(f, "1")?,
-                        OptBool::False => write!(f, "0")?,
-                        OptBool::None => write!(f, "-")?,
+                // If we have skipped levels then the intermediate variables should be don't care
+                for i in (last_index as usize + 1)..(index as usize) {
+                    choices[i] = OptBool::None;
+                }
+
+                println!("Choices {:?}", choices);
+                if index <= last_index {
+                    // Set all ones to zero, and initialize the next index on true
+                    let mut had_false = false;
+                    for i in 0..choices.len() {
+                        if choices[i] == OptBool::True {
+                            choices[i] = OptBool::False;
+                        } else if choices[i] == OptBool::False {
+                            choices[i] = OptBool::True;
+                            had_false = true;
+                            break; // Skip updating further indices
+                        } 
+                    }
+
+                    if !had_false && !resized {
+                        // All choices with 1 have been taken, so abort.
+                        println!("Finished all choices");
+                        stop_condition = true;
                     }
                 }
+
+                // Update the choice for the current index
+                last_index = index;
+
+                if choices[index as usize] == OptBool::None {
+                    // First time setting this index is should be false
+                    choices[index as usize] = OptBool::False;
+                }
+
+
+                match choices[index as usize] {
+                    OptBool::False => true,
+                    OptBool::True => false,
+                    OptBool::None => unreachable!("Proper choice should have been set"),
+                }
+            })
+        {
+            if !first {
+                write!(f, "+")?;
             }
 
-            Ok(())
-        })
+            if !stop_condition {}
+
+            for value in cube {
+                match value {
+                    OptBool::True => write!(f, "1")?,
+                    OptBool::False => write!(f, "0")?,
+                    OptBool::None => write!(f, "-")?,
+                }
+            }
+            first = false;
+        }
+
+        Ok(())
     }
 }
 
