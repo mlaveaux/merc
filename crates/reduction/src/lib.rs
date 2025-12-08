@@ -6,8 +6,10 @@
 //!
 //!
 
+mod antichain;
 mod block_partition;
 mod compare;
+mod failures_refinement;
 mod indexed_partition;
 mod quotient;
 mod reduce;
@@ -16,8 +18,10 @@ mod signature_refinement;
 mod signatures;
 mod sort_topological;
 
+pub use antichain::*;
 pub use block_partition::*;
 pub use compare::*;
+pub use failures_refinement::*;
 pub use indexed_partition::*;
 pub use quotient::*;
 pub use reduce::*;
