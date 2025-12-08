@@ -1,7 +1,10 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
 
 use delegate::delegate;
+use oxidd::BooleanFunction;
+use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
 
 use crate::ParityGame;
 use crate::Player;
@@ -43,11 +46,7 @@ impl<'a> Edge<'a> {
 
 impl VariabilityParityGame {
     /// Construct a new variability parity game from an iterator over transitions.
-    pub fn new(
-        parity_game: ParityGame,
-        configuration: BDDFunction,
-        edges_configuration: Vec<BDDFunction>,
-    ) -> Self {
+    pub fn new(parity_game: ParityGame, configuration: BDDFunction, edges_configuration: Vec<BDDFunction>) -> Self {
         // Check that the sizes are consistent
         debug_assert_eq!(
             edges_configuration.len(),
@@ -57,6 +56,91 @@ impl VariabilityParityGame {
 
         Self {
             game: parity_game,
+            configuration,
+            edges_configuration,
+        }
+    }
+
+    /// Constructs a new parity game from an iterator over edges.
+    pub fn from_edges<F, I>(
+        manager_ref: &BDDManagerRef,
+        initial_vertex: VertexIndex,
+        owner: Vec<Player>,
+        priority: Vec<Priority>,
+        num_of_vertices: Option<usize>,
+        configuration: BDDFunction,
+        mut edges: F,
+    ) -> Self
+    where
+        F: FnMut() -> I,
+        I: Iterator<Item = (VertexIndex, BDDFunction, VertexIndex)>,
+    {
+        let mut vertices = Vec::new();
+        if let Some(num_of_vertices) = num_of_vertices {
+            vertices.resize_with(num_of_vertices, Default::default);
+            debug_assert!(
+                initial_vertex.value() < num_of_vertices,
+                "Initial vertex index {} out of bounds {num_of_vertices}",
+                initial_vertex.value()
+            );
+        }
+
+        // Count the number of transitions for every state
+        let mut num_of_edges = 0;
+        for (from, _, to) in edges() {
+            // Ensure that the states vector is large enough.
+            if vertices.len() <= *from.max(to) {
+                vertices.resize_with(*from.max(to) + 1, || 0);
+            }
+
+            vertices[*from] += 1;
+            num_of_edges += 1;
+
+            if let Some(num_of_vertices) = num_of_vertices {
+                debug_assert!(
+                    *from < num_of_vertices && *to < num_of_vertices,
+                    "Vertex index out of bounds: from {:?}, to {:?}, num_of_vertices {}",
+                    from,
+                    to,
+                    num_of_vertices
+                );
+            }
+        }
+
+        if initial_vertex.value() >= vertices.len() {
+            // Ensure that the initial state is a valid state (and all states before it exist).
+            vertices.resize_with(initial_vertex.value() + 1, Default::default);
+        }
+
+        // Track the number of transitions before every state.
+        vertices.iter_mut().fold(0, |count, start| {
+            let result = count + *start;
+            *start = count;
+            result
+        });
+
+        // Place the transitions, and increment the end for every state.
+        let mut edges_to = vec![VertexIndex::new(0); num_of_edges];
+        let mut edges_configuration =
+            manager_ref.with_manager_shared(|manager| vec![BDDFunction::f(manager); num_of_edges]);
+        for (from, config, to) in edges() {
+            let start = &mut vertices[*from];
+            edges_to[*start] = to;
+            edges_configuration[*start] = config;
+            *start += 1;
+        }
+
+        // Reset the offset.
+        vertices.iter_mut().fold(0, |previous, start| {
+            let result = *start;
+            *start = previous;
+            result
+        });
+
+        vertices.push(num_of_edges); // Sentinel
+
+        Self {
+            game: ParityGame::new(initial_vertex, owner, priority, vertices, edges_to),
             configuration,
             edges_configuration,
         }
