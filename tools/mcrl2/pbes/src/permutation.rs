@@ -5,7 +5,7 @@ use std::fmt;
 
 use merc_utilities::MercError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Permutation {
     /// We represent a permutation as an explicit list of (domain -> image) pairs,
     /// sorted by domain.
@@ -161,6 +161,19 @@ impl fmt::Display for Permutation {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for Permutation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, (d, v)) in self.mapping.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{} -> {}", d, v)?;
+        }
+        write!(f, "]")
     }
 }
 
