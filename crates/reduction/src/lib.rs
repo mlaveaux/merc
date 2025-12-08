@@ -6,8 +6,10 @@
 //!
 //!
 
+mod antichain;
 mod block_partition;
 mod compare;
+mod failures_refinement;
 mod indexed_partition;
 mod quotient;
 mod reduce;
@@ -18,8 +20,10 @@ mod simple_block_partition;
 mod sort_topological;
 mod weak_bisimulation;
 
+pub use antichain::*;
 pub use block_partition::*;
 pub use compare::*;
+pub use failures_refinement::*;
 pub use indexed_partition::*;
 pub use quotient::*;
 pub use reduce::*;
