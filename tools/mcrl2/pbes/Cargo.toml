@@ -15,3 +15,7 @@ clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
 itertools.workspace = true
+
+[features]
+# Enables the compiling rewriter option for mCRL2.
+mcrl2_jittyc = []

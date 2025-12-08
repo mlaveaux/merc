@@ -86,7 +86,7 @@ fn main() {
         "logger.cpp",
         //"command_line_interface.cpp",
         "text_utility.cpp",
-        //"toolset_version.cpp",
+        "toolset_version.cpp",
     ];
 
     let pbes_sources_files = [
@@ -120,7 +120,7 @@ fn main() {
         .std("c++20")
         .define("MCRL2_NO_RECURSIVE_SOUNDNESS_CHECKS", "1") // These checks overflow the stack, and are extremely slow.
         .define("LPS_NO_RECURSIVE_SOUNDNESS_CHECKS", "1")
-        .define("MERC_MCRL2_VERSION", "<internal_merc_build>") // Sets the mCRL2 version to something recognized as our internal build.
+        .define("MERC_MCRL2_VERSION", "\"internal_merc_build\"") // Sets the mCRL2 version to something recognized as our internal build.
         .includes(add_prefix(
             mcrl2_path.clone(),
             &[
@@ -175,6 +175,12 @@ fn main() {
         ))
         .file("cpp/pbes.cpp")
         .file(mcrl2_workarounds_path.clone() + "mcrl2_syntax.c"); // This is to avoid generating the dparser grammer.
+
+    #[cfg(feature = "mcrl2_jittyc")]
+    build.files(add_prefix(
+        mcrl2_path.clone() + "libraries/data/source/",
+        &["detail/rewrite/jittyc.cpp"],
+    ));
 
     #[cfg(feature = "mcrl2_jittyc")]
     build.define("MCRL2_ENABLE_JITTYC", "1");

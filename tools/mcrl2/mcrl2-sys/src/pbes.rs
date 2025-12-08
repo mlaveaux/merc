@@ -1,6 +1,5 @@
 #[cxx::bridge(namespace = "mcrl2::pbes_system")]
 pub mod ffi {
-
     /// A helper struct for std::pair<const local_control_flow_graph_vertex*, UniquePtr<CxxVector<usize>>>
     struct vertex_outgoing_edge {
         vertex: *const local_control_flow_graph_vertex,
@@ -20,6 +19,11 @@ pub mod ffi {
 
         /// Loads a PBES from a string.
         fn mcrl2_load_pbes_from_text(input: &str) -> Result<UniquePtr<pbes>>;
+
+        #[namespace = "mcrl2::data"]
+        type data_specification = crate::data::ffi::data_specification;
+
+        fn mcrl2_pbes_data_specification(input: &pbes) -> UniquePtr<data_specification>;
 
         type stategraph_algorithm;
 
@@ -106,10 +110,10 @@ pub mod ffi {
         type srf_equation;
 
         /// Convert a PBES to an SRF PBES.
-        fn mcrl2_to_srf_pbes(input: &pbes) -> Result<UniquePtr<srf_pbes>>;
+        fn mcrl2_pbes_to_srf_pbes(input: &pbes) -> Result<UniquePtr<srf_pbes>>;
 
         /// Returns PBES as a string.
-        fn mcrl2_to_string(input: &pbes) -> String;
+        fn mcrl2_pbes_to_string(input: &pbes) -> String;
 
         /// Convert a SRF PBES to a PBES.
         fn mcrl2_srf_pbes_to_pbes(input: &srf_pbes) -> UniquePtr<pbes>;

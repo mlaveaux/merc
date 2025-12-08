@@ -3,6 +3,7 @@
 #pragma once
 
 #include "mcrl2/atermpp/aterm.h"
+#include "mcrl2/data/data_specification.h"
 #include "mcrl2/pbes/detail/stategraph_local_algorithm.h"
 #include "mcrl2/pbes/detail/stategraph_pbes.h"
 #include "mcrl2/pbes/io.h"
@@ -55,7 +56,13 @@ std::unique_ptr<pbes> mcrl2_load_pbes_from_text(rust::Str input)
 }
 
 inline
-rust::String mcrl2_to_string(const pbes& pbesspec)
+std::unique_ptr<data::data_specification> mcrl2_pbes_data_specification(const pbes& pbesspec)
+{
+  return std::make_unique<data::data_specification>(pbesspec.data());
+}
+
+inline
+rust::String mcrl2_pbes_to_string(const pbes& pbesspec)
 {
   std::stringstream ss;
   ss << pbesspec;
@@ -175,7 +182,7 @@ std::unique_ptr<atermpp::aterm> mcrl2_stategraph_equation_variable(const detail:
 
 
 inline
-std::unique_ptr<srf_pbes> mcrl2_to_srf_pbes(const pbes& p)
+std::unique_ptr<srf_pbes> mcrl2_pbes_to_srf_pbes(const pbes& p)
 {
   return std::make_unique<srf_pbes>(pbes2srf(p));
 }

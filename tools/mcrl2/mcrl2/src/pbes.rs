@@ -4,11 +4,17 @@ use mcrl2_sys::cxx::CxxVector;
 use mcrl2_sys::cxx::UniquePtr;
 use mcrl2_sys::pbes::ffi::local_control_flow_graph;
 use mcrl2_sys::pbes::ffi::local_control_flow_graph_vertex;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_pbes_file;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text_file;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_index;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_name;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_outgoing_edges;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_value;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertices;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_data_specification;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_to_srf_pbes;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_to_string;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_name;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_parameters;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_to_string;
@@ -20,7 +26,6 @@ use mcrl2_sys::pbes::ffi::mcrl2_stategraph_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_cfgs;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_equations;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_run;
-use mcrl2_sys::pbes::ffi::mcrl2_to_string;
 use mcrl2_sys::pbes::ffi::mcrl2_unify_parameters;
 use mcrl2_sys::pbes::ffi::pbes;
 use mcrl2_sys::pbes::ffi::predicate_variable;
@@ -34,6 +39,7 @@ use crate::Aterm;
 use crate::AtermList;
 use crate::AtermString;
 use crate::DataExpression;
+use crate::DataSpecification;
 use crate::DataVariable;
 
 /// mcrl2::pbes_system::pbes
@@ -45,22 +51,29 @@ impl Pbes {
     /// Load a PBES from a file.
     pub fn from_file(filename: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_pbes_file(filename)?,
+            pbes: mcrl2_load_pbes_from_pbes_file(filename)?,
         })
     }
 
     /// Load a PBES from a textual pbes file.
     pub fn from_text_file(filename: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text_file(filename)?,
+            pbes: mcrl2_load_pbes_from_text_file(filename)?,
         })
     }
 
     /// Load a PBES from text.
     pub fn from_text(input: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text(input)?,
+            pbes: mcrl2_load_pbes_from_text(input)?,
         })
+    }
+
+    /// Returns the data specification of the PBES.
+    pub fn data_specification(&self) -> DataSpecification {
+        DataSpecification::new(
+            mcrl2_pbes_data_specification(&self.pbes),
+        )
     }
 
     pub(crate) fn new(pbes: UniquePtr<pbes>) -> Self {
@@ -70,7 +83,7 @@ impl Pbes {
 
 impl fmt::Display for Pbes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", mcrl2_to_string(&self.pbes))
+        write!(f, "{}", mcrl2_pbes_to_string(&self.pbes))
     }
 }
 
@@ -290,7 +303,7 @@ pub struct SrfPbes {
 impl SrfPbes {
     /// Convert a PBES to an SRF PBES.
     pub fn from(pbes: &Pbes) -> Result<Self, MercError> {
-        let srf_pbes = mcrl2_sys::pbes::ffi::mcrl2_to_srf_pbes(&pbes.pbes)?;
+        let srf_pbes = mcrl2_pbes_to_srf_pbes(&pbes.pbes)?;
 
         let mut ffi_equations = CxxVector::new();
         mcrl2_srf_pbes_equations(ffi_equations.pin_mut(), &srf_pbes);
