@@ -8,15 +8,8 @@ use std::error::Error;
 use std::fs::copy;
 use std::fs::create_dir_all;
 
-/// Builds the project in release mode and packages specified binaries.
-///
-/// This function performs the following operations:
-/// 1. Runs `cargo build --release` to build optimized binaries
-/// 2. Creates a 'package' directory in the workspace root
-/// 3. Copies the binaries ltsgraph, ltsinfo, and mercrewrite to the package directory
-///
-/// The design choice to use a dedicated package directory ensures clean separation
-/// of packaged artifacts from build artifacts, making distribution easier.
+/// Builds the project in release mode and packages specified binaries into a
+/// newly created 'package' directory.
 pub fn package() -> Result<(), Box<dyn Error>> {
     // Get the workspace root directory
     let workspace_root = env::current_dir()?;
