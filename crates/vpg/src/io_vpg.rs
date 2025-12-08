@@ -219,8 +219,9 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
         write!(
             writer,
             "{}",
-            game.outgoing_edges(v)
-                .format_with(", ", |edge, fmt| { fmt(&FormatConfigSet(edge.configuration())) })
+            game.outgoing_edges(v).format_with(",", |edge, fmt| {
+                fmt(&format_args!("{}|{}", edge.to(), FormatConfigSet(edge.configuration())))
+            })
         )?;
 
         writeln!(writer, ";")?;
@@ -254,7 +255,6 @@ impl fmt::Display for FormatConfigSet<'_> {
                     choices[i] = OptBool::None;
                 }
 
-                println!("Choices {:?}", choices);
                 if index <= last_index {
                     // Set all ones to zero, and initialize the next index on true
                     let mut had_false = false;
@@ -265,12 +265,11 @@ impl fmt::Display for FormatConfigSet<'_> {
                             choices[i] = OptBool::True;
                             had_false = true;
                             break; // Skip updating further indices
-                        } 
+                        }
                     }
 
                     if !had_false && !resized {
                         // All choices with 1 have been taken, so abort.
-                        println!("Finished all choices");
                         stop_condition = true;
                     }
                 }
@@ -282,7 +281,6 @@ impl fmt::Display for FormatConfigSet<'_> {
                     // First time setting this index is should be false
                     choices[index as usize] = OptBool::False;
                 }
-
 
                 match choices[index as usize] {
                     OptBool::False => true,
