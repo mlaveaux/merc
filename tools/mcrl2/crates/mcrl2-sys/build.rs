@@ -229,6 +229,12 @@ fn add_debug_defines(build: &mut Build) {
             // build.define("_GLIBCXX_DEBUG", "1");
             // build.define("_GLIBCXX_DEBUG_PEDANTIC", "1");
             build.define("_GLIBCXX_ASSERTIONS", "1");
+
+            // Handle overflows
+            build.flag_if_supported("-ftrapv");
+            build.flag_if_supported("-fstack-protector-strong");
+            build.flag_if_supported("-fstack-clash-protection");
+            build.flag_if_supported("-fstrict-flex-arrays=3");
         }
         "release" => {
             build.define("NDEBUG", "1");
