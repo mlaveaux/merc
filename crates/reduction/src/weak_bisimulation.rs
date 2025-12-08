@@ -16,11 +16,8 @@ use merc_lts::LabelledTransitionSystem;
 use merc_utilities::Timing;
 
 use crate::BlockIndex;
-use crate::SimpleBlock;
 use crate::SimpleBlockPartition;
 use crate::preprocess_branching;
-use crate::quotient_lts_naive;
-use crate::tau_scc_decomposition;
 
 /// Type alias because we use bitvec for marking states
 type BitArray = BitVec<u64, Lsb0>;
@@ -28,7 +25,6 @@ type BitArray = BitVec<u64, Lsb0>;
 /// Apply weak bisimulation reduction
 pub fn weak_bisimulation(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, SimpleBlockPartition) {
     let mut time_pre = timing.start("preprocessing");
-    let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = preprocess_branching(lts);
     time_pre.finish();
 
