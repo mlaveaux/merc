@@ -2,11 +2,16 @@ use cargo_emit::rerun_if_changed;
 use cc::Build;
 
 fn main() {
+    // Path to the mCRL2 location
+    let mcrl2_path = String::from("../../../3rd-party/mCRL2/");
+    let mcrl2_workarounds_path = String::from("../../../3rd-party/mCRL2-workarounds/");
+
     #[cfg(feature = "mcrl2_cpptrace")]
     {
         // The debug flags must be set on all the standard libraries used.
         let mut debug_build = Build::new();
         add_debug_defines(&mut debug_build);
+        add_compile_flags(&mut debug_build, mcrl2_workarounds_path.clone());
 
         // Use the `cmake` crate to build cpptrace.
         let mut dst = cmake::Config::new("../../../3rd-party/cpptrace")
@@ -94,10 +99,6 @@ fn main() {
 
     let process_source_files = ["process.cpp"];
 
-    // Path to the mCRL2 location
-    let mcrl2_path = String::from("../../../3rd-party/mCRL2/");
-    let mcrl2_workarounds_path = String::from("../../../3rd-party/mCRL2-workarounds/");
-
     // Build dparser separately since it's a C library.
     let mut build_dparser = cc::Build::new();
     build_dparser
@@ -173,7 +174,7 @@ fn main() {
             &utilities_source_files,
         ))
         .file("cpp/pbes.cpp")
-        .file(mcrl2_workarounds_path + "mcrl2_syntax.c"); // This is to avoid generating the dparser grammer.
+        .file(mcrl2_workarounds_path.clone() + "mcrl2_syntax.c"); // This is to avoid generating the dparser grammer.
 
     #[cfg(feature = "mcrl2_jittyc")]
     build.define("MCRL2_ENABLE_JITTYC", "1");
@@ -245,11 +246,12 @@ fn add_compile_flags(build: &mut Build, mcrl2_path: String) {
     #[cfg(windows)]
     build
         .include(mcrl2_path + "build/workarounds/msvc") // These are MSVC workarounds that mCRL2 relies on for compilation.
-        .flag("/EHs")
-        .flag("/bigobj")
-        .flag("/MP")
-        .flag("/Zc:inline")
-        .flag("/permissive-")
+        .flag_if_supported("/EHsc")
+        .flag_if_supported("/bigobj")
+        .flag_if_supported("/MP")
+        .flag_if_supported("/Zc:inline")
+        .flag_if_supported("/permissive-")
+        .flag_if_supported("/wd4267") // Disable implicit conversion warnings.
         .define("WIN32", "1")
         .define("WIN32_LEAN_AND_MEAN", "1")
         .define("NOMINMAX", "1")
