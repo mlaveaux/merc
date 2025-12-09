@@ -36,7 +36,7 @@ mod inner {
 
     use super::*;
 
-    /// This is a wrapper around the ATerm type that stores a single `u64` using an annotation.
+    /// This is a wrapper around the [ATerm] type that stores a single `u64` using an annotation.
     #[merc_term(is_int_term)]
     pub struct ATermInt {
         term: ATerm,

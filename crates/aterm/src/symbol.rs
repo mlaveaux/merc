@@ -138,7 +138,7 @@ impl fmt::Debug for SymbolRef<'_> {
     }
 }
 
-/// A protected function symbol, with the same interface as `SymbolRef`.
+/// A protected function symbol, with the same interface as [SymbolRef].
 pub struct Symbol {
     symbol: SymbolRef<'static>,
     root: ProtectionIndex,

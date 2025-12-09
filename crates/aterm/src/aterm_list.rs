@@ -189,7 +189,7 @@ impl<T: From<ATerm> + fmt::Display> fmt::Display for ATermList<T> {
     }
 }
 
-/// The iterator over the elements of an ATermList.
+/// The iterator over the elements of an [ATermList].
 pub struct ATermListIter<T> {
     current: ATermList<T>,
 }
