@@ -431,9 +431,25 @@ pub struct Action {
     pub args: Vec<DataExpr>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct MultiAction {
     pub actions: Vec<Action>,
+}
+
+impl PartialEq for MultiAction {
+    fn eq(&self, other: &Self) -> bool {
+        if self.actions.len() != other.actions.len() {
+            return false;
+        }
+
+        for action in self.actions.iter() {
+            if !other.actions.contains(action) {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 #[derive(Arbitrary, Clone, Copy, Debug, Eq, PartialEq, Hash)]
