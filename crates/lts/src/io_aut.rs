@@ -3,13 +3,13 @@ use std::io::Read;
 use std::io::Write;
 
 use log::info;
-use log::trace;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 use thiserror::Error;
 
 use merc_io::LineIterator;
 use merc_io::TimeProgress;
+use merc_utilities::debug_trace;
 use merc_utilities::MercError;
 
 use crate::LTS;
@@ -87,7 +87,6 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     let progress = TimeProgress::new(|percentage: usize| info!("Reading transitions {}%...", percentage), 1);
 
     while let Some(line) = lines.next() {
-        trace!("{line}");
         let (from_txt, label_txt, to_txt) =
             read_transition(line).ok_or_else(|| IOError::InvalidTransition(line.clone()))?;
 
@@ -95,7 +94,7 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
         let from = StateIndex::new(from_txt.parse()?);
         let to = StateIndex::new(to_txt.parse()?);
 
-        trace!("Read transition {from} --[{label_txt}]-> {to}");
+        debug_trace!("Read transition {from} --[{label_txt}]-> {to}");
 
         builder.add_transition(from, label_txt, to);
 
