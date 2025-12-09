@@ -21,6 +21,7 @@ use merc_io::LineIterator;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
+use crate::CubeIter;
 use crate::IOError;
 use crate::ParityGame;
 use crate::Player;
@@ -233,76 +234,29 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
 }
 
 /// A helper structure to format configuration sets for output.
-struct FormatConfigSet<'a>(&'a BDDFunction);
+pub struct FormatConfigSet<'a>(&'a BDDFunction);
 
 impl fmt::Display for FormatConfigSet<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut choices: Vec<OptBool> = Vec::new();
-        let mut last_index = 0;
-        let mut first = true;
-        let mut stop_condition = false;
+        write!(
+            f,
+            "{}",
+            CubeIter::new(&self.0).format_with("+", |cube, fmt| { fmt(&format_args!("{}", FormatConfig(&cube))) })
+        )
+    }
+}
 
-        // Use pick_cube to iterate over all cubes in the BDD
-        while !stop_condition
-            && let Some(cube) = self.0.pick_cube(|_manager, _edge, index| {
-                // Ensure that the choices vector is large enough, initialize with don't care
-                let mut resized = false;
-                if index as usize >= choices.len() {
-                    resized = true;
-                    choices.resize(index as usize + 1, OptBool::None);
-                }
+/// A helper structure to format a configuration for output.
+pub struct FormatConfig<'a>(&'a Vec<OptBool>);
 
-                // If we have skipped levels then the intermediate variables should be don't care
-                for i in (last_index as usize + 1)..(index as usize) {
-                    choices[i] = OptBool::None;
-                }
-
-                if index <= last_index {
-                    // Set all ones to zero, and initialize the next index on true
-                    let mut had_false = false;
-                    for i in 0..choices.len() {
-                        if choices[i] == OptBool::True {
-                            choices[i] = OptBool::False;
-                        } else if choices[i] == OptBool::False {
-                            choices[i] = OptBool::True;
-                            had_false = true;
-                            break; // Skip updating further indices
-                        }
-                    }
-
-                    if !had_false && !resized {
-                        // All choices with 1 have been taken, so abort.
-                        stop_condition = true;
-                    }
-                }
-
-                // Update the choice for the current index
-                last_index = index;
-
-                if choices[index as usize] == OptBool::None {
-                    // First time setting this index, it should be false
-                    choices[index as usize] = OptBool::False;
-                }
-
-                match choices[index as usize] {
-                    OptBool::False => true,
-                    OptBool::True => false,
-                    OptBool::None => unreachable!("Proper choice should have been set"),
-                }
-            })
-        {
-            if !first {
-                write!(f, "+")?;
+impl fmt::Display for FormatConfig<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for value in self.0 {
+            match value {
+                OptBool::True => write!(f, "1")?,
+                OptBool::False => write!(f, "0")?,
+                OptBool::None => write!(f, "-")?,
             }
-
-            for value in cube {
-                match value {
-                    OptBool::True => write!(f, "1")?,
-                    OptBool::False => write!(f, "0")?,
-                    OptBool::None => write!(f, "-")?,
-                }
-            }
-            first = false;
         }
 
         Ok(())
