@@ -1,18 +1,32 @@
-# Merc Project AI Coding Agent Instructions
+This is a Rust based repository that demonstrates efficient, correct and safe implementations of algorithms and data structures.
 
-## Project Overview
+## Development Workflows
 
-Merc stands for "**m**CRL2 **e**xcept **R**eliable & **C**oncurrent". The project demonstrates correct implementation using safe Rust with performance goals comparable to the C++ toolset.
+### Building & Testing
 
-- **Requires**: Rust 1.85.0+, 2024 edition
-- **License**: BSL-1.0
-- **Related**: Heavily inspired by [mCRL2](https://github.com/mCRL2org/mCRL2) (C++ implementation in `3rd-party/mCRL2/`)
+```bash
+# Standard build
+cargo build                    # Debug (dev) mode
+cargo build --release          # Release mode
 
-### Safety Philosophy
+# GUI tools (separate workspace)
+cd tools/gui && cargo build
 
-**Strict unsafe isolation**: Most crates use `#![forbid(unsafe_code)]`.
+# mCRL2 tools (separate workspace)
+cd tools/mCRL2 && cargo build
 
-**When you see `#![forbid(unsafe_code)]`**: Do NOT introduce unsafe without moving to appropriate crate
+# Testing
+cargo test                     # All tests
+cargo test -- --no-capture     # Show test output
+cargo test -p merc_sabre --lib # Single crate
+```
+
+### Formatting & Quality
+
+```bash
+# Format code (required before commit)
+cargo +nightly fmt
+```
 
 ## Third-Party Dependencies
 
@@ -62,26 +76,3 @@ Merc stands for "**m**CRL2 **e**xcept **R**eliable & **C**oncurrent". The projec
 - **`regex`**: Regular expressions (benchmarking, parsing)
 - **`serde`/`serde_json`**: Serialization (benchmark results, configs)
 
-## Development Workflows
-
-### Building & Testing
-
-```bash
-# Standard build
-cargo build                    # Debug (dev) mode
-cargo build --release          # Release mode
-
-# GUI tools (separate workspace)
-cd tools/gui && cargo build
-
-# Testing
-cargo test                     # All tests
-cargo test -- --no-capture     # Show test output
-cargo test -p merc_sabre --lib # Single crate
-```
-### Formatting & Quality
-
-```bash
-# Format code (required before commit)
-cargo +nightly fmt
-```
