@@ -186,8 +186,8 @@ impl FeatureTransitionSystem {
         }
     }
 
-    /// Returns the underlying labelled transition system.
-    pub fn feature_label(&self, label_index: usize) -> &BDDFunction {
+    /// Returns the feature label BDD for the given label index.
+    pub fn feature_label(&self, label_index: LabelIndex) -> &BDDFunction {
         &self.feature_labels[label_index]
     }
 
@@ -203,6 +203,11 @@ impl LTS for FeatureTransitionSystem {
         let (lts, initial_state) = self.lts.merge_disjoint(&other.lts);
         self.lts = lts;
         self.feature_labels.extend_from_slice(&other.feature_labels);
+
+        // The feature diagrams should be the same.
+        assert!(self.feature_diagram.variables == other.feature_diagram.variables);
+        assert!(self.feature_diagram.configuration == other.feature_diagram.configuration);
+
         (self, initial_state)
     }
 

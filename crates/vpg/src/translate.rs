@@ -1,13 +1,21 @@
+
+use log::trace;
+use merc_syntax::ActFrm;
+use merc_syntax::ActFrmBinaryOp;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
+use oxidd::BooleanFunction;
+
 use merc_lts::LTS;
 use merc_lts::StateIndex;
 use merc_syntax::FixedPointOperator;
 use merc_syntax::ModalityOperator;
+use merc_syntax::MultiAction;
+use merc_syntax::RegFrm;
 use merc_syntax::StateFrm;
 use merc_syntax::StateFrmOp;
 use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
 
 use crate::FeatureTransitionSystem;
 use crate::Player;
@@ -25,6 +33,9 @@ pub fn translate(
     let mut vertices: Vec<(Player, Priority)> = Vec::new();
     let mut edges: Vec<(VertexIndex, BDDFunction, VertexIndex)> = Vec::new();
 
+    // Parses all labels into MultiAction once
+    let parsed_labels: Result<Vec<MultiAction>, MercError> = fts.labels().iter().map(|label| MultiAction::parse(label)).collect();
+
     // Translate the initial vertex
     translate_vertex(
         &mut vertex_map,
@@ -32,6 +43,7 @@ pub fn translate(
         &mut edges,
         fts.initial_state_index(),
         fts,
+        &parsed_labels?,
         formula,
     )?;
 
@@ -56,6 +68,7 @@ pub fn translate_vertex<'a>(
     edges: &mut Vec<(VertexIndex, BDDFunction, VertexIndex)>,
     s: StateIndex,
     fts: &FeatureTransitionSystem,
+    parsed_labels: &Vec<MultiAction>,
     formula: &StateFrm,
 ) -> Result<VertexIndex, MercError> {
     let (index, inserted) = vertex_map.insert((s, formula.clone()));
@@ -73,6 +86,8 @@ pub fn translate_vertex<'a>(
         "Vertex indices should be assigned sequentially"
     );
 
+    trace!("Translating vertex ({}, {})", s, formula);
+
     match formula {
         StateFrm::True => {
             // (s, true) → odd, 0
@@ -85,19 +100,19 @@ pub fn translate_vertex<'a>(
         StateFrm::Binary { op, lhs, rhs } => {
             match op {
                 StateFrmOp::Conjunction => {
-                    // (s, Ψ_1 ∧ Ψ_2) → odd, (s, Ψ_1)|P and (s, Ψ_2)|P, 0
-                    vertices.push((Player::Even, Priority::new(0)));
-                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, lhs)?;
-                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, rhs)?;
+                    // (s, Ψ_1 ∧ Ψ_2) →_P odd, (s, Ψ_1) and (s, Ψ_2), 0
+                    vertices.push((Player::Odd, Priority::new(0)));
+                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, lhs)?;
+                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, rhs)?;
 
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_1));
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_2));
                 }
                 StateFrmOp::Disjunction => {
-                    // (s, Ψ_1 ∨ Ψ_2) → even, (s, Ψ_1)|P and (s, Ψ_2)|P, 0
-                    vertices.push((Player::Odd, Priority::new(0)));
-                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, lhs)?;
-                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, rhs)?;
+                    // (s, Ψ_1 ∨ Ψ_2) →_P even, (s, Ψ_1) and (s, Ψ_2), 0
+                    vertices.push((Player::Even, Priority::new(0)));
+                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, lhs)?;
+                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, rhs)?;
 
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_1));
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_2));
@@ -112,16 +127,16 @@ pub fn translate_vertex<'a>(
         } => {
             match operator {
                 FixedPointOperator::Least => {
-                    // (s, μ X. Ψ) → odd, (s, Ψ), 1
+                    // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 1
                     vertices.push((Player::Odd, Priority::new(1)));
 
-                    // (s, ν X. Ψ) → even, (s, Ψ), 2
                     let s_psi = translate_vertex(
                         vertex_map,
                         vertices,
                         edges,
                         s,
                         fts,
+                        parsed_labels,
                         &substitute(*body.clone(), &|subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
@@ -145,15 +160,16 @@ pub fn translate_vertex<'a>(
                     edges.push((vertex_index, fts.configuration().clone(), s_psi));
                 }
                 FixedPointOperator::Greatest => {
+                    // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2
                     vertices.push((Player::Even, Priority::new(2)));
 
-                    // (s, ν X. Ψ) → even, (s, Ψ), 2
                     let s_psi = translate_vertex(
                         vertex_map,
                         vertices,
                         edges,
                         s,
                         fts,
+                        parsed_labels,
                         &substitute(*body.clone(), &|subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
@@ -189,9 +205,15 @@ pub fn translate_vertex<'a>(
                     vertices.push((Player::Odd, Priority::new(0)));
 
                     for transition in fts.outgoing_transitions(s) {
-                        let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, expr)?;
+                        let action = &parsed_labels[*transition.label];
 
-                        edges.push((vertex_index, fts.configuration().clone(), s_prime_psi)); // TODO: Set proper configuration
+                        trace!("Matching action {} against formula {}", action, formula);
+
+                        if match_regular_formula(formula, &action)? {
+                            let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
+
+                            edges.push((vertex_index, fts.configuration().and(fts.feature_label(transition.label))?, s_prime_psi));
+                        }
                     }
                 }
                 ModalityOperator::Diamond => {
@@ -199,9 +221,13 @@ pub fn translate_vertex<'a>(
                     vertices.push((Player::Even, Priority::new(0)));
 
                     for transition in fts.outgoing_transitions(s) {
-                        let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, expr)?;
+                        let action = &parsed_labels[*transition.label];
 
-                        edges.push((vertex_index, fts.configuration().clone(), s_prime_psi));
+                        if match_regular_formula(formula, &action)? {
+                            let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
+
+                            edges.push((vertex_index, fts.configuration().and(fts.feature_label(transition.label))?, s_prime_psi));
+                        }
                     }
                 }
             }
@@ -216,96 +242,38 @@ pub fn translate_vertex<'a>(
     Ok(vertex_index)
 }
 
-
-
-/// Substitute state formula variables in a formula using the provided substitution function.
-fn substitute(formula: StateFrm, substitution: &impl Fn(&StateFrm) -> Option<StateFrm>) -> StateFrm {
-    if let Some(formula) = substitution(&formula) {
-        // A substitution was made, return the new formula.
-        return formula;
-    }
-
+/// Returns true iff the given action matches the regular formula.
+fn match_regular_formula(formula: &RegFrm, action: &MultiAction) -> Result<bool, MercError> {
     match formula {
-        StateFrm::Binary { op, lhs, rhs } => {
-            let new_lhs = substitute(*lhs, substitution);
-            let new_rhs = substitute(*rhs, substitution);
-            StateFrm::Binary {
-                op,
-                lhs: Box::new(new_lhs),
-                rhs: Box::new(new_rhs),
-            }
+        RegFrm::Action(action_formula) => {
+            match_action_formula(action_formula, action)            
+        },
+        RegFrm::Choice { lhs, rhs } => {
+            Ok(match_regular_formula(lhs, action)? || match_regular_formula(rhs, action)?)
         }
-        StateFrm::FixedPoint {
-            operator,
-            variable,
-            body,
-        } => {
-            let new_body = substitute(*body, substitution);
-            StateFrm::FixedPoint {
-                operator,
-                variable,
-                body: Box::new(new_body),
-            }
-        }
-        StateFrm::Bound { bound, variables, body } => {
-            let new_body = substitute(*body, substitution);
-            StateFrm::Bound {
-                bound,
-                variables,
-                body: Box::new(new_body),
-            }
-        }
-        StateFrm::Modality {
-            operator,
-            formula,
-            expr,
-        } => {
-            let expr = substitute(*expr, substitution);
-            StateFrm::Modality {
-                operator,
-                formula,
-                expr: Box::new(expr),
-            }
-        }
-        StateFrm::Quantifier {
-            quantifier,
-            variables,
-            body,
-        } => {
-            let new_body = substitute(*body, substitution);
-            StateFrm::Quantifier {
-                quantifier,
-                variables,
-                body: Box::new(new_body),
-            }
-        }
-        StateFrm::DataValExprRightMult(expr, data_val) => {
-            let new_expr = substitute(*expr, substitution);
-            StateFrm::DataValExprRightMult(Box::new(new_expr), data_val)
-        }
-        StateFrm::DataValExprLeftMult(data_val, expr) => {
-            let new_expr = substitute(*expr, substitution);
-            StateFrm::DataValExprLeftMult(data_val, Box::new(new_expr))
-        }
-        StateFrm::Unary { op, expr } => {
-            let new_expr = substitute(*expr, substitution);
-            StateFrm::Unary {
-                op,
-                expr: Box::new(new_expr),
-            }
-        }
-        StateFrm::Id(_, _)
-        | StateFrm::True
-        | StateFrm::False
-        | StateFrm::Delay(_)
-        | StateFrm::Yaled(_)
-        | StateFrm::DataValExpr(_) => formula,
+        _ => Err(format!("Cannot translate regular formula {}", formula).into()),
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_substitution_state_formulas() {}
+/// Returns true iff the given action matches the action formula.
+fn match_action_formula(formula: &ActFrm, action: &MultiAction) -> Result<bool, MercError> {
+    match formula {
+        ActFrm::True => Ok(true),
+        ActFrm::False => Ok(false),
+        ActFrm::MultAct(expected_action) => {
+            Ok(expected_action == action)
+        },
+        ActFrm::Binary { op, lhs, rhs } => {
+            match op {
+                ActFrmBinaryOp::Union => {
+                    Ok(match_action_formula(lhs, action)? || match_action_formula(rhs, action)?)
+                }
+                _ => Err(format!("Cannot translate binary opertor {}", formula).into()),
+            }
+        }
+        ActFrm::Negation(expr) => {
+            Ok(!match_action_formula(expr, action)?)
+        }
+        _ => Err(format!("Cannot translate action formula {}", formula).into()),
+    }
 }
