@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+mod cube_iter;
 mod feature_transition_system;
 mod io;
 mod io_pg;
@@ -20,6 +21,7 @@ mod variability_predecessors;
 mod variability_zielonka;
 mod zielonka;
 
+pub use cube_iter::*;
 pub use feature_transition_system::*;
 pub use io::*;
 pub use io_pg::*;
