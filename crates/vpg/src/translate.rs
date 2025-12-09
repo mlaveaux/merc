@@ -1,11 +1,12 @@
-
+use log::info;
 use log::trace;
 use merc_syntax::ActFrm;
 use merc_syntax::ActFrmBinaryOp;
+use merc_syntax::Action;
 use merc_syntax::visit;
+use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
-use oxidd::BooleanFunction;
 
 use merc_lts::LTS;
 use merc_lts::StateIndex;
@@ -35,7 +36,18 @@ pub fn translate(
     let mut edges: Vec<(VertexIndex, BDDFunction, VertexIndex)> = Vec::new();
 
     // Parses all labels into MultiAction once
-    let parsed_labels: Result<Vec<MultiAction>, MercError> = fts.labels().iter().map(|label| MultiAction::parse(label)).collect();
+    let parsed_labels: Result<Vec<MultiAction>, MercError> =
+        fts.labels().iter().map(|label| MultiAction::parse(label)).collect();
+
+    // Simplify the labels by stripping BDD information
+    let simplified_labels: Vec<MultiAction> = parsed_labels?
+        .iter()
+        .map(|ma| strip_feature_configuration_from_multi_action(ma))
+        .collect();
+
+    for label in &simplified_labels {
+        info!("label: {}", label);
+    }
 
     // Translate the initial vertex
     translate_vertex(
@@ -44,7 +56,7 @@ pub fn translate(
         &mut edges,
         fts.initial_state_index(),
         fts,
-        &parsed_labels?,
+        &simplified_labels,
         formula,
     )?;
 
@@ -118,7 +130,9 @@ pub fn translate_vertex<'a>(
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_1));
                     edges.push((vertex_index, fts.configuration().clone(), s_psi_2));
                 }
-                _ => return Err(format!("Cannot translate binary operator in {}", formula).into()),
+                _ => {
+                    unimplemented!("Cannot translate binary operator in {}", formula);
+                }
             }
         }
         StateFrm::FixedPoint {
@@ -128,8 +142,8 @@ pub fn translate_vertex<'a>(
         } => {
             match operator {
                 FixedPointOperator::Least => {
-                    // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 1
-                    vertices.push((Player::Odd, Priority::new(1)));
+                    // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1
+                    vertices.push((Player::Odd, Priority::new(2 * alternation_depth(body) / 2 + 1)));
 
                     let s_psi = translate_vertex(
                         vertex_map,
@@ -149,6 +163,16 @@ pub fn translate_vertex<'a>(
                                         return Ok(Some(formula.clone()));
                                     }
                                 }
+                                StateFrm::FixedPoint {
+                                    operator: _,
+                                    variable: inner_variable,
+                                    body: _,
+                                } => {
+                                    // Prevent capturing inner fixed-point variables with the same name
+                                    if variable.identifier == *inner_variable.identifier {
+                                        return Ok(Some(subformula.clone()));
+                                    }
+                                }
                                 _ => {
                                     // Do nothing
                                 }
@@ -161,8 +185,8 @@ pub fn translate_vertex<'a>(
                     edges.push((vertex_index, fts.configuration().clone(), s_psi));
                 }
                 FixedPointOperator::Greatest => {
-                    // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2
-                    vertices.push((Player::Even, Priority::new(2)));
+                    // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2 * floor(AD(Ψ)/2)
+                    vertices.push((Player::Even, Priority::new(2 * alternation_depth(body) / 2)));
 
                     let s_psi = translate_vertex(
                         vertex_map,
@@ -180,6 +204,16 @@ pub fn translate_vertex<'a>(
                                     );
                                     if variable.identifier == *name {
                                         return Ok(Some(formula.clone()));
+                                    }
+                                }
+                                StateFrm::FixedPoint {
+                                    operator: _,
+                                    variable: inner_variable,
+                                    body: _,
+                                } => {
+                                    // Prevent capturing inner fixed-point variables with the same name
+                                    if variable.identifier == *inner_variable.identifier {
+                                        return Ok(Some(subformula.clone()));
                                     }
                                 }
                                 _ => {
@@ -210,10 +244,15 @@ pub fn translate_vertex<'a>(
 
                         trace!("Matching action {} against formula {}", action, formula);
 
-                        if match_regular_formula(formula, &action)? {
-                            let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
+                        if match_regular_formula(formula, &action) {
+                            let s_prime_psi =
+                                translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
 
-                            edges.push((vertex_index, fts.configuration().and(fts.feature_label(transition.label))?, s_prime_psi));
+                            edges.push((
+                                vertex_index,
+                                fts.configuration().and(fts.feature_label(transition.label))?,
+                                s_prime_psi,
+                            ));
                         }
                     }
                 }
@@ -224,16 +263,23 @@ pub fn translate_vertex<'a>(
                     for transition in fts.outgoing_transitions(s) {
                         let action = &parsed_labels[*transition.label];
 
-                        if match_regular_formula(formula, &action)? {
-                            let s_prime_psi = translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
+                        if match_regular_formula(formula, &action) {
+                            let s_prime_psi =
+                                translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
 
-                            edges.push((vertex_index, fts.configuration().and(fts.feature_label(transition.label))?, s_prime_psi));
+                            edges.push((
+                                vertex_index,
+                                fts.configuration().and(fts.feature_label(transition.label))?,
+                                s_prime_psi,
+                            ));
                         }
                     }
                 }
             }
         }
-        _ => return Err(format!("Cannot translate formula {}", formula).into()),
+        _ => {
+            unimplemented!("Cannot translate formula {}", formula);
+        }
     }
 
     debug_assert!(
@@ -243,38 +289,70 @@ pub fn translate_vertex<'a>(
     Ok(vertex_index)
 }
 
+/// Removes the BDD information from the multi-action, i.e., only keeps the action labels.
+fn strip_feature_configuration_from_multi_action(multi_action: &MultiAction) -> MultiAction {
+    MultiAction {
+        actions: multi_action
+            .actions
+            .iter()
+            .map(|action| Action {
+                id: action.id.clone(),
+                args: Vec::new(),
+            })
+            .collect(),
+    }
+}
+
 /// Returns true iff the given action matches the regular formula.
-fn match_regular_formula(formula: &RegFrm, action: &MultiAction) -> Result<bool, MercError> {
+fn match_regular_formula(formula: &RegFrm, action: &MultiAction) -> bool {
     match formula {
-        RegFrm::Action(action_formula) => {
-            match_action_formula(action_formula, action)            
-        },
-        RegFrm::Choice { lhs, rhs } => {
-            Ok(match_regular_formula(lhs, action)? || match_regular_formula(rhs, action)?)
+        RegFrm::Action(action_formula) => match_action_formula(action_formula, action),
+        RegFrm::Choice { lhs, rhs } => match_regular_formula(lhs, action) || match_regular_formula(rhs, action),
+        _ => {
+            unimplemented!("Cannot translate regular formula {}", formula);
         }
-        _ => Err(format!("Cannot translate regular formula {}", formula).into()),
     }
 }
 
 /// Returns true iff the given action matches the action formula.
-fn match_action_formula(formula: &ActFrm, action: &MultiAction) -> Result<bool, MercError> {
+fn match_action_formula(formula: &ActFrm, action: &MultiAction) -> bool {
     match formula {
-        ActFrm::True => Ok(true),
-        ActFrm::False => Ok(false),
-        ActFrm::MultAct(expected_action) => {
-            Ok(expected_action == action)
-        },
-        ActFrm::Binary { op, lhs, rhs } => {
-            match op {
-                ActFrmBinaryOp::Union => {
-                    Ok(match_action_formula(lhs, action)? || match_action_formula(rhs, action)?)
-                }
-                _ => Err(format!("Cannot translate binary opertor {}", formula).into()),
+        ActFrm::True => true,
+        ActFrm::False => false,
+        ActFrm::MultAct(expected_action) => expected_action == action,
+        ActFrm::Binary { op, lhs, rhs } => match op {
+            ActFrmBinaryOp::Union => match_action_formula(lhs, action) || match_action_formula(rhs, action),
+            _ => {
+                unimplemented!("Cannot translate binary operator {}", formula);
             }
+        },
+        ActFrm::Negation(expr) => !match_action_formula(expr, action),
+        _ => {
+            unimplemented!("Cannot translate action formula {}", formula);
         }
-        ActFrm::Negation(expr) => {
-            Ok(!match_action_formula(expr, action)?)
+    }
+}
+
+/// Returns the alternation depth of the given state formula.
+fn alternation_depth(formula: &StateFrm) -> usize {
+    match formula {
+        StateFrm::FixedPoint { body, .. } => 1 + alternation_depth(body),
+        _ => {
+            unimplemented!("Cannot determine alternation depth of formula {}", formula)
         }
-        _ => Err(format!("Cannot translate action formula {}", formula).into()),
+    }
+}
+
+
+/// Returns the alternation depth of the given state formula.
+fn alternation_depth_rec(formula: &StateFrm, op: FixedPointOperator) -> usize {
+    match formula {
+        StateFrm::Id { .. } => 0,
+        StateFrm::FixedPoint { operator, body, .. } => (if *operator != op { 1 } else { 0 }) + alternation_depth(body),
+        StateFrm::Binary { lhs, rhs, .. } => alternation_depth(lhs).max(alternation_depth(rhs)),
+        StateFrm::Modality { expr, .. } => alternation_depth(expr),
+        _ => {
+            unimplemented!("Cannot determine alternation depth of formula {}", formula)
+        }
     }
 }

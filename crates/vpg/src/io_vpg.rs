@@ -295,8 +295,6 @@ impl fmt::Display for FormatConfigSet<'_> {
                 write!(f, "+")?;
             }
 
-            if !stop_condition {}
-
             for value in cube {
                 match value {
                     OptBool::True => write!(f, "1")?,
