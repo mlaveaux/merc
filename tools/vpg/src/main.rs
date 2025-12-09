@@ -150,13 +150,28 @@ fn main() -> Result<ExitCode, MercError> {
                 // Read a feature diagram and a feature transition system, encode it into a variability parity game, and write it to a new file.
                 let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
 
-                let mut feature_diagram_file = File::open(&args.feature_diagram_filename)?;
+                let mut feature_diagram_file = File::open(&args.feature_diagram_filename).map_err(|e| {
+                    MercError::from(format!(
+                        "Could not open feature diagram file '{}': {}",
+                        &args.feature_diagram_filename, e
+                    ))
+                })?;
                 let feature_diagram = FeatureDiagram::from_reader(&manager_ref, &mut feature_diagram_file)?;
 
-                let mut fts_file = File::open(&args.fts_filename)?;
+                let mut fts_file = File::open(&args.fts_filename).map_err(|e| {
+                    MercError::from(format!(
+                        "Could not open feature transition system file '{}': {}",
+                        &args.fts_filename, e
+                    ))
+                })?;
                 let fts = read_fts(&manager_ref, &mut fts_file, feature_diagram)?;
 
-                let formula_spec = UntypedStateFrmSpec::parse(&read_to_string(&args.formula_filename)?)?;
+                let formula_spec = UntypedStateFrmSpec::parse(&read_to_string(&args.formula_filename).map_err(|e| {
+                    MercError::from(format!(
+                        "Could not open formula file '{}': {}",
+                        &args.formula_filename, e
+                    ))
+                })?)?;
                 if !formula_spec.action_declarations.is_empty() {
                     return Err(MercError::from("The formula must declare at least one action."));
                 }
