@@ -2,6 +2,7 @@
 use log::trace;
 use merc_syntax::ActFrm;
 use merc_syntax::ActFrmBinaryOp;
+use merc_syntax::substitute;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::BooleanFunction;
