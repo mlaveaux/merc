@@ -2,7 +2,7 @@
 use log::trace;
 use merc_syntax::ActFrm;
 use merc_syntax::ActFrmBinaryOp;
-use merc_syntax::substitute;
+use merc_syntax::visit;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::BooleanFunction;
@@ -138,7 +138,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &substitute(*body.clone(), &|subformula| {
+                        &visit(*body.clone(), &|subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
@@ -171,7 +171,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &substitute(*body.clone(), &|subformula| {
+                        &visit(*body.clone(), &|subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
