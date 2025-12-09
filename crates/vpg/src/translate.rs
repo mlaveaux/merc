@@ -138,7 +138,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &visit(*body.clone(), &|subformula| {
+                        &visit(*body.clone(), |subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
@@ -146,7 +146,7 @@ pub fn translate_vertex<'a>(
                                         "State formula variables with arguments are not supported in VPG translation"
                                     );
                                     if variable.identifier == *name {
-                                        return Some(formula.clone());
+                                        return Ok(Some(formula.clone()));
                                     }
                                 }
                                 _ => {
@@ -154,8 +154,8 @@ pub fn translate_vertex<'a>(
                                 }
                             }
 
-                            None
-                        }),
+                            Ok(None)
+                        })?,
                     )?;
 
                     edges.push((vertex_index, fts.configuration().clone(), s_psi));
@@ -171,7 +171,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &visit(*body.clone(), &|subformula| {
+                        &visit(*body.clone(), |subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
@@ -179,7 +179,7 @@ pub fn translate_vertex<'a>(
                                         "State formula variables with arguments are not supported in VPG translation"
                                     );
                                     if variable.identifier == *name {
-                                        return Some(formula.clone());
+                                        return Ok(Some(formula.clone()));
                                     }
                                 }
                                 _ => {
@@ -187,8 +187,8 @@ pub fn translate_vertex<'a>(
                                 }
                             }
 
-                            None
-                        }),
+                            Ok(None)
+                        })?,
                     )?;
 
                     edges.push((vertex_index, fts.configuration().clone(), s_psi));
