@@ -1,5 +1,3 @@
-use log::trace;
-use merc_utilities::DisplayPair;
 use merc_utilities::MercError;
 use pest::Parser;
 use pest_consume::Error;
@@ -25,8 +23,6 @@ impl UntypedProcessSpecification {
     pub fn parse(spec: &str) -> Result<UntypedProcessSpecification, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::MCRL2Spec, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 specification");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
-
         Ok(Mcrl2Parser::MCRL2Spec(ParseNode::new(root))?)
     }
 }
@@ -36,7 +32,6 @@ impl UntypedDataSpecification {
     pub fn parse(spec: &str) -> Result<UntypedDataSpecification, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::DataSpec, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 data specification");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::DataSpec(ParseNode::new(root))?)
     }
@@ -46,7 +41,6 @@ impl DataExpr {
     pub fn parse(spec: &str) -> Result<DataExpr, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::DataExpr, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 data expression");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::DataExpr(ParseNode::new(root))?)
     }
@@ -56,7 +50,6 @@ impl MultiAction {
     pub fn parse(spec: &str) -> Result<MultiAction, MercError> {
         let mut result = Mcrl2Parser::parse(Rule::MultAct, spec).map_err(extend_parser_error)?;
         let root = result.next().expect("Could not parse mCRL2 multi-action");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::MultAct(ParseNode::new(root))?)
     }
@@ -68,7 +61,6 @@ impl UntypedStateFrmSpec {
         let root = result
             .next()
             .expect("Could not parse mCRL2 state formula specification");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::StateFrmSpec(ParseNode::new(root))?)
     }
@@ -80,7 +72,6 @@ impl UntypedActionRenameSpec {
         let root = result
             .next()
             .expect("Could not parse mCRL2 action rename specification");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::ActionRenameSpec(ParseNode::new(root))?)
     }
@@ -92,7 +83,6 @@ impl UntypedPbes {
         let root = result
             .next()
             .expect("Could not parse parameterised boolean equation system");
-        trace!("Parse tree {}", DisplayPair(root.clone()));
 
         Ok(Mcrl2Parser::PbesSpec(ParseNode::new(root))?)
     }
