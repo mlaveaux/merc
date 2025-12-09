@@ -36,7 +36,9 @@ use crate::VertexIndex;
 /// The format starts with a header, followed by the vertices
 ///
 /// parity <num_of_vertices>;
-/// `<index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;`
+/// `\<index\> \<priority\> \<owner\> \<outgoing_vertex\>,\<outgoing_vertex\>,...;`
+/// Each outgoing edge is represented as `\<\to>|\<configuration_set\>`. For the
+/// format of the configuration set see [parse_configuration_set]
 pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<VariabilityParityGame, MercError> {
     let mut lines = LineIterator::new(reader);
     lines.advance();
@@ -278,7 +280,7 @@ impl fmt::Display for FormatConfigSet<'_> {
                 last_index = index;
 
                 if choices[index as usize] == OptBool::None {
-                    // First time setting this index is should be false
+                    // First time setting this index, it should be false
                     choices[index as usize] = OptBool::False;
                 }
 
