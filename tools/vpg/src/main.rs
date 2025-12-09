@@ -173,7 +173,7 @@ fn main() -> Result<ExitCode, MercError> {
                     ))
                 })?)?;
                 if !formula_spec.action_declarations.is_empty() {
-                    return Err(MercError::from("The formula must declare at least one action."));
+                    return Err(MercError::from("We do not support formulas with action declarations."));
                 }
 
                 if !formula_spec.data_specification.is_empty() {
