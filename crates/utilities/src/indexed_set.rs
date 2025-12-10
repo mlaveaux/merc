@@ -125,7 +125,7 @@ impl<T, S> IndexedSet<T, S> {
 }
 
 impl<T: Clone, S> IndexedSet<T, S> {
-    /// Returns a vector cpmtaining all elements of this indexed set.
+    /// Returns a vector containing all elements of this indexed set.
     pub fn to_vec(&self) -> Vec<T> {
         self.iter().map(|(_, entry)| entry.clone()).collect()
     }
