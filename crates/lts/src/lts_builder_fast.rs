@@ -5,7 +5,7 @@ use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
 
-/// This is the same as [LtsBuilder], but optimized for speed rather than memory usage.
+/// This is the same as [`crate::LtsBuilder`], but optimized for speed rather than memory usage.
 /// So it does not use the byte compression for the transitions since somehow permuting and
 /// sorting these take a long time (probably due to cache misses).
 ///

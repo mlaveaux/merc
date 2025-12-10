@@ -58,7 +58,7 @@ impl fmt::Debug for DataPosition {
     }
 }
 
-/// A specialisation of the [PositionIndexed] trait for [DataExpression]. This is used to keep the indexing consistent.
+/// A specialisation of the [`crate::PositionIndexed`] trait for [DataExpression]. This is used to keep the indexing consistent.
 pub trait DataPositionIndexed<'b> {
     type Target<'a>
     where
