@@ -1,5 +1,7 @@
 name: "Copilot Setup Steps"
 
+permissions:
+  contents: read
 
 on:  
   workflow_dispatch:
@@ -10,17 +12,10 @@ on:
     paths:
       - .github/workflows/copilot-setup-steps.yml
 
-
-env:
-  CARGO_TERM_COLOR: always
-  SCCACHE_GHA_ENABLED: on
-
 jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
 
-  permissions:
-    contents: read
 
   steps:
     - name: Install Ubuntu Dependencies
