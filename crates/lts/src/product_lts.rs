@@ -98,7 +98,7 @@ pub fn product_lts(left: &impl LTS, right: &impl LTS) -> LabelledTransitionSyste
                 continue;
             }
 
-            // (left, right) -[a]-> (left', right) iff left -[a]->right and a is not a synchronous action.
+            // (left, right) -[a]-> (left, right') iff right -[a]-> right' and a is not a synchronous action.
             let (right_index, inserted) = discovered_states.insert((left_state, right_transition.to));
 
             let label_index = LabelIndex::new(

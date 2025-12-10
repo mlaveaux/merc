@@ -40,8 +40,11 @@ impl SimpleBlockPartition {
 
     /// Splits a block into two blocks according to the given predicate. If the
     /// predicate holds for all or none of the elements, no split occurs.
-    pub fn split_block(&mut self, block_index: BlockIndex, predicate: impl Fn(StateIndex) -> bool) -> Option<BlockIndex>{
-
+    pub fn split_block(
+        &mut self,
+        block_index: BlockIndex,
+        predicate: impl Fn(StateIndex) -> bool,
+    ) -> Option<BlockIndex> {
         // Size of the new block.
         let mut size = 0usize;
 
@@ -66,12 +69,17 @@ impl SimpleBlockPartition {
         // Update the original block
         self.blocks[block_index].end = self.blocks[block_index].begin + size;
         self.blocks[block_index].stable = false;
-        
-        trace!("Split block {:?} into blocks {:?} and {:?}", block_index, block_index, BlockIndex::new(last_block));
+
+        trace!(
+            "Split block {:?} into blocks {:?} and {:?}",
+            block_index,
+            block_index,
+            BlockIndex::new(last_block)
+        );
         Some(BlockIndex::new(last_block))
     }
 
-    // Returns the number of blocks in the partition.
+    /// Returns the number of blocks in the partition.
     pub fn num_of_blocks(&self) -> usize {
         self.blocks.len()
     }
@@ -211,5 +219,28 @@ impl Iterator for SimpleBlockIter<'_> {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_block_partition() {
+        let mut partition = SimpleBlockPartition::new(10);
+
+        assert_eq!(partition.num_of_blocks(), 1);
+
+        let initial_block = BlockIndex::new(0);
+        assert_eq!(partition.block(initial_block).len(), 10);
+
+        let block_index = partition
+            .split_block(BlockIndex::new(0), |state| *state < *StateIndex::new(5))
+            .unwrap();
+
+        assert_eq!(partition.num_of_blocks(), 2);
+        assert_eq!(partition.block(initial_block).len(), 5);
+        assert_eq!(partition.block(block_index).len(), 5);
     }
 }
