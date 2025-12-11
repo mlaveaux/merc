@@ -20,8 +20,9 @@ pub type LabelIndex = TagIndex<usize, LabelTag>;
 /// The index for a state.
 pub type StateIndex = TagIndex<usize, StateTag>;
 
-pub trait LTS 
-    where Self: Sized
+pub trait LTS
+where
+    Self: Sized,
 {
     /// Returns the index of the initial state
     fn initial_state_index(&self) -> StateIndex;

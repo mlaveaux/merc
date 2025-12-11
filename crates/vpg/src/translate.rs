@@ -386,7 +386,8 @@ mod tests {
 
     use merc_syntax::UntypedStateFrmSpec;
 
-    use crate::{FeatureDiagram, read_fts};
+    use crate::FeatureDiagram;
+    use crate::read_fts;
 
     use super::*;
 
@@ -412,8 +413,15 @@ mod tests {
 
         let fd = FeatureDiagram::from_reader(
             &manager_ref,
-            include_bytes!("../../../examples/vpg/running_example.fd") as &[u8]).unwrap();
-        let fts = read_fts(&manager_ref, include_bytes!("../../../examples/vpg/running_example_fts.aut") as &[u8], fd).unwrap();
+            include_bytes!("../../../examples/vpg/running_example.fd") as &[u8],
+        )
+        .unwrap();
+        let fts = read_fts(
+            &manager_ref,
+            include_bytes!("../../../examples/vpg/running_example_fts.aut") as &[u8],
+            fd,
+        )
+        .unwrap();
 
         let formula = UntypedStateFrmSpec::parse(include_str!("../../../examples/vpg/running_example.mcf")).unwrap();
 

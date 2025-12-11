@@ -410,10 +410,11 @@ impl fmt::Debug for Submap {
 
 #[cfg(test)]
 mod tests {
+    use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
+    use oxidd::bdd::BDDFunction;
     use oxidd::util::AllocResult;
-    use oxidd::{BooleanFunction, bdd::BDDFunction};
 
     use crate::VertexIndex;
 

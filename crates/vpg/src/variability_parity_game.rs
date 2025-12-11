@@ -49,14 +49,18 @@ impl<'a> Edge<'a> {
 
 impl VariabilityParityGame {
     /// Construct a new variability parity game from an iterator over transitions.
-    pub fn new(parity_game: ParityGame, configuration: BDDFunction, variables: Vec<BDDFunction>, edges_configuration: Vec<BDDFunction>) -> Self {
+    pub fn new(
+        parity_game: ParityGame,
+        configuration: BDDFunction,
+        variables: Vec<BDDFunction>,
+        edges_configuration: Vec<BDDFunction>,
+    ) -> Self {
         // Check that the sizes are consistent
         debug_assert_eq!(
             edges_configuration.len(),
             parity_game.num_of_edges(),
             "There should be a configuration BDD for every transition"
         );
-
 
         Self {
             game: parity_game,

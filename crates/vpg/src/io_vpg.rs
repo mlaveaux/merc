@@ -156,7 +156,6 @@ fn parse_configuration(manager: &BDDManagerRef, config: &str) -> Result<(Vec<BDD
                 .map(|i| BDDFunction::var(manager, i))
                 .collect::<Result<Vec<_>, _>>()
         })?;
-        
 
         let configuration = parse_configuration_set(manager, &variables, config)?;
         return Ok((variables, configuration));

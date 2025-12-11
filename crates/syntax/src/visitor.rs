@@ -122,7 +122,8 @@ mod tests {
             }
 
             Ok(None)
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(variables, vec!["X", "X", "Y"]);
     }

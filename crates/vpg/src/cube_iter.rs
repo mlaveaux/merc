@@ -1,6 +1,7 @@
 use merc_utilities::MercError;
 use oxidd::BooleanFunction;
-use oxidd::{bdd::BDDFunction, util::OptBool};
+use oxidd::bdd::BDDFunction;
+use oxidd::util::OptBool;
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
 pub struct CubeIter<'a> {
