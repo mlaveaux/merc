@@ -209,7 +209,11 @@ impl LTS for FeatureTransitionSystem {
         self.lts = lts;
         self.feature_labels.extend_from_slice(&other.feature_labels);
 
-        // The feature diagrams should be the same.
+        // The feature diagrams must be identical when merging disjoint FTSs.
+        // This is because the feature labels and configurations are defined
+        // with respect to the same set of features and constraints. Merging
+        // FTSs with different feature diagrams would result in an inconsistent
+        // or ill-defined system.
         assert!(self.feature_diagram.variables == other.feature_diagram.variables);
         assert!(self.feature_diagram.configuration == other.feature_diagram.configuration);
 

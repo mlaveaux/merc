@@ -130,7 +130,7 @@ impl Iterator for CubeIterAll<'_> {
             let mut tmp = self.bdd.clone();
             for (index, value) in self.cube.iter().enumerate() {
                 if *value == OptBool::True {
-                    tmp = match self.bdd.and(&self.variables[index]) {
+                    tmp = match tmp.and(&self.variables[index]) {
                         Ok(val) => val,
                         Err(e) => return Some(Err(e.into())),
                     };
@@ -139,7 +139,7 @@ impl Iterator for CubeIterAll<'_> {
                         Ok(val) => val,
                         Err(e) => return Some(Err(e.into())),
                     };
-                    tmp = match self.bdd.and(&not_var) {
+                    tmp = match tmp.and(&not_var) {
                         Ok(val) => val,
                         Err(e) => return Some(Err(e.into())),
                     };
