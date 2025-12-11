@@ -438,7 +438,7 @@ impl PbesExpression {
     }
 }
 
+/// Replace variables in the given PBES expression according to the given substitution sigma.
 pub fn replace_variables(expr: &PbesExpression, sigma: Vec<(Aterm, Aterm)>) -> PbesExpression {
-    let replaced_term = mcrl2_replace_variables(expr.term.get(), sigma_closure);
-    PbesExpression::new(Aterm::new(replaced_term))
+    PbesExpression::new(Aterm::new(mcrl2_pbes_expression_replace_variables(expr.term.get(), sigma)))
 }
