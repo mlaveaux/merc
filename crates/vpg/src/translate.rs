@@ -386,6 +386,8 @@ mod tests {
 
     use merc_syntax::UntypedStateFrmSpec;
 
+    use crate::{FeatureDiagram, read_fts};
+
     use super::*;
 
     #[test]
@@ -402,5 +404,19 @@ mod tests {
             alternation_depth(&UntypedStateFrmSpec::parse("nu X. mu Z. X && Z").unwrap().formula),
             2
         );
+    }
+
+    #[test]
+    fn test_running_example() {
+        let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+
+        let fd = FeatureDiagram::from_reader(
+            &manager_ref,
+            include_bytes!("../../../examples/vpg/running_example.fd") as &[u8]).unwrap();
+        let fts = read_fts(&manager_ref, include_bytes!("../../../examples/vpg/running_example_fts.aut") as &[u8], fd).unwrap();
+
+        let formula = UntypedStateFrmSpec::parse(include_str!("../../../examples/vpg/running_example.mcf")).unwrap();
+
+        let _vpg = translate(&manager_ref, &fts, &formula.formula).unwrap();
     }
 }
