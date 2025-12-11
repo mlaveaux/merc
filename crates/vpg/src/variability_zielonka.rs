@@ -44,23 +44,7 @@ pub fn solve_variability_zielonka(
 
     let W = zielonka.solve_recursive(V)?;
 
-    // Check that the result is a valid partition
-    if cfg!(debug_assertions) {
-        for v in game.iter_vertices() {
-            let tmp = W[0][v].or(&W[1][v])?;
-
-            // The union of both solutions should be the entire set of vertices.
-            debug_assert!(
-                tmp == manager_ref.with_manager_shared(|manager| {
-                    if alternative_solving {
-                        BDDFunction::t(manager)
-                    } else {
-                        game.configuration().clone()
-                    }
-                })
-            );
-        }
-    }
+    zielonka.check_partity(&W)?;
 
     Ok(W)
 }
@@ -171,6 +155,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             omega_prime[not_x.to_index()].clear();
             // 20. return (omega_0, omega_1)
             debug!("return (omega'_0, omega'_1)");
+            self.check_partity(&omega_prime)?;
             return Ok(omega_prime);
         }
 
@@ -187,7 +172,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         omega_double_prime[not_x.to_index()] = omega_prime_opponent.or(&beta)?;
 
         // 20. return (omega_0, omega_1)
-
+        self.check_partity(&omega_double_prime)?;
         Ok(omega_double_prime)
     }
 
@@ -266,6 +251,34 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         }
 
         (Priority::new(highest), Priority::new(lowest))
+    }
+
+    fn check_partity(&self, W: &[Submap; 2]) -> Result<(), MercError> {
+        // Check that the result is a valid partition
+        if cfg!(debug_assertions) {
+            for v in self.game.iter_vertices() {
+                let tmp = W[0][v].or(&W[1][v])?;
+
+                // The union of both solutions should be the entire set of vertices.
+                debug_assert!(
+                    tmp == self.manager_ref.with_manager_shared(|manager| {
+                        if self.alternative_solving {
+                            BDDFunction::t(manager)
+                        } else {
+                            self.game.configuration().clone()
+                        }
+                    }),
+                    "The union of both solutions should be the entire set of vertices, but vertex {v} is missing."
+                );
+
+                debug_assert!(
+                    W[0][v].and(&W[1][v])?.satisfiable() == false,
+                    "The intersection of both solutions should be empty, but vertex {v} has non-empty intersection."
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
