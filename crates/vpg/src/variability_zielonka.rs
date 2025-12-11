@@ -44,7 +44,7 @@ pub fn solve_variability_zielonka(
 
     let W = zielonka.solve_recursive(V)?;
 
-    zielonka.check_partity(&W)?;
+    zielonka.check_partition(&W)?;
 
     Ok(W)
 }
@@ -155,7 +155,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             omega_prime[not_x.to_index()].clear();
             // 20. return (omega_0, omega_1)
             debug!("return (omega'_0, omega'_1)");
-            self.check_partity(&omega_prime)?;
+            self.check_partition(&omega_prime)?;
             return Ok(omega_prime);
         }
 
@@ -172,7 +172,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         omega_double_prime[not_x.to_index()] = omega_prime_opponent.or(&beta)?;
 
         // 20. return (omega_0, omega_1)
-        self.check_partity(&omega_double_prime)?;
+        self.check_partition(&omega_double_prime)?;
         Ok(omega_double_prime)
     }
 
@@ -253,7 +253,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         (Priority::new(highest), Priority::new(lowest))
     }
 
-    fn check_partity(&self, W: &[Submap; 2]) -> Result<(), MercError> {
+    fn check_partition(&self, W: &[Submap; 2]) -> Result<(), MercError> {
         // Check that the result is a valid partition
         if cfg!(debug_assertions) {
             for v in self.game.iter_vertices() {
@@ -272,7 +272,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                 );
 
                 debug_assert!(
-                    W[0][v].and(&W[1][v])?.satisfiable() == false,
+                    !W[0][v].and(&W[1][v])?.satisfiable(),
                     "The intersection of both solutions should be empty, but vertex {v} has non-empty intersection."
                 );
             }
