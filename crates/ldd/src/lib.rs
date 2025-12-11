@@ -38,11 +38,10 @@ mod io_ldd;
 pub mod iterators;
 mod operations;
 mod storage;
-
-#[cfg(test)]
 mod test_utility;
 
 pub use format::*;
 pub use io_ldd::*;
 pub use operations::*;
 pub use storage::*;
+pub use test_utility::*;
