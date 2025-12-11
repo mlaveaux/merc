@@ -1,5 +1,6 @@
-use oxidd::{bdd::BDDFunction, util::OptBool};
+use merc_utilities::MercError;
 use oxidd::BooleanFunction;
+use oxidd::{bdd::BDDFunction, util::OptBool};
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
 pub struct CubeIter<'a> {
@@ -84,7 +85,7 @@ impl Iterator for CubeIter<'_> {
                 OptBool::None => unreachable!("Proper choice should have been set"),
             }
         });
-    
+
         // Check if all choices are None, then we are also done (since the
         // choice function is not called and the set is the universe) we must
         // deal with it here.
@@ -93,5 +94,75 @@ impl Iterator for CubeIter<'_> {
         }
 
         cube
+    }
+}
+
+/// The same as [CubeIter], but iterates over all satisfying assignments without
+/// considering don't care values. For the universe BDD, the [CubeIter] yields only
+/// one cube with all don't cares, while this iterator yields all possible cubes.
+pub struct CubeIterAll<'a> {
+    bdd: &'a BDDFunction,
+
+    cube: Vec<OptBool>,
+
+    variables: &'a Vec<BDDFunction>,
+}
+
+impl<'a> CubeIterAll<'a> {
+    /// Creates a new cube iterator that iterates over the single cube
+    pub fn new(variables: &'a Vec<BDDFunction>, bdd: &'a BDDFunction) -> CubeIterAll<'a> {
+        let cube = Vec::from_iter((0..variables.len()).map(|_| OptBool::False));
+        Self { bdd, cube, variables }
+    }
+}
+
+impl Iterator for CubeIterAll<'_> {
+    type Item = Result<(Vec<OptBool>, BDDFunction), MercError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cube.iter().all(|x| *x == OptBool::True) {
+            // All variables are true, we are done
+            return None;
+        }
+
+        loop {
+            let mut tmp = self.bdd.clone();
+            for (index, value) in self.cube.iter().enumerate() {
+                if *value == OptBool::True {
+                    tmp = match self.bdd.and(&self.variables[index]) {
+                        Ok(val) => val,
+                        Err(e) => return Some(Err(e.into())),
+                    };
+                } else {
+                    let not_var = match self.variables[index].not() {
+                        Ok(val) => val,
+                        Err(e) => return Some(Err(e.into())),
+                    };
+                    tmp = match self.bdd.and(&not_var) {
+                        Ok(val) => val,
+                        Err(e) => return Some(Err(e.into())),
+                    };
+                }
+
+                if !tmp.satisfiable() {
+                    // This cube is not satisfying, try the next one
+                    break;
+                }
+            }
+
+            if tmp.satisfiable() {
+                for value in self.cube.iter_mut() {
+                    // Set each variable to true until we find one that is false
+                    if *value == OptBool::False {
+                        *value = OptBool::True;
+                        break;
+                    }
+
+                    *value = OptBool::False;
+                }
+
+                return Some(Ok((self.cube.clone(), tmp)));
+            }
+        }
     }
 }
