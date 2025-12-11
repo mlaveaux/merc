@@ -21,16 +21,17 @@ use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_to_string;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equations;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_to_pbes;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_unify_parameters;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_equation_predicate_variables;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_cfgs;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_equations;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_run;
-use mcrl2_sys::pbes::ffi::mcrl2_unify_parameters;
 use mcrl2_sys::pbes::ffi::pbes;
 use mcrl2_sys::pbes::ffi::predicate_variable;
 use mcrl2_sys::pbes::ffi::srf_equation;
 use mcrl2_sys::pbes::ffi::srf_pbes;
+use mcrl2_sys::pbes::ffi::srf_summand;
 use mcrl2_sys::pbes::ffi::stategraph_algorithm;
 use mcrl2_sys::pbes::ffi::stategraph_equation;
 use merc_utilities::MercError;
@@ -71,9 +72,7 @@ impl Pbes {
 
     /// Returns the data specification of the PBES.
     pub fn data_specification(&self) -> DataSpecification {
-        DataSpecification::new(
-            mcrl2_pbes_data_specification(&self.pbes),
-        )
+        DataSpecification::new(mcrl2_pbes_data_specification(&self.pbes))
     }
 
     pub(crate) fn new(pbes: UniquePtr<pbes>) -> Self {
@@ -249,12 +248,16 @@ impl PredicateVariable {
 
     /// Creates a new `PredicateVariable` from the given FFI variable pointer.
     pub(crate) fn new(variable: *const predicate_variable) -> Self {
-        PredicateVariable { _variable: variable, used: unsafe { mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_used(
-                variable.as_ref().expect("Pointer should be valid"),
-            )}, 
-            changed: unsafe {mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_changed(
-                variable.as_ref().expect("Pointer should be valid"),
-            )}
+        PredicateVariable {
+            _variable: variable,
+            used: unsafe {
+                mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_used(variable.as_ref().expect("Pointer should be valid"))
+            },
+            changed: unsafe {
+                mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_changed(
+                    variable.as_ref().expect("Pointer should be valid"),
+                )
+            },
         }
     }
 }
@@ -322,7 +325,7 @@ impl SrfPbes {
 
     /// Unify all parameters of the equations.
     pub fn unify_parameters(&mut self, ignore_ce_equations: bool, reset: bool) -> Result<(), MercError> {
-        mcrl2_unify_parameters(self.srf_pbes.pin_mut(), ignore_ce_equations, reset);
+        mcrl2_srf_pbes_unify_parameters(self.srf_pbes.pin_mut(), ignore_ce_equations, reset);
         Ok(())
     }
 
@@ -335,6 +338,9 @@ impl SrfPbes {
 /// mcrl2::pbes_system::srf_equation
 pub struct SrfEquation {
     equation: *const srf_equation,
+
+    summands: Vec<SrfSummand>,
+    summands_ffi: Vec<srf_summand>,
 }
 
 impl SrfEquation {
@@ -343,9 +349,51 @@ impl SrfEquation {
         PropositionalVariable::new(Aterm::new(unsafe { mcrl2_srf_pbes_equation_variable(self.equation) }))
     }
 
-    /// Creates a new `SrfEquation` from the given FFI equation pointer.
+    /// Returns the summands of the equation.
+    pub fn summands(&self) -> &Vec<SrfSummand> {
+        &self.summands
+    }
+
+    /// Creates a new [`SrfEquation`] from the given FFI equation pointer.
     pub(crate) fn new(equation: *const srf_equation) -> Self {
-        SrfEquation { equation }
+        let mut summands_ffi = CxxVector::new();
+        mcrl2_srf_equations_summands(summands_ffi.pin_mut(), unsafe {
+            equation.as_ref().expect("Pointer should be valid")
+        });
+        let summands = summands_ffi.iter().map(|s| SrfSummand { summand: s }).collect();
+
+        SrfEquation {
+            equation,
+            summands_ffi,
+            summands,
+        }
+    }
+}
+
+/// mcrl2::pbes_system::srf_summand
+pub struct SrfSummand {
+    summand: *const srf_summand,
+}
+
+impl SrfSummand {
+
+    /// Returns the condition of the summand.
+    pub fn condition(&self) -> PbesExpression {
+        PbesExpression::new(Aterm::new(unsafe {
+            mcrl2_sys::pbes::ffi::mcrl2_srf_summand_condition(self.summand)
+        }))
+    }
+
+    /// Returns the variable of the summand.
+    pub fn variable(&self) -> PbesExpression {
+        PbesExpression::new(Aterm::new(unsafe {
+            mcrl2_sys::pbes::ffi::mcrl2_srf_summand_variable(self.summand)
+        }))
+    }
+
+    /// Creates a new [`SrfSummand`] from the given FFI summand pointer.
+    pub(crate) fn new(summand: *const srf_summand) -> Self {
+        SrfSummand { summand }
     }
 }
 
@@ -376,4 +424,21 @@ impl fmt::Debug for PropositionalVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", mcrl2_propositional_variable_to_string(self.term.get()))
     }
+}
+
+/// mcrl2::pbes_system::pbes_expression
+pub struct PbesExpression {
+    term: Aterm,
+}
+
+impl PbesExpression {
+    /// Creates a new [PbesExpression] from the given term.
+    pub(crate) fn new(term: Aterm) -> Self {
+        PbesExpression { term }
+    }
+}
+
+pub fn replace_variables(expr: &PbesExpression, sigma: Vec<(Aterm, Aterm)>) -> PbesExpression {
+    let replaced_term = mcrl2_replace_variables(expr.term.get(), sigma_closure);
+    PbesExpression::new(Aterm::new(replaced_term))
 }
