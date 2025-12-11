@@ -138,8 +138,8 @@ impl SymmetryAlgorithm {
                 for other_equation in self.srf.equations() {
                     for other_summand in other_equation.summands() {
                         if equation.variable().name() == other_equation.variable().name()
-                            && apply_permutation(summand.condition(), self.parameters, pi) == other_summand.condition()
-                            && apply_permutation(summand.variable(), self.parameters, pi) == other_summand.variable()
+                            && apply_permutation(summand.condition(), &self.parameters, &pi) == other_summand.condition()
+                            && apply_permutation(summand.variable(), &self.parameters, &pi) == other_summand.variable()
                         {
                             matched = true;
                             break;
@@ -153,7 +153,7 @@ impl SymmetryAlgorithm {
 
                 if !matched {
                     info!(
-                        "No matching summand found for summand in equation {}.",
+                        "No matching summand found for summand in equation {:?}.",
                         equation.variable().name()
                     );
                     return false;
@@ -437,8 +437,8 @@ impl SymmetryAlgorithm {
             let result = remaining_j.iter().find(|&&j| {
                 let variable_prime = &equation.predicate_variables()[j];
 
-                self.equal_under_permutation(pi, &variable.changed(), &variable_prime.changed())
-                    && self.equal_under_permutation(pi, &variable.used(), &variable_prime.used())
+                self.equal_under_permutation(pi, &variable.changed(), &variable_prime.changed()).is_ok()
+                    && self.equal_under_permutation(pi, &variable.used(), &variable_prime.used()).is_ok()
             });
 
             if let Some(x) = result {
@@ -558,18 +558,18 @@ fn variable_index(cfg: &ControlFlowGraph) -> usize {
 }
 
 fn apply_permutation(expression: &PbesExpression, parameters: &Vec<DataVariable>, pi: &Permutation) -> PbesExpression {
-    let sigma = (0..parameters.len())
+    let sigma: Vec<(DataVariable, DataVariable)> = (0..parameters.len())
         .map(|i| {
             let var = &parameters[i];
             let permuted_var = &parameters[pi.value(i)];
 
             (var.clone(), permuted_var.clone())
         })
-        .collect::<Vec<(ATerm, ATerm)>>();
+        .collect();
 
-    let result = replace_variables(expression, sigma);
+    // let result = replace_variables(expression, sigma);
 
-    replace_propositional_variables(&result, pi, parameters)
+    // replace_propositional_variables(&result, pi, parameters)
 }
 
 #[cfg(test)]
