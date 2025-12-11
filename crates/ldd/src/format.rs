@@ -1,16 +1,18 @@
-use crate::Data;
-use crate::Ldd;
-use crate::Storage;
-use crate::iterators::*;
-
 use std::collections::HashSet;
 use std::fmt;
 use std::io;
 use std::io::Write;
 
+use itertools::Itertools;
+
+use crate::Data;
+use crate::Ldd;
+use crate::Storage;
+use crate::iterators::*;
+
 /// Print the vector set represented by the LDD.
-pub fn fmt_node<'a>(storage: &'a Storage, ldd: &Ldd) -> Display<'a> {
-    Display {
+pub fn fmt_node<'a>(storage: &'a Storage, ldd: &Ldd) -> LddDisplay<'a> {
+    LddDisplay {
         storage,
         ldd: ldd.clone(),
     }
@@ -47,12 +49,12 @@ edge [dir = forward];
     writeln!(f, "}}")
 }
 
-pub struct Display<'a> {
+pub struct LddDisplay<'a> {
     storage: &'a Storage,
     ldd: Ldd,
 }
 
-impl fmt::Display for Display<'_> {
+impl fmt::Display for LddDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{{")?;
         print(self.storage, &self.ldd, f)?;
@@ -63,11 +65,7 @@ impl fmt::Display for Display<'_> {
 /// Print the vector set represented by the LDD.
 fn print(storage: &Storage, ldd: &Ldd, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for vector in iter(storage, ldd) {
-        write!(f, "<")?;
-        for val in vector {
-            write!(f, "{val} ")?;
-        }
-        writeln!(f, ">")?;
+        writeln!(f, "[{}]", vector.iter().format(" "))?;
     }
 
     Ok(())

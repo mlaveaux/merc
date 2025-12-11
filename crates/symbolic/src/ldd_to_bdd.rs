@@ -52,56 +52,68 @@ fn ldd_to_bdd(
 }
 
 /// Computes the highest value for every layer in the LDD
-fn compute_highest(storage: &mut Storage, ldd: &Ldd) -> Vec<usize> {
+fn compute_highest(storage: &mut Storage, ldd: &Ldd) -> Vec<u32> {
     let mut result = vec![0; height(storage, ldd)];
     compute_highest_rec(storage, &mut result, ldd, 0);
     result
 }
 
 /// Helper function for compute_highest
-fn compute_highest_rec(storage: &mut Storage, result: &mut Vec<usize>, set: &LddRef<'_>, index: usize) {
+fn compute_highest_rec(storage: &mut Storage, result: &mut Vec<u32>, set: &LddRef<'_>, depth: usize) {
     if set == storage.empty_set() || set == storage.empty_vector() {
         return;
     }
 
-    let DataRef(value, right, down) = storage.get_ref(set);
-    compute_highest_rec(storage, result, &right, index);
-    compute_highest_rec(storage, result, &down, index + 1);
+    let DataRef(value, down, right) = storage.get_ref(set);
+    compute_highest_rec(storage, result, &right, depth);
+    compute_highest_rec(storage, result, &down, depth + 1);
 
-    result[index] = result[index].max(value as usize + 1);
+    result[depth] = result[depth].max(value);
 }
 
 /// Computes the number of bits required to represent each element in the vector
-fn compute_bits(highest: &Vec<usize>) -> Vec<usize> {
+fn compute_bits(highest: &Vec<u32>) -> Vec<u32> {
     highest
         .iter()
-        .map(|&h| (usize::BITS - h.leading_zeros()) as usize)
+        .map(|&h| (u32::BITS - h.leading_zeros()) as u32)
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use merc_ldd::{from_iter, random_vector_set};
+    use merc_ldd::{fmt_node, from_iter, random_vector_set};
     use merc_utilities::random_test;
 
     use super::*;
 
     #[test]
-    fn test_random_ldd_to_bdd() {
-
+    fn test_random_compute_highest() {
         random_test(100, |rng| {
             let set = random_vector_set(rng, 4, 3, 5);
-
             let mut storage = Storage::new();
             let ldd = from_iter(&mut storage, set.iter());
+            println!("LDD: {}", fmt_node(&storage, &ldd));
 
             let highest = compute_highest(&mut storage, &ldd);
+            println!("Highest: {:?}", highest);
             for (i, h) in highest.iter().enumerate() {
 
                 // Determine the heighest value for every vector
                 for value in set.iter() {
-                    assert!(*h > value[i] as usize, "The highest value for layer {} is {}, but vector has value {}", i, h, value[i]);
+                    assert!(*h >= value[i], "The highest value for depth {} is {}, but vector has value {}", i, h, value[i]);
                 }
+            }
+
+            let bits = compute_bits(&highest);
+            println!("Bits: {:?}", bits);
+
+            for (i, b) in bits.iter().enumerate() {
+                let expected_bits = if highest[i] == 0 {
+                    0
+                } else {
+                    (u32::BITS - highest[i].leading_zeros())
+                };
+                assert_eq!(*b, expected_bits, "The number of bits for depth {} is {}, but expected {}", i, b, expected_bits);
             }
         })        
     }

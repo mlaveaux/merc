@@ -6,8 +6,8 @@
 
 mod symbolic_lts;
 mod symbolic_refinement;
-mod utility;
+mod ldd_to_bdd;
 
 pub use symbolic_lts::*;
 pub use symbolic_refinement::*;
-pub use utility::*;
+pub use ldd_to_bdd::*;
