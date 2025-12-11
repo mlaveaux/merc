@@ -3,9 +3,9 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
-use mcrl2::Pbes;
 use mcrl2::set_reporting_level;
 use mcrl2::verbosity_to_log_level_t;
+use mcrl2::Pbes;
 use merc_tools::VerbosityFlag;
 use merc_tools::Version;
 use merc_tools::VersionFlag;
@@ -15,9 +15,9 @@ use merc_utilities::Timing;
 use crate::permutation::Permutation;
 use crate::symmetry::SymmetryAlgorithm;
 
+mod clone_iterator;
 mod permutation;
 mod symmetry;
-mod clone_iterator;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum PbesFormat {
@@ -57,7 +57,15 @@ struct SymmetryArgs {
     #[arg(long, short('i'), value_enum)]
     format: Option<PbesFormat>,
 
+    /// Pass a single permutation to check for symmetry
     permutation: Option<String>,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Partition data parameters into their sorts before considering their permutation groups"
+    )]
+    partition_data_sorts: bool,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -86,12 +94,13 @@ fn main() -> Result<ExitCode, MercError> {
             PbesFormat::Text => Pbes::from_text_file(&args.filename)?,
         };
 
+        let algorithm = SymmetryAlgorithm::new(&pbes, false)?;
         if let Some(permutation) = &args.permutation {
-            eprintln!("Note: the permutation argument is currently not used.");
-            let _pi = Permutation::from_input(permutation)?;
-        } 
-
-        SymmetryAlgorithm::new(&pbes, false)?.run();
+            let pi = Permutation::from_input(permutation)?;
+            algorithm.check_symmetry(&pi)?;
+        } else {
+            algorithm.find_symmetries();
+        }
     }
 
     if cli.timings {
