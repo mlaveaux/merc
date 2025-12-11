@@ -6,6 +6,11 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
+use oxidd::BooleanFunction;
+use oxidd::ManagerRef;
+use oxidd::bdd::BDDFunction;
+use oxidd::util::OptBool;
+
 use log::debug;
 use merc_syntax::UntypedStateFrmSpec;
 use merc_tools::VerbosityFlag;
@@ -58,7 +63,11 @@ enum Commands {
 struct SolveArgs {
     filename: String,
 
+    /// The parity game file format
     format: Option<ParityGameFormat>,
+
+    /// Whether to output the solution for every single vertex, not just in the initial vertex.
+    full_solution: bool,
 }
 
 /// Arguments for computing the reachable part of a parity game
@@ -68,7 +77,7 @@ struct ReachableArgs {
     output: String,
 }
 
-/// Arguments for encoding a feature transition system into a variability parity game
+/// Arguments for translating a feature transition system and a modal formula into a variability parity game
 #[derive(clap::Args, Debug)]
 struct TranslateArgs {
     /// The filename of the feature diagram
@@ -82,9 +91,6 @@ struct TranslateArgs {
 
     /// The variability parity game output filename
     output: String,
-
-    ///  Whether to output the solution for every single vertex, not just in the initial vertex.
-    full_solution: bool,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -128,11 +134,29 @@ fn main() -> Result<ExitCode, MercError> {
                     time_read.finish();
 
                     let mut time_solve = timing.start("solve_variability_zielonka");
-                    let solutions = solve_variability_zielonka(&manager_ref, &game, false)?;                    
+                    let solutions = solve_variability_zielonka(&manager_ref, &game, false)?;
                     for product in CubeIter::new(game.configuration()) {
                         println!("For product {} the following vertices are in:", FormatConfig(&product));
-                        for solution in solutions[0].iter_vertices() {
+                        // Construct function for this cube
+                        let mut cube = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
+                        for (choice, var) in product.iter().zip(game.variables()) {
+                            match choice {
+                                OptBool::True => {
+                                    cube = cube.and(var)?;
+                                }
+                                OptBool::False => {
+                                    cube = cube.and(&var.not()?)?;
+                                }
+                                OptBool::None => {
+                                    // Don't care
+                                }
+                            }
+                        }
 
+                        for (vertex, configuration) in solutions[0].iter() {
+                            if configuration.and(&cube)?.satisfiable() {
+                                print!("{}", vertex);
+                            }
                         }
                     }
 
@@ -178,12 +202,13 @@ fn main() -> Result<ExitCode, MercError> {
                 })?;
                 let fts = read_fts(&manager_ref, &mut fts_file, feature_diagram)?;
 
-                let formula_spec = UntypedStateFrmSpec::parse(&read_to_string(&args.formula_filename).map_err(|e| {
-                    MercError::from(format!(
-                        "Could not open formula file '{}': {}",
-                        &args.formula_filename, e
-                    ))
-                })?)?;
+                let formula_spec =
+                    UntypedStateFrmSpec::parse(&read_to_string(&args.formula_filename).map_err(|e| {
+                        MercError::from(format!(
+                            "Could not open formula file '{}': {}",
+                            &args.formula_filename, e
+                        ))
+                    })?)?;
                 if !formula_spec.action_declarations.is_empty() {
                     return Err(MercError::from("We do not support formulas with action declarations."));
                 }

@@ -5,7 +5,7 @@ use oxidd::BooleanFunction;
 pub struct CubeIter<'a> {
     /// The BDD to iterate over.
     bdd: &'a BDDFunction,
-    /// The current choices for each variable.
+    /// The current choices for each variable, OptBool::None means don't care.
     choices: Vec<OptBool>,
     /// Keeps track of the last index visited by pick_cube
     last_index: u32,
@@ -33,6 +33,11 @@ impl Iterator for CubeIter<'_> {
             return None;
         }
 
+        // We essentially addition on binary sequences (where 1 = true, 0 =
+        // false, and don't care is skipped). Whenever index <= last_index is
+        // encountered, we flip all 1s to 0s until we find a 0 to flip to 1.
+        // Furthermore, if we skip indices, we set the intermediate indices to
+        // don't care. Finally, when they are all one then we are done.
         let cube = self.bdd.pick_cube(|_manager, _edge, index| {
             // Ensure that the choices vector is large enough, initialize with don't care
             let mut resized = false;
@@ -41,13 +46,13 @@ impl Iterator for CubeIter<'_> {
                 self.choices.resize(index as usize + 1, OptBool::None);
             }
 
-            // If we have skipped levels then the intermediate variables should be don't care
+            // If we have skipped levels then the intermediate variables should be don't cares.
             for i in (self.last_index as usize + 1)..(index as usize) {
                 self.choices[i] = OptBool::None;
             }
 
             if index <= self.last_index {
-                // Set all ones to zero, and initialize the next index on true
+                // Set all ones to zero, and initialize the next index to true
                 let mut had_false = false;
                 for i in 0..self.choices.len() {
                     if self.choices[i] == OptBool::True {
@@ -80,7 +85,9 @@ impl Iterator for CubeIter<'_> {
             }
         });
     
-        // Check if all choices are None, then we are done
+        // Check if all choices are None, then we are also done (since the
+        // choice function is not called and the set is the universe) we must
+        // deal with it here.
         if self.choices.iter().all(|x| *x == OptBool::None) {
             self.done = true;
         }

@@ -61,6 +61,9 @@ pub fn translate(
         formula,
     )?;
 
+    // Convert the feature diagram (with names) to a VPG
+    let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
+
     let num_of_vertices = vertices.len();
     Ok(VariabilityParityGame::from_edges(
         manager_ref,
@@ -69,6 +72,7 @@ pub fn translate(
         vertices.into_iter().map(|(_, pr)| pr).collect(),
         Some(num_of_vertices),
         fts.configuration().clone(),
+        variables,
         || edges.iter().cloned(),
     ))
 }

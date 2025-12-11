@@ -20,6 +20,21 @@ where
     }
 }
 
+/// Can be used to run a random test with a specific seed for reproducibility.
+pub fn random_test_seeded<F>(seed: u64, iterations: usize, mut test_function: F)
+where
+    F: FnMut(&mut StdRng),
+{
+    test_logger();
+
+    println!("seed: {seed}");
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    for _ in 0..iterations {
+        test_function(&mut rng);
+    }
+}
+
 pub fn random_test_threads<C, F, G>(iterations: usize, num_threads: usize, init_function: G, test_function: F)
 where
     C: Send + 'static,
