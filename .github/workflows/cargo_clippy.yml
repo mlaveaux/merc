@@ -36,21 +36,21 @@ jobs:
       with:
         components: clippy
 
-    - name: Run cargo clipp
-      uses: giraffate/clippy-action@v1
+    - name: Run cargo clippy
+      uses: sksat/action-clippy@v1.1.1
       with:
         reporter: 'github-pr-review'
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Run cargo clipp for GUI tools
-      uses: giraffate/clippy-action@v1
+      uses:  sksat/action-clippy@v1.1.1
       with:
         reporter: 'github-pr-review'
         github_token: ${{ secrets.GITHUB_TOKEN }}
         workdir: tools/gui
         
     - name: Run cargo clipp for mCRL2 tools
-      uses: giraffate/clippy-action@v1
+      uses:  sksat/action-clippy@v1.1.1
       with:
         reporter: 'github-pr-review'
         github_token: ${{ secrets.GITHUB_TOKEN }}
