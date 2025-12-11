@@ -13,10 +13,10 @@ debug = "line-tables-only"
 [workspace]
 resolver = "2"
 members = [
-    "mcrl2-sys",
-    "mcrl2",
+    "crates/mcrl2-sys",
+    "crates/mcrl2",
+    "crates/xtask",
     "pbes",
-    "xtask",
 ]
 
 [patch.crates-io]
@@ -39,8 +39,8 @@ cargo-emit = "0.2"
 duct = "1.1"
 
 # The workspace libraries.
-mcrl2 = { path = "mcrl2" }
-mcrl2-sys = { path = "mcrl2-sys" }
+mcrl2 = { path = "crates/mcrl2" }
+mcrl2-sys = { path = "crates/mcrl2-sys" }
 merc_io = { path = "../../crates/io" }
 merc_tools = { path = "../../crates/tools" }
 merc_utilities = { path = "../../crates/utilities" }

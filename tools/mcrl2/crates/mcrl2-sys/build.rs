@@ -3,8 +3,8 @@ use cc::Build;
 
 fn main() {
     // Path to the mCRL2 location
-    let mcrl2_path = String::from("../../../3rd-party/mCRL2/");
-    let mcrl2_workarounds_path = String::from("../../../3rd-party/mCRL2-workarounds/");
+    let mcrl2_path = String::from("../../../../3rd-party/mCRL2/");
+    let mcrl2_workarounds_path = String::from("../../../../3rd-party/mCRL2-workarounds/");
 
     #[cfg(feature = "mcrl2_cpptrace")]
     {
@@ -14,7 +14,7 @@ fn main() {
         add_compile_flags(&mut debug_build, mcrl2_workarounds_path.clone());
 
         // Use the `cmake` crate to build cpptrace.
-        let mut dst = cmake::Config::new("../../../3rd-party/cpptrace")
+        let mut dst = cmake::Config::new("../../../../3rd-party/cpptrace")
             .define("BUILD_SHARED_LIBS", "OFF") // Build a static library.
             .define("CPPTRACE_USE_EXTERNAL_LIBDWARF", "OFF") // Compile libdwarf as part of cpptrace.
             .init_cxx_cfg(debug_build)
