@@ -247,7 +247,7 @@ impl fmt::Display for FormatConfigSet<'_> {
 }
 
 /// A helper structure to format a configuration for output.
-pub struct FormatConfig<'a>(&'a Vec<OptBool>);
+pub struct FormatConfig<'a>(pub &'a Vec<OptBool>);
 
 impl fmt::Display for FormatConfig<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
