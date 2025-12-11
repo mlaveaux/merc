@@ -152,7 +152,6 @@ mod tests {
     use merc_utilities::random_test;
 
     use crate::LTS;
-    use crate::random_lts;
     use crate::random_lts_monolithic;
 
     #[test]
