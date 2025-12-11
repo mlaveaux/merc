@@ -145,7 +145,42 @@ impl SymmetryAlgorithm {
         for (alpha, beta) in combined_candidates {
             let permutation = alpha.concat(&beta);
             info!("Found candidate: {}", permutation);
+            info!("Found candidate: {:?}", permutation);
         }
+    }
+
+    /// Performs the syntactic check defined as symcheck in the paper.
+    pub fn check_symmetry(&self, pi: &Permutation) -> bool {
+        for equation in self.srf.equations() {
+            for summand in equation.summands() {
+                let mut matched = false;
+                for other_equation in self.srf.equations() {
+                    for other_summand in other_equation.summands() {
+                        if equation.variable().name() == other_equation.variable().name()
+                            && apply_permutation(summand.condition(), self.parameters, pi) == other_summand.condition()
+                            && apply_permutation(summand.variable(), self.parameters, pi) == other_summand.variable()
+                        {
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if matched {
+                        break;
+                    }
+                }
+
+                if !matched {
+                    info!(
+                        "No matching summand found for summand in equation {}.",
+                        equation.variable().name()
+                    );
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     /// Determine the cliques in the given control flow graphs.
@@ -508,6 +543,44 @@ impl SymmetryAlgorithm {
     }
 }
 
+/// Returns the index of the variable that the control flow graph considers
+fn variable_index(cfg: &ControlFlowGraph) -> usize {
+    // Check that all the vertices have the same variable assigned for consistency
+    cfg.vertices().iter().for_each(|v| {
+        if v.index()
+            != cfg
+                .vertices()
+                .first()
+                .expect("There is at least one vertex in a CFG")
+                .index()
+        {
+            panic!("Inconsistent variable indices in control flow graph.");
+        }
+    });
+
+    for v in cfg.vertices() {
+        // Simply return the index of the variable
+        return v.index();
+    }
+
+    panic!("No variable found in control flow graph.");
+}
+
+fn apply_permutation(expression: &PbesExpression, parameters: &Vec<DataVariable>, pi: &Permutation) -> PbesExpression {
+    let sigma = (0..parameters.len())
+        .map(|i| {
+            let var = &parameters[i];
+            let permuted_var = &parameters[pi.value(i)];
+
+            (var.clone(), permuted_var.clone())
+        })
+        .collect::<Vec<(ATerm, ATerm)>>();
+
+    let result = replace_variables(expression, sigma);
+
+    replace_propositional_variables(&result, pi, parameters)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,7 +594,7 @@ mod tests {
         ] {
             let pbes = Pbes::from_text(example).unwrap();
 
-            SymmetryAlgorithm::new(&pbes, false).unwrap().run();
+            SymmetryAlgorithm::new(&pbes, false).unwrap().find_symmetries();
         }
     }
 }
