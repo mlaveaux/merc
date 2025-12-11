@@ -431,7 +431,7 @@ pub struct Action {
     pub args: Vec<DataExpr>,
 }
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug, Eq)]
 pub struct MultiAction {
     pub actions: Vec<Action>,
 }
@@ -449,6 +449,16 @@ impl PartialEq for MultiAction {
         }
 
         true
+    }
+}
+
+impl Hash for MultiAction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut action_ids: Vec<&String> = self.actions.iter().map(|a| &a.id).collect();
+        action_ids.sort();
+        for action_id in action_ids {
+            action_id.hash(state);
+        }
     }
 }
 
