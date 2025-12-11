@@ -79,6 +79,11 @@ impl Iterator for CubeIter<'_> {
                 OptBool::None => unreachable!("Proper choice should have been set"),
             }
         });
+    
+        // Check if all choices are None, then we are done
+        if self.choices.iter().all(|x| *x == OptBool::None) {
+            self.done = true;
+        }
 
         cube
     }
