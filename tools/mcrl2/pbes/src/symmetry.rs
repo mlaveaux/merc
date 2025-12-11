@@ -12,6 +12,7 @@ use mcrl2::ControlFlowGraph;
 use mcrl2::ControlFlowGraphVertex;
 use mcrl2::DataVariable;
 use mcrl2::Pbes;
+use mcrl2::PbesExpression;
 use mcrl2::PbesStategraph;
 use mcrl2::SrfPbes;
 use mcrl2::StategraphEquation;
@@ -30,29 +31,8 @@ pub struct SymmetryAlgorithm {
     parameters: Vec<DataVariable>, // The parameters of the unified SRF PBES.
 
     all_control_flow_parameters: Vec<usize>, // Keeps track of all parameters identified as control flow parameters.
-}
 
-/// Returns the index of the variable that the control flow graph considers
-fn variable_index(cfg: &ControlFlowGraph) -> usize {
-    // Check that all the vertices have the same variable assigned for consistency
-    cfg.vertices().iter().for_each(|v| {
-        if v.index()
-            != cfg
-                .vertices()
-                .first()
-                .expect("There is at least one vertex in a CFG")
-                .index()
-        {
-            panic!("Inconsistent variable indices in control flow graph.");
-        }
-    });
-
-    for v in cfg.vertices() {
-        // Simply return the index of the variable
-        return v.index();
-    }
-
-    panic!("No variable found in control flow graph.");
+    srf: SrfPbes, // The SRF PBES after unifying parameters.
 }
 
 impl SymmetryAlgorithm {
@@ -90,11 +70,12 @@ impl SymmetryAlgorithm {
             state_graph,
             all_control_flow_parameters,
             parameters,
+            srf,
         })
     }
 
     /// Runs the symmetry detection algorithm.
-    pub fn run(&self) {
+    pub fn find_symmetries(&self) {
         let cliques = self.cliques();
 
         for clique in &cliques {
@@ -312,7 +293,6 @@ impl SymmetryAlgorithm {
         for s in c.vertices() {
             let mut s_matched = false;
             for s_c_prime in c_prime.vertices() {
-                println!("Checking vertices {:?} and {:?}.", s, s_c_prime);
                 // Check whether there is a matching value in c' for every value in c.
                 if s.value() == s_c_prime.value() && s.name() == s_c_prime.name() {
                     s_matched = true;
@@ -320,10 +300,6 @@ impl SymmetryAlgorithm {
                     // There exist t such that s_c and s'_c' match according to the definitions in the paper.
                     for s_prime in c.vertices() {
                         for s_c_prime_prime in c_prime.vertices() {
-                            println!(
-                                "  Checking outgoing edges to {:?} and {:?}.",
-                                s_prime, s_c_prime_prime
-                            );
                             // Y(v) in c and Y(v) in c_prime.
                             if s_prime.value() == s_c_prime_prime.value() && s_prime.name() == s_c_prime_prime.name() {
                                 let v_c = s.outgoing_edges().iter().find(|(vertex, _)| *vertex == s_prime.get());
@@ -481,10 +457,20 @@ impl SymmetryAlgorithm {
     }
 
     /// Checks whether the data parameters of two sets are equal under the given permutation.
-    fn equal_under_permutation(&self, pi: &Permutation, left: &Vec<usize>, right: &Vec<usize>) -> bool {
+    fn equal_under_permutation(
+        &self,
+        pi: &Permutation,
+        left: &Vec<usize>,
+        right: &Vec<usize>,
+    ) -> Result<(), MercError> {
         if left.len() != right.len() {
             // Sets have different sizes.
-            return false;
+            return Err(format!(
+                "Sets have different sizes: left has size {}, right has size {}",
+                left.len(),
+                right.len()
+            )
+            .into());
         }
 
         // Only need to check one way since sizes are equal (and the vectors have no duplicates).
@@ -496,11 +482,16 @@ impl SymmetryAlgorithm {
 
             let l_permuted = pi.value(*l);
             if !right.contains(&l_permuted) {
-                return false;
+                return Err(format!(
+                    "Sets have different sizes: left has size {}, right has size {}",
+                    left.len(),
+                    right.len()
+                )
+                .into());
             }
         }
 
-        true
+        Ok(())
     }
 
     /// Computes the sizes(c, s, s')
