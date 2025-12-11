@@ -195,6 +195,11 @@ impl FeatureTransitionSystem {
     pub fn configuration(&self) -> &BDDFunction {
         self.feature_diagram.configuration()
     }
+
+    /// Returns the variables used in the feature diagram.
+    pub fn variables(&self) -> &HashMap<String, BDDFunction> {
+        &self.feature_diagram.variables
+    }
 }
 
 impl LTS for FeatureTransitionSystem {

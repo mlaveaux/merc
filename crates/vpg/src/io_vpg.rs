@@ -141,6 +141,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     Ok(VariabilityParityGame::new(
         ParityGame::new(VertexIndex::new(0), owner, priority, vertices, edges_to),
         configurations,
+        variables,
         edges_configuration,
     ))
 }
@@ -155,6 +156,7 @@ fn parse_configuration(manager: &BDDManagerRef, config: &str) -> Result<(Vec<BDD
                 .map(|i| BDDFunction::var(manager, i))
                 .collect::<Result<Vec<_>, _>>()
         })?;
+        
 
         let configuration = parse_configuration_set(manager, &variables, config)?;
         return Ok((variables, configuration));
@@ -207,7 +209,7 @@ fn parse_configuration_set(
 }
 
 /// Writes the given parity game to the given writer in .vpg format.
-/// Note that the reader is buffered internally using a `BufWriter`.
+/// Note that the writer is buffered internally using a `BufWriter`.
 pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Result<(), MercError> {
     let mut writer = BufWriter::new(writer);
 

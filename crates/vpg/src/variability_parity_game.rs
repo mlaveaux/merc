@@ -21,6 +21,9 @@ pub struct VariabilityParityGame {
     /// The overall configurations for the variability parity game.
     configuration: BDDFunction,
 
+    /// The variables used in the configuration BDD.
+    variables: Vec<BDDFunction>,
+
     /// However, every edge has an associated BDD function representing the configurations
     /// in which the edge is enabled.
     edges_configuration: Vec<BDDFunction>,
@@ -46,7 +49,7 @@ impl<'a> Edge<'a> {
 
 impl VariabilityParityGame {
     /// Construct a new variability parity game from an iterator over transitions.
-    pub fn new(parity_game: ParityGame, configuration: BDDFunction, edges_configuration: Vec<BDDFunction>) -> Self {
+    pub fn new(parity_game: ParityGame, configuration: BDDFunction, variables: Vec<BDDFunction>, edges_configuration: Vec<BDDFunction>) -> Self {
         // Check that the sizes are consistent
         debug_assert_eq!(
             edges_configuration.len(),
@@ -54,9 +57,11 @@ impl VariabilityParityGame {
             "There should be a configuration BDD for every transition"
         );
 
+
         Self {
             game: parity_game,
             configuration,
+            variables,
             edges_configuration,
         }
     }
@@ -69,6 +74,7 @@ impl VariabilityParityGame {
         priority: Vec<Priority>,
         num_of_vertices: Option<usize>,
         configuration: BDDFunction,
+        variables: Vec<BDDFunction>,
         mut edges: F,
     ) -> Self
     where
@@ -142,6 +148,7 @@ impl VariabilityParityGame {
         Self {
             game: ParityGame::new(initial_vertex, owner, priority, vertices, edges_to),
             configuration,
+            variables,
             edges_configuration,
         }
     }
@@ -159,6 +166,11 @@ impl VariabilityParityGame {
     /// Returns the overall configuration BDD of the variability parity game.
     pub fn configuration(&self) -> &BDDFunction {
         &self.configuration
+    }
+
+    /// Returns the variables used in the configuration BDD.
+    pub fn variables(&self) -> &Vec<BDDFunction> {
+        &self.variables
     }
 
     delegate! {

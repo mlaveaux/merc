@@ -48,15 +48,17 @@ pub fn solve_variability_zielonka(
     if cfg!(debug_assertions) {
         for v in game.iter_vertices() {
             let tmp = W[0][v].or(&W[1][v])?;
-            
+
             // The union of both solutions should be the entire set of vertices.
-            debug_assert!(tmp == manager_ref.with_manager_shared(|manager| {
-                if alternative_solving {
-                    BDDFunction::t(manager)
-                } else {
-                    game.configuration().clone()
-                }
-            }));
+            debug_assert!(
+                tmp == manager_ref.with_manager_shared(|manager| {
+                    if alternative_solving {
+                        BDDFunction::t(manager)
+                    } else {
+                        game.configuration().clone()
+                    }
+                })
+            );
         }
     }
 
@@ -142,12 +144,13 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             mu.set(*v, gamma[*v].clone());
         }
 
-        debug!("solve_rec(gamma) |gamma| = {}, highest prio = {}, lowest prio = {}, player = {}, |mu| = {}",
+        debug!(
+            "solve_rec(gamma) |gamma| = {}, highest prio = {}, lowest prio = {}, player = {}, |mu| = {}",
             gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
             highest_prio,
             lowest_prio,
             x,
-            mu.len()
+            mu.number_of_non_empty()
         );
 
         let alpha = self.attractor(x, &gamma, mu)?;
@@ -156,18 +159,19 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         debug!("begin solve_rec(gamma \\ alpha)");
         let mut omega_prime = self.solve_recursive(gamma.clone().minus(&alpha)?)?;
         debug!("end solve_rec(gamma \\ alpha)");
-        debug!("|omega'_0| = {}, |omega'_1| = {}",
-            omega_prime[0].len(),
-            omega_prime[1].len(),
+        debug!(
+            "|omega'_0| = {}, |omega'_1| = {}",
+            omega_prime[0].number_of_non_empty(),
+            omega_prime[1].number_of_non_empty(),
         );
 
         if omega_prime[not_x.to_index()].is_empty() {
             // 11. omega_x := omega'_x \cup alpha
             omega_prime[x.to_index()] = gamma;
             omega_prime[not_x.to_index()].clear();
-            // 20. return (omega_0, omega_1) 
+            // 20. return (omega_0, omega_1)
             debug!("return (omega'_0, omega'_1)");
-            return Ok(omega_prime)
+            return Ok(omega_prime);
         }
 
         // 14. \beta := attr_notalpha(\omega'_notalpha)
@@ -182,7 +186,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // 17. omega_notx := omega'_notx \cup \beta
         omega_double_prime[not_x.to_index()] = omega_prime_opponent.or(&beta)?;
 
-        // 20. return (omega_0, omega_1) 
+        // 20. return (omega_0, omega_1)
 
         Ok(omega_double_prime)
     }
@@ -197,7 +201,6 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         }
 
         /// 3. A := U
-
         // 4. While Q not empty do
         // 5. w := Q.pop()
         while let Some(w) = self.temp_queue.pop() {
@@ -221,11 +224,18 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
                             if tmp.satisfiable() {
                                 // 12. a := a && (C \ (theta(v, w') && \gamma(w'))) \cup A(w')
-                                a = a.and(&self.game.configuration().min(edge.configuration()).and(&gamma[edge.to()])?)?.or(&A[edge.to()])?;
+                                a = a
+                                    .and(
+                                        &self
+                                            .game
+                                            .configuration()
+                                            .and(&edge.configuration().and(&gamma[edge.to()])?.not()?)?,
+                                    )?
+                                    .or(&A[edge.to()])?;
                             }
                         }
                     }
-                    
+
                     // 15. a \ A(v) != \emptyset
                     if a.and(&A[v].not()?)?.satisfiable() {
                         // 16. A(v) := A(v) \cup a
@@ -265,7 +275,7 @@ pub struct Submap {
     /// The mapping from vertex indices to BDD functions.
     mapping: Vec<BDDFunction>,
 
-    /// Invariant: counts the number of empty positions in the mapping.
+    /// Invariant: counts the number of non-empty positions in the mapping.
     non_empty_count: usize,
 }
 
@@ -282,11 +292,24 @@ impl Submap {
     pub fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_ {
         self.mapping.iter().enumerate().filter_map(|(i, func)| {
             if func.satisfiable() {
-                None
-            } else {
                 Some(VertexIndex::new(i))
+            } else {
+                None
             }
         })
+    }
+
+    /// Returns the number of non-empty entries in the submap.
+    pub fn number_of_non_empty(&self) -> usize {
+        self.non_empty_count
+    }
+
+    /// Returns an iterator over the entries in the submap.
+    pub fn iter(&self) -> impl Iterator<Item = (VertexIndex, &BDDFunction)> {
+        self.mapping
+            .iter()
+            .enumerate()
+            .map(|(i, func)| (VertexIndex::new(i), func))
     }
 
     /// Sets the function for the given vertex index.
@@ -309,9 +332,9 @@ impl Submap {
         self.non_empty_count == 0
     }
 
-    /// Returns the number of non-empty entries in the submap.
+    /// Returns the number of entries in the submap.
     fn len(&self) -> usize {
-        self.non_empty_count
+        self.mapping.len()
     }
 
     /// Clears the submap, setting all entries to the empty function.
@@ -327,7 +350,13 @@ impl Submap {
     /// Computes the difference between this submap and another submap.
     fn minus(mut self, other: &Submap) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
+            let was_satisfiable = func.satisfiable();
             *func = func.and(&other.mapping[i].not()?)?;
+            let is_satisfiable = func.satisfiable();
+
+            if was_satisfiable && !is_satisfiable {
+                self.non_empty_count -= 1;
+            }
         }
 
         Ok(self)
@@ -336,7 +365,13 @@ impl Submap {
     /// Computes the union between this submap and another submap.
     fn or(mut self, other: &Submap) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
+            let was_satisfiable = func.satisfiable();
             *func = func.or(&other.mapping[i])?;
+            let is_satisfiable = func.satisfiable();
+
+            if !was_satisfiable && is_satisfiable {
+                self.non_empty_count += 1;
+            }
         }
 
         Ok(self)
@@ -357,5 +392,33 @@ impl fmt::Debug for Submap {
             writeln!(f, "  {}", i)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oxidd::Manager;
+    use oxidd::ManagerRef;
+    use oxidd::util::AllocResult;
+    use oxidd::{BooleanFunction, bdd::BDDFunction};
+
+    use crate::VertexIndex;
+
+    #[test]
+    fn test_submap() {
+        let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+        let vars: Vec<BDDFunction> = manager_ref
+            .with_manager_exclusive(|manager| {
+                AllocResult::from_iter(manager.add_vars(3).map(|i| BDDFunction::var(manager, i)))
+            })
+            .expect("Could not create variables");
+
+        let mut submap = super::Submap::new(manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)), 3);
+
+        assert_eq!(submap.len(), 3);
+        assert_eq!(submap.non_empty_count, 0);
+        submap.set(VertexIndex::new(1), vars[0].clone());
+
+        assert_eq!(submap.non_empty_count, 1);
     }
 }
