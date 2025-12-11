@@ -14,7 +14,9 @@ use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
+use merc_vpg::CubeIter;
 use merc_vpg::FeatureDiagram;
+use merc_vpg::FormatConfig;
 use merc_vpg::ParityGameFormat;
 use merc_vpg::guess_format_from_extension;
 use merc_vpg::read_fts;
@@ -48,7 +50,7 @@ struct Cli {
 enum Commands {
     Solve(SolveArgs),
     Reachable(ReachableArgs),
-    Encode(EncodeArgs),
+    Translate(TranslateArgs),
 }
 
 /// Arguments for solving a parity game
@@ -68,7 +70,7 @@ struct ReachableArgs {
 
 /// Arguments for encoding a feature transition system into a variability parity game
 #[derive(clap::Args, Debug)]
-struct EncodeArgs {
+struct TranslateArgs {
     /// The filename of the feature diagram
     feature_diagram_filename: String,
 
@@ -80,6 +82,9 @@ struct EncodeArgs {
 
     /// The variability parity game output filename
     output: String,
+
+    ///  Whether to output the solution for every single vertex, not just in the initial vertex.
+    full_solution: bool,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -123,7 +128,14 @@ fn main() -> Result<ExitCode, MercError> {
                     time_read.finish();
 
                     let mut time_solve = timing.start("solve_variability_zielonka");
-                    println!("{}", solve_variability_zielonka(&manager_ref, &game, false).solution());
+                    let solutions = solve_variability_zielonka(&manager_ref, &game, false)?;                    
+                    for product in CubeIter::new(game.configuration()) {
+                        println!("For product {} the following vertices are in:", FormatConfig(&product));
+                        for solution in solutions[0].iter_vertices() {
+
+                        }
+                    }
+
                     time_solve.finish();
                 }
             }
@@ -146,7 +158,7 @@ fn main() -> Result<ExitCode, MercError> {
                 let mut output_file = File::create(&args.output)?;
                 merc_vpg::write_pg(&mut output_file, &reachable_game)?;
             }
-            Commands::Encode(args) => {
+            Commands::Translate(args) => {
                 // Read a feature diagram and a feature transition system, encode it into a variability parity game, and write it to a new file.
                 let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
 

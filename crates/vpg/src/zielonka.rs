@@ -150,15 +150,20 @@ impl ZielonkaSolver<'_> {
     fn attractor(&mut self, player: Player, V: &Set, mut A: Set) -> Set {
         let initial_size = A.count_ones();
 
+        // 2. Q = {v \in A}
         self.temp_queue.clear();
         for v in A.iter_ones() {
             self.temp_queue.push(VertexIndex::new(v));
         }
 
+        // 4. While Q is not empty do
+        // 5. w := Q.pop()
         while let Some(v) = self.temp_queue.pop() {
+            // For every v \in Ew do
             for u in self.predecessors.predecessors(v) {
                 if V[*v] {
                     let attracted = if self.game.owner(u) == player {
+                        // v \in V and v in V_\alpha
                         true
                     } else {
                         // Check if all successors of u are in the attractor
