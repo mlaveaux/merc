@@ -6,10 +6,8 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::Subcommand;
 
+use merc_vpg::CubeIterAll;
 use oxidd::BooleanFunction;
-use oxidd::ManagerRef;
-use oxidd::bdd::BDDFunction;
-use oxidd::util::OptBool;
 
 use log::debug;
 use merc_syntax::UntypedStateFrmSpec;
@@ -19,7 +17,6 @@ use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
-use merc_vpg::CubeIter;
 use merc_vpg::FeatureDiagram;
 use merc_vpg::FormatConfig;
 use merc_vpg::ParityGameFormat;
@@ -67,6 +64,7 @@ struct SolveArgs {
     format: Option<ParityGameFormat>,
 
     /// Whether to output the solution for every single vertex, not just in the initial vertex.
+    #[arg(long, default_value_t = false)]
     full_solution: bool,
 }
 
@@ -135,31 +133,32 @@ fn main() -> Result<ExitCode, MercError> {
 
                     let mut time_solve = timing.start("solve_variability_zielonka");
                     let solutions = solve_variability_zielonka(&manager_ref, &game, false)?;
-                    for product in CubeIter::new(game.configuration()) {
-                        println!("For product {} the following vertices are in:", FormatConfig(&product));
-                        // Construct function for this cube
-                        let mut cube = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
-                        for (choice, var) in product.iter().zip(game.variables()) {
-                            match choice {
-                                OptBool::True => {
-                                    cube = cube.and(var)?;
-                                }
-                                OptBool::False => {
-                                    cube = cube.and(&var.not()?)?;
-                                }
-                                OptBool::None => {
-                                    // Don't care
-                                }
-                            }
-                        }
+                    for (index, w) in solutions.iter().enumerate() {
+                        println!("W{index}: ");
 
-                        for (vertex, configuration) in solutions[0].iter() {
-                            if configuration.and(&cube)?.satisfiable() {
-                                print!("{}", vertex);
+                        for entry in CubeIterAll::new(game.variables(), &game.configuration()) {
+                            let (config, config_function) = entry?;
+
+                            print!("For product {} the following vertices are in: ", FormatConfig(&config));
+                            let mut first = true;
+                            for (vertex, configuration) in w.iter() {
+                                if !first {
+                                    print!(", ");
+                                }
+
+                                if configuration.and(&config_function)?.satisfiable() {
+                                    print!("{}", vertex);
+                                }
+                                first = false;
+
+                                if !args.full_solution {
+                                    // Only print the solution for the initial vertex
+                                    break;
+                                }
                             }
+                            println!();
                         }
                     }
-
                     time_solve.finish();
                 }
             }
