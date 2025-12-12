@@ -47,9 +47,10 @@ pub fn translate(
     }
 
     let equation_system = ModalEquationSystem::new(formula);
+    info!("{}", equation_system);
     let mut algorithm = Translation::new(fts, &simplified_labels, &equation_system, true);
 
-    algorithm.translate_vertex(fts.initial_state_index(), &equation_system.equation(0).clone().into())?;
+    algorithm.translate_equation(fts.initial_state_index(), 0)?;
 
     // Convert the feature diagram (with names) to a VPG
     let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
@@ -78,9 +79,16 @@ pub fn translate(
     Ok(result)
 }
 
+/// Is used to distinguish between StateFrm and Equation vertices in the vertex map.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Formula<'a> {
+    StateFrm(&'a StateFrm),
+    Equation(usize),
+}
+
 // Local struct to keep track of the translation state
 struct Translation<'a> {
-    vertex_map: IndexedSet<(StateIndex, StateFrm)>,
+    vertex_map: IndexedSet<(StateIndex, Formula<'a>)>,
     vertices: Vec<(Player, Priority)>,
     edges: Vec<(VertexIndex, BDDFunction, VertexIndex)>,
 
@@ -97,14 +105,14 @@ struct Translation<'a> {
     equation_system: &'a ModalEquationSystem,
 }
 
-impl Translation<'_> {
-    fn new<'a>(
+impl<'a> Translation<'a> {
+    fn new(
         fts: &'a FeatureTransitionSystem,
         parsed_labels: &'a Vec<MultiAction>,
         equation_system: &'a ModalEquationSystem,
         make_total: bool,
-    ) -> Translation<'a> {
-        Translation {
+    ) -> Self {
+        Self {
             vertex_map: IndexedSet::new(),
             vertices: Vec::new(),
             edges: Vec::new(),
@@ -123,8 +131,9 @@ impl Translation<'_> {
     /// The `vertex_map` is used to keep track of already translated vertices.
     ///
     /// This function is recursively called for subformulas.
-    pub fn translate_vertex(&mut self, s: StateIndex, formula: &StateFrm) -> Result<VertexIndex, MercError> {
-        let (index, inserted) = self.vertex_map.insert((s, formula.clone()));
+    pub fn translate_vertex(&mut self, s: StateIndex, formula: &'a StateFrm) -> Result<VertexIndex, MercError> {
+        let (index, inserted) = self.vertex_map.insert((s, Formula::StateFrm(formula)));
+        println!("translate_vertex {index}");
         let vertex_index = VertexIndex::new(*index);
 
         if !inserted {
@@ -192,13 +201,15 @@ impl Translation<'_> {
                 }
             }
             StateFrm::Id(identifier, _args) => {
-                let (i, equation) = self
+                let (i, _equation) = self
                     .equation_system
                     .find_equation_by_identifier(identifier)
                     .expect("Variable must correspond to an equation");
 
                 let equation_vertex = self.translate_equation(s, i);
-                self.edges.push((vertex_index, self.fts.configuration().clone(), equation_vertex?));
+                self.vertices.push((Player::Odd, Priority::new(0))); // The priority and owner do not matter here
+                self.edges
+                    .push((vertex_index, self.fts.configuration().clone(), equation_vertex?));
             }
             StateFrm::Modality {
                 operator,
@@ -275,8 +286,9 @@ impl Translation<'_> {
     }
 
     /// Applies the translation to the given (s, equation) vertex.
-    fn translate_equation(&mut self, s: StateIndex, equation_index: usize) -> Result<VertexIndex, MercError> {        
-        let (index, inserted) = self.vertex_map.insert((s, i));
+    fn translate_equation(&mut self, s: StateIndex, equation_index: usize) -> Result<VertexIndex, MercError> {
+        let (index, inserted) = self.vertex_map.insert((s, Formula::Equation(equation_index)));
+        println!("translate_equation {index}");
         let vertex_index = VertexIndex::new(*index);
 
         if !inserted {
@@ -298,7 +310,7 @@ impl Translation<'_> {
             FixedPointOperator::Greatest => {
                 // (s, ν X. Ψ) →_P even, (s, Ψ[x := ν X. Ψ]), 2 * (AD(Ψ)/2). In Rust division is already floor.
                 self.vertices.push((
-                    Player::Odd,
+                    Player::Even,
                     Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2)),
                 ));
                 let s_psi = self.translate_vertex(s, equation.body())?;
@@ -306,7 +318,11 @@ impl Translation<'_> {
             }
         }
 
-        Ok(())
+        debug_assert!(
+            vertex_index <= self.vertices.len() - 1,
+            "New vertex must have been added for equation {equation_index}"
+        );
+        Ok(vertex_index)
     }
 }
 

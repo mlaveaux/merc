@@ -162,6 +162,16 @@ impl ParityGame {
     pub(crate) fn edges_to(&self) -> &Vec<VertexIndex> {
         &self.edges_to
     }
+
+    /// Returns the owners array.
+    pub(crate) fn owners(&self) -> &Vec<Player> {
+        &self.owner
+    }
+
+    /// Returns the priorities array.
+    pub(crate) fn priorities(&self) -> &Vec<Priority> {
+        &self.priority
+    }
 }
 
 impl PG for ParityGame {

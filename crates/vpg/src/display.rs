@@ -102,7 +102,9 @@ fn write_init_arrow(f: &mut fmt::Formatter<'_>, initial: impl fmt::Display) -> f
     writeln!(f, "  init -> v{} [arrowsize=0.6];", initial)
 }
 
-fn write_footer(f: &mut fmt::Formatter<'_>) -> fmt::Result { writeln!(f, "}}") }
+fn write_footer(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    writeln!(f, "}}")
+}
 
 fn write_vertices<G: PG>(f: &mut fmt::Formatter<'_>, game: &G) -> fmt::Result {
     for v in game.iter_vertices() {

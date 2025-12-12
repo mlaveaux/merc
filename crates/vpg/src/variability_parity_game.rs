@@ -182,6 +182,16 @@ impl VariabilityParityGame {
     pub fn variables(&self) -> &Vec<BDDFunction> {
         &self.variables
     }
+
+    /// Returns the owners of the vertices in the variability parity game.
+    pub(crate) fn owners(&self) -> &Vec<Player> {
+        self.game.owners()
+    }
+
+    /// Returns the priorities of the vertices in the variability parity game.
+    pub(crate) fn priorities(&self) -> &Vec<Priority> {
+        self.game.priorities()
+    }
 }
 
 impl PG for VariabilityParityGame {

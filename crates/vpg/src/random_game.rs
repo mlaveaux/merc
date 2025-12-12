@@ -1,9 +1,16 @@
+use merc_utilities::MercError;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
 use rand::Rng;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
+use crate::VariabilityParityGame;
 use crate::VertexIndex;
+use crate::create_variables;
+use crate::random_bdd;
 
 /// Creates a random parity game with the given number of vertices, priorities, and outdegree.
 pub fn random_parity_game(
@@ -45,18 +52,59 @@ pub fn random_parity_game(
     ParityGame::from_edges(initial_vertex, owner, priority, || edge_list.iter().cloned())
 }
 
+/// Creates a random parity game with the given number of vertices, priorities, and outdegree.
+pub fn random_variability_parity_game(
+    manager_ref: &BDDManagerRef,
+    rng: &mut impl Rng,
+    num_of_vertices: usize,
+    num_of_priorities: usize,
+    outdegree: usize,
+    number_of_variables: u32,
+) -> Result<VariabilityParityGame, MercError> {
+    let pg = random_parity_game(rng, num_of_vertices, num_of_priorities, outdegree);
+
+    // Create random feature variables.
+    let variables: Vec<BDDFunction> = create_variables(manager_ref, number_of_variables)?;
+
+    // Create random edge configurations.
+    let mut edges_configuration: Vec<BDDFunction> = Vec::with_capacity(pg.num_of_edges());
+    for _ in 0..pg.num_of_edges() {
+        edges_configuration.push(random_bdd(manager_ref, rng, &variables)?);
+    }
+
+    // Overall configuration is the conjunction of all features (i.e., all features enabled).
+    let configuration = random_bdd(manager_ref, rng, &variables)?;
+
+    Ok(VariabilityParityGame::new(
+        pg,
+        configuration,
+        variables,
+        edges_configuration,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use merc_utilities::random_test;
 
     use crate::PG;
     use crate::random_parity_game;
+    use crate::random_variability_parity_game;
 
     #[test]
     fn test_random_parity_game() {
         random_test(100, |rng| {
             let pg = random_parity_game(rng, 10, 5, 3);
             assert_eq!(pg.num_of_vertices(), 10);
+        })
+    }
+
+    #[test]
+    fn test_random_variability_parity_game() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, 10, 5, 3, 3).unwrap();
+            assert_eq!(vpg.num_of_vertices(), 10);
         })
     }
 }

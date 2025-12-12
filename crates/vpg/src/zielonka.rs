@@ -29,11 +29,31 @@ pub fn solve_zielonka(game: &ParityGame) -> Player {
 
     // Check that the result is a valid partition
     debug_assert!(
-        W[0].clone().bitand(&W[1]).not_any(),
+        {
+            let intersection = W[0].clone() & &W[1];
+            if intersection.any() {
+                let non_disjoint: Vec<_> = intersection.iter_ones().collect();
+                panic!(
+                    "The winning sets are not disjoint. Vertices in both sets: {:?}",
+                    non_disjoint
+                );
+            }
+            true
+        },
         "The winning sets are not disjoint"
     );
     debug_assert!(
-        (W[0].clone() | W[1].clone()).all(),
+        {
+            let both = W[0].clone() | &W[1];
+            if !both.all() {
+                let missing: Vec<_> = both.iter_zeros().take(game.num_of_vertices()).collect();
+                panic!(
+                    "The winning sets do not cover all vertices. Missing vertices: {:?}",
+                    missing
+                );
+            }
+            true
+        },
         "The winning sets do not cover all vertices"
     );
 
@@ -214,6 +234,8 @@ mod tests {
     fn test_random_parity_game() {
         random_test(100, |rng| {
             let pg = random_parity_game(rng, 10, 5, 3);
+            println!("{:?}", pg);
+
             solve_zielonka(&pg);
         })
     }
