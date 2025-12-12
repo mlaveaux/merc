@@ -8,6 +8,7 @@
 
 mod cube_iter;
 mod feature_transition_system;
+mod fixpoint_equation_system;
 mod io;
 mod io_pg;
 mod io_vpg;
@@ -23,6 +24,7 @@ mod zielonka;
 
 pub use cube_iter::*;
 pub use feature_transition_system::*;
+pub use fixpoint_equation_system::*;
 pub use io::*;
 pub use io_pg::*;
 pub use io_vpg::*;
