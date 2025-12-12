@@ -3,8 +3,6 @@ use log::trace;
 use merc_syntax::ActFrm;
 use merc_syntax::ActFrmBinaryOp;
 use merc_syntax::Action;
-use merc_syntax::StateVarDecl;
-use merc_syntax::apply;
 use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
@@ -21,6 +19,7 @@ use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
 use crate::FeatureTransitionSystem;
+use crate::ModalEquationSystem;
 use crate::PG;
 use crate::Player;
 use crate::Priority;
@@ -47,8 +46,10 @@ pub fn translate(
         info!("label: {}", label);
     }
 
-    let mut algorithm = Translation::new(fts, &simplified_labels, true);
-    algorithm.translate_vertex(fts.initial_state_index(), formula)?;
+    let equation_system = ModalEquationSystem::new(formula);
+    let mut algorithm = Translation::new(fts, &simplified_labels, &equation_system, true);
+
+    algorithm.translate_vertex(fts.initial_state_index(), &equation_system.equation(0).clone().into())?;
 
     // Convert the feature diagram (with names) to a VPG
     let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
@@ -89,13 +90,18 @@ struct Translation<'a> {
     /// The parsed labels of the FTS.
     parsed_labels: &'a Vec<MultiAction>,
 
+    /// The feature transition system being translated.
     fts: &'a FeatureTransitionSystem,
+
+    /// A reference to the modal equation system being translated.
+    equation_system: &'a ModalEquationSystem,
 }
 
 impl Translation<'_> {
     fn new<'a>(
         fts: &'a FeatureTransitionSystem,
         parsed_labels: &'a Vec<MultiAction>,
+        equation_system: &'a ModalEquationSystem,
         make_total: bool,
     ) -> Translation<'a> {
         Translation {
@@ -104,6 +110,7 @@ impl Translation<'_> {
             edges: Vec::new(),
             fts,
             parsed_labels,
+            equation_system,
             make_total,
         }
     }
@@ -184,91 +191,14 @@ impl Translation<'_> {
                     }
                 }
             }
-            StateFrm::FixedPoint {
-                operator,
-                variable,
-                body,
-            } => {
-                match operator {
-                    FixedPointOperator::Least => {
-                        // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1. In Rust division is already floor.
-                        self.vertices
-                            .push((Player::Odd, Priority::new(2 * (alternation_depth(formula) / 2) + 1)));
+            StateFrm::Id(identifier, _args) => {
+                let (i, equation) = self
+                    .equation_system
+                    .find_equation_by_identifier(identifier)
+                    .expect("Variable must correspond to an equation");
 
-                        let s_psi = self.translate_vertex(
-                            s,
-                            &apply(*body.clone(), |subformula| {
-                                match &subformula {
-                                    StateFrm::Id(name, arguments) => {
-                                        assert!(
-                                            arguments.is_empty(),
-                                            "State formula variables with arguments are not supported in VPG translation"
-                                        );
-                                        if variable.identifier == *name {
-                                            return Ok(Some(formula.clone()));
-                                        }
-                                    }
-                                    StateFrm::FixedPoint {
-                                        operator: _,
-                                        variable: inner_variable,
-                                        body: _,
-                                    } => {
-                                        // Prevent capturing inner fixed-point variables with the same name
-                                        if variable.identifier == *inner_variable.identifier {
-                                            return Ok(Some(subformula.clone()));
-                                        }
-                                    }
-                                    _ => {
-                                        // Do nothing
-                                    }
-                                }
-
-                                Ok(None)
-                            })?,
-                        )?;
-
-                        self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
-                    }
-                    FixedPointOperator::Greatest => {
-                        // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2 * floor(AD(Ψ)/2). In Rust division is already floor.
-                        self.vertices
-                            .push((Player::Even, Priority::new(2 * (alternation_depth(formula) / 2))));
-
-                        let s_psi = self.translate_vertex(
-                            s,
-                            &apply(*body.clone(), |subformula| {
-                                match &subformula {
-                                    StateFrm::Id(name, arguments) => {
-                                        assert!(
-                                            arguments.is_empty(),
-                                            "State formula variables with arguments are not supported in VPG translation"
-                                        );
-                                        if variable.identifier == *name {
-                                            return Ok(Some(formula.clone()));
-                                        }
-                                    }
-                                    StateFrm::FixedPoint {
-                                        operator: _,
-                                        variable: inner_variable,
-                                        body: _,
-                                    } => {
-                                        // Prevent capturing inner fixed-point variables with the same name
-                                        if variable.identifier == *inner_variable.identifier {
-                                            return Ok(Some(subformula.clone()));
-                                        }
-                                    }
-                                    _ => {
-                                        // Do nothing
-                                    }
-                                }
-
-                                Ok(None)
-                            })?,
-                        )?;
-
-                        self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
-                    }
-                }
+                let equation_vertex = self.translate_equation(s, i);
+                self.edges.push((vertex_index, self.fts.configuration().clone(), equation_vertex?));
             }
             StateFrm::Modality {
                 operator,
@@ -343,6 +273,41 @@ impl Translation<'_> {
         );
         Ok(vertex_index)
     }
+
+    /// Applies the translation to the given (s, equation) vertex.
+    fn translate_equation(&mut self, s: StateIndex, equation_index: usize) -> Result<VertexIndex, MercError> {        
+        let (index, inserted) = self.vertex_map.insert((s, i));
+        let vertex_index = VertexIndex::new(*index);
+
+        if !inserted {
+            // Returns the existing vertex.
+            return Ok(vertex_index);
+        }
+
+        let equation = self.equation_system.equation(equation_index);
+        match equation.operator() {
+            FixedPointOperator::Least => {
+                // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1. In Rust division is already floor.
+                self.vertices.push((
+                    Player::Odd,
+                    Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2) + 1),
+                ));
+                let s_psi = self.translate_vertex(s, equation.body())?;
+                self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+            }
+            FixedPointOperator::Greatest => {
+                // (s, ν X. Ψ) →_P even, (s, Ψ[x := ν X. Ψ]), 2 * (AD(Ψ)/2). In Rust division is already floor.
+                self.vertices.push((
+                    Player::Odd,
+                    Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2)),
+                ));
+                let s_psi = self.translate_vertex(s, equation.body())?;
+                self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Removes the BDD information from the multi-action, i.e., only keeps the action labels.
@@ -389,71 +354,6 @@ fn match_action_formula(formula: &ActFrm, action: &MultiAction) -> bool {
     }
 }
 
-/// Returns the alternation depth of the given state formula.
-fn alternation_depth(formula: &StateFrm) -> usize {
-    match formula {
-        StateFrm::FixedPoint {
-            operator,
-            variable,
-            body,
-            ..
-        } => alternation_depth_rec(body, *operator, &variable),
-        _ => {
-            unimplemented!("Cannot determine alternation depth of formula {}", formula)
-        }
-    }
-}
-
-/// Returns the alternation depth of the given state formula.
-///
-/// `current_op` is the operator of the outer fixed-point formula.
-/// `name` is the variable declaration of the outer fixed-point formula.
-///
-/// # Details
-///
-/// This implements the following function:
-///   - AD(X) = 1 if X is the outer variable, and 0 otherwise.
-///   - AD(μ X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
-///   - AD(ν X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
-///   - AD(Ψ_1 op Ψ_2) = max(AD(Ψ_1), AD(Ψ_2))
-///   - AD([a] Ψ) = AD(Ψ)
-///   - AD(<a> Ψ) = AD(Ψ)
-fn alternation_depth_rec(formula: &StateFrm, current_op: FixedPointOperator, name: &StateVarDecl) -> usize {
-    match formula {
-        StateFrm::Id(id, _) => {
-            if id == &name.identifier {
-                1
-            } else {
-                0
-            }
-        }
-        StateFrm::FixedPoint {
-            operator,
-            variable,
-            body,
-        } => {
-            if variable.identifier == name.identifier {
-                // Do not count inner fixed-point variables with the same name
-                return 0;
-            }
-
-            let depth = alternation_depth_rec(body, *operator, name);
-            if depth > 0 {
-                (if *operator != current_op { 1 } else { 0 }) + depth
-            } else {
-                0
-            }
-        }
-        StateFrm::Binary { lhs, rhs, .. } => {
-            alternation_depth_rec(lhs, current_op, name).max(alternation_depth_rec(rhs, current_op, name))
-        }
-        StateFrm::Modality { expr, .. } => alternation_depth_rec(expr, current_op, name),
-        _ => {
-            unimplemented!("Cannot determine alternation depth of formula {}", formula)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use merc_syntax::UntypedStateFrmSpec;
@@ -462,26 +362,6 @@ mod tests {
     use crate::read_fts;
 
     use super::*;
-
-    #[test]
-    fn test_alternation_depth() {
-        assert_eq!(
-            alternation_depth(&UntypedStateFrmSpec::parse("nu X. X").unwrap().formula),
-            1
-        );
-        assert_eq!(
-            alternation_depth(&UntypedStateFrmSpec::parse("nu X. nu Z. X").unwrap().formula),
-            1
-        );
-        assert_eq!(
-            alternation_depth(&UntypedStateFrmSpec::parse("nu X. mu Z. X && Z").unwrap().formula),
-            2
-        );
-        assert_eq!(
-            alternation_depth(&UntypedStateFrmSpec::parse("nu X. mu Z. X && nu X. X").unwrap().formula),
-            2
-        );
-    }
 
     #[test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri

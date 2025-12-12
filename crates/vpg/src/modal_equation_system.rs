@@ -1,21 +1,53 @@
+use std::collections::HashSet;
 use std::fmt;
 
 use merc_syntax::FixedPointOperator;
 use merc_syntax::StateFrm;
 use merc_syntax::StateVarDecl;
-use merc_syntax::apply;
-use merc_syntax::visit;
+use merc_syntax::apply_statefrm;
+use merc_syntax::visit_statefrm;
 
 /// A fixpoint equation system representing a ranked set of fixpoint equations.
+///
+/// Each equation is of the shape `{mu, nu} X(args...) = rhs`. Where rhs
+/// contains no further fixpoint equations.
 pub struct ModalEquationSystem {
     equations: Vec<Equation>,
 }
 
 /// A single fixpoint equation of the shape `{mu, nu} X(args...) = rhs`.
-struct Equation {
+#[derive(Clone)]
+pub struct Equation {
     operator: FixedPointOperator,
     variable: StateVarDecl,
     rhs: StateFrm,
+}
+
+impl Equation {
+    /// Returns the operator of the equation.
+    pub fn operator(&self) -> FixedPointOperator {
+        self.operator
+    }
+
+    /// Returns the variable declaration of the equation.
+    pub fn variable(&self) -> &StateVarDecl {
+        &self.variable
+    }
+
+    /// Returns the body of the equation.
+    pub fn body(&self) -> &StateFrm {
+        &self.rhs
+    }
+}
+
+impl Into<StateFrm> for Equation {
+    fn into(self) -> StateFrm {
+        StateFrm::FixedPoint {
+            operator: self.operator,
+            variable: self.variable,
+            body: Box::new(self.rhs),
+        }
+    }
 }
 
 impl ModalEquationSystem {
@@ -23,7 +55,7 @@ impl ModalEquationSystem {
     pub fn new(formula: &StateFrm) -> Self {
         let mut equations = Vec::new();
 
-        visit(formula, |formula| match formula {
+        visit_statefrm(formula, |formula| match formula {
             // E(nu X. f) = (nu X = RHS(f)) + E(f)
             // E(mu X. f) = (mu X = RHS(f)) + E(f)
             // E(g) = epsilon, if g is not a fixpoint formula
@@ -44,76 +76,64 @@ impl ModalEquationSystem {
         })
         .expect("No error expected during fixpoint equation system construction");
 
+        // Check that there are no duplicate variable names
+        if cfg!(debug_assertions) {
+            let identifiers: HashSet<&String> = HashSet::from_iter(equations.iter().map(|eq| &eq.variable.identifier));
+            debug_assert_eq!(
+                identifiers.len(),
+                equations.len(),
+                "Duplicate variable names found in fixpoint equation system"
+            );
+        }
+
+        debug_assert!(
+            equations.len() > 0,
+            "At least one fixpoint equation expected in the equation system"
+        );
+
         ModalEquationSystem { equations }
     }
 
-    /// Returns the alternation depth of the fixpoint equation system.
-    pub fn alternation_depth(&self) -> usize {
-        if self.equations.is_empty() {
-            return 0;
-        }
-        
-        let first = &self.equations[0];
-        self.alternation_depth_rec(&first.rhs, first.operator, &first.variable)
+    /// Returns the ith equation in the system.
+    pub fn equation(&self, i: usize) -> &Equation {
+        &self.equations[i]
+    }
+
+    /// Returns the alternation depth of the ith equation
+    pub fn alternation_depth(&self, i: usize) -> usize {
+        let equation = &self.equations[i];
+        self.alternation_depth_rec(i, equation.operator, &equation.variable.identifier)
+    }
+
+    /// Finds an equation by its variable identifier.
+    pub fn find_equation_by_identifier(&self, id: &str) -> Option<(usize, &Equation)> {
+        self.equations
+            .iter()
+            .enumerate()
+            .find(|(_, eq)| eq.variable.identifier == id)
     }
 
     /// Returns the alternation depth of the given state formula.
     ///
-    /// `current_op` is the operator of the current equation.
-    /// `current_var` is the variable declaration of the current equation.
-    ///
     /// # Details
     ///
-    /// This implements the following function:
-    ///   - AD(X) = AD of equation for X (if found), with alternation if operator changes
-    ///   - AD(μ X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
-    ///   - AD(ν X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
-    ///   - AD(Ψ_1 op Ψ_2) = max(AD(Ψ_1), AD(Ψ_2))
-    ///   - AD([a] Ψ) = AD(Ψ)
-    ///   - AD(<a> Ψ) = AD(Ψ)
-    fn alternation_depth_rec(&self, formula: &StateFrm, current_op: FixedPointOperator, current_var: &StateVarDecl) -> usize {
-        match formula {
-            StateFrm::Id(id, _) => {
-                // Check if this is a recursive reference to the current variable
-                if id == &current_var.identifier {
-                    return 1;
-                }
-                
-                // Find the equation corresponding to this variable and continue recursion
-                if let Some(equation) = self.equations.iter().find(|eq| &eq.variable.identifier == id) {
-                    let depth = self.alternation_depth_rec(&equation.rhs, equation.operator, &equation.variable);
-                    if depth > 0 {
-                        (if equation.operator != current_op { 1 } else { 0 }) + depth
-                    } else {
-                        0
-                    }
-                } else {
-                    0
-                }
+    /// Let `E` be the set of equations in the system and `X` be the variable coresponding to the
+    /// equation sigma X = f.
+    ///
+    ///  AD(X) = CAD(sigma, X, E), which is inductively defined as:
+    ///  - CAD(sigma, X, (sigma' Y)E') = 0, if sigma = sigma' and X = Y
+    ///  - CAD(sigma, X, (sigma' Y)E') = CAD(sigma, X, E'), if sigma == sigma' and X != Y
+    ///  - CAD(sigma, X, (sigma' Y)E') = 1 + CAD(sigma', Y, E'), if sigma != sigma'
+    fn alternation_depth_rec(&self, i: usize, sigma: FixedPointOperator, variable: &String) -> usize {
+        let equation = &self.equations[i];
+        if sigma == equation.operator {
+            if equation.variable.identifier == *variable {
+                0
+            } else {
+                self.alternation_depth_rec(i + 1, sigma, variable)
             }
-            StateFrm::FixedPoint {
-                operator,
-                variable,
-                body,
-            } => {
-                if variable.identifier == current_var.identifier {
-                    // Do not count inner fixed-point variables with the same name
-                    return 0;
-                }
-
-                let depth = self.alternation_depth_rec(body, *operator, variable);
-                if depth > 0 {
-                    (if *operator != current_op { 1 } else { 0 }) + depth
-                } else {
-                    0
-                }
-            }
-            StateFrm::Binary { lhs, rhs, .. } => {
-                self.alternation_depth_rec(lhs, current_op, current_var)
-                    .max(self.alternation_depth_rec(rhs, current_op, current_var))
-            }
-            StateFrm::Modality { expr, .. } => self.alternation_depth_rec(expr, current_op, current_var),
-            _ => 0,
+        } else {
+            1 + self.alternation_depth_rec(i + 1, equation.operator, &equation.variable.identifier)
         }
     }
 }
@@ -130,7 +150,7 @@ impl ModalEquationSystem {
 /// RHS(mu X. f) = X(args)
 /// RHS(nu X. f) = X(args)
 fn rhs(formula: &StateFrm) -> StateFrm {
-    apply(formula.clone(), |formula| match formula {
+    apply_statefrm(formula.clone(), |formula| match formula {
         // RHS(mu X. phi) = X(args)
         StateFrm::FixedPoint { variable, .. } => Ok(Some(StateFrm::Id(
             variable.identifier.clone(),
@@ -164,5 +184,21 @@ mod tests {
         let fes = ModalEquationSystem::new(&formula);
 
         println!("{}", fes);
+
+        assert_eq!(fes.equations.len(), 2);
+        assert_eq!(fes.alternation_depth(0), 1);
+        assert_eq!(fes.alternation_depth(1), 0);
+    }
+
+    #[test]
+    fn test_fixpoint_equation_system_duplicates() {
+        let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true && nu Y . <c>X")
+            .unwrap()
+            .formula;
+        let fes = ModalEquationSystem::new(&formula);
+
+        println!("{}", fes);
+
+        assert_eq!(fes.equations.len(), 2);
     }
 }

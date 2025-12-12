@@ -8,11 +8,11 @@ use crate::StateFrm;
 /// formula. If it returns `Some(new_formula)`, the substitution is applied and
 /// the new formula is returned. If it returns `None`, the substitution is not
 /// applied and the function continues to traverse the formula tree.
-pub fn apply(
+pub fn apply_statefrm(
     formula: StateFrm,
     mut function: impl FnMut(&StateFrm) -> Result<Option<StateFrm>, MercError>,
 ) -> Result<StateFrm, MercError> {
-    apply_rec(formula, &mut function)
+    apply_statefrm_rec(formula, &mut function)
 }
 
 /// Visits the state formula and calls the given function on each subformula.
@@ -21,12 +21,12 @@ pub fn apply(
 /// formula. If it returns `Some(new_formula)`, the substitution is applied and
 /// the new formula is returned. If it returns `None`, the substitution is not
 /// applied and the function continues to traverse the formula tree.
-pub fn visit(formula: &StateFrm, mut visitor: impl FnMut(&StateFrm) -> Result<(), MercError>) -> Result<(), MercError> {
-    visit_rec(formula, &mut visitor)
+pub fn visit_statefrm(formula: &StateFrm, mut visitor: impl FnMut(&StateFrm) -> Result<(), MercError>) -> Result<(), MercError> {
+    visit_statefrm_rec(formula, &mut visitor)
 }
 
 /// See [`apply`].
-fn apply_rec(
+fn apply_statefrm_rec(
     formula: StateFrm,
     apply: &mut impl FnMut(&StateFrm) -> Result<Option<StateFrm>, MercError>,
 ) -> Result<StateFrm, MercError> {
@@ -37,8 +37,8 @@ fn apply_rec(
 
     match formula {
         StateFrm::Binary { op, lhs, rhs } => {
-            let new_lhs = apply_rec(*lhs, apply)?;
-            let new_rhs = apply_rec(*rhs, apply)?;
+            let new_lhs = apply_statefrm_rec(*lhs, apply_statefrm)?;
+            let new_rhs = apply_statefrm_rec(*rhs, apply_statefrm)?;
             Ok(StateFrm::Binary {
                 op,
                 lhs: Box::new(new_lhs),
@@ -50,7 +50,7 @@ fn apply_rec(
             variable,
             body,
         } => {
-            let new_body = apply_rec(*body, apply)?;
+            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
             Ok(StateFrm::FixedPoint {
                 operator,
                 variable,
@@ -58,7 +58,7 @@ fn apply_rec(
             })
         }
         StateFrm::Bound { bound, variables, body } => {
-            let new_body = apply_rec(*body, apply)?;
+            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
             Ok(StateFrm::Bound {
                 bound,
                 variables,
@@ -70,7 +70,7 @@ fn apply_rec(
             formula,
             expr,
         } => {
-            let expr = apply_rec(*expr, apply)?;
+            let expr = apply_statefrm_rec(*expr, apply_statefrm)?;
             Ok(StateFrm::Modality {
                 operator,
                 formula,
@@ -82,7 +82,7 @@ fn apply_rec(
             variables,
             body,
         } => {
-            let new_body = apply_rec(*body, apply)?;
+            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
             Ok(StateFrm::Quantifier {
                 quantifier,
                 variables,
@@ -90,15 +90,15 @@ fn apply_rec(
             })
         }
         StateFrm::DataValExprRightMult(expr, data_val) => {
-            let new_expr = apply_rec(*expr, apply)?;
+            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
             Ok(StateFrm::DataValExprRightMult(Box::new(new_expr), data_val))
         }
         StateFrm::DataValExprLeftMult(data_val, expr) => {
-            let new_expr = apply_rec(*expr, apply)?;
+            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
             Ok(StateFrm::DataValExprLeftMult(data_val, Box::new(new_expr)))
         }
         StateFrm::Unary { op, expr } => {
-            let new_expr = apply_rec(*expr, apply)?;
+            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
             Ok(StateFrm::Unary {
                 op,
                 expr: Box::new(new_expr),
@@ -114,7 +114,7 @@ fn apply_rec(
 }
 
 /// See [`visit`].
-fn visit_rec(
+fn visit_statefrm_rec(
     formula: &StateFrm,
     function: &mut impl FnMut(&StateFrm) -> Result<(), MercError>,
 ) -> Result<(), MercError> {
@@ -122,29 +122,29 @@ fn visit_rec(
 
     match formula {
         StateFrm::Binary { lhs, rhs, .. } => {
-            visit_rec(lhs, function)?;
-            visit_rec(rhs, function)?;
+            visit_statefrm_rec(lhs, function)?;
+            visit_statefrm_rec(rhs, function)?;
         }
         StateFrm::FixedPoint { body, .. } => {
-            visit_rec(body, function)?;
+            visit_statefrm_rec(body, function)?;
         }
         StateFrm::Bound { body, .. } => {
-            visit_rec(body, function)?;
+            visit_statefrm_rec(body, function)?;
         }
         StateFrm::Modality { expr, .. } => {
-            visit_rec(expr, function)?;
+            visit_statefrm_rec(expr, function)?;
         }
         StateFrm::Quantifier { body, .. } => {
-            visit_rec(body, function)?;
+            visit_statefrm_rec(body, function)?;
         }
         StateFrm::DataValExprRightMult(expr, _data_val) => {
-            visit_rec(expr, function)?;
+            visit_statefrm_rec(expr, function)?;
         }
         StateFrm::DataValExprLeftMult(_data_val, expr) => {
-            visit_rec(expr, function)?;
+            visit_statefrm_rec(expr, function)?;
         }
         StateFrm::Unary { expr, .. } => {
-            visit_rec(expr, function)?;
+            visit_statefrm_rec(expr, function)?;
         }
         StateFrm::Id(_, _)
         | StateFrm::True
@@ -170,7 +170,7 @@ mod tests {
         let input = UntypedStateFrmSpec::parse("mu X. [a]X && mu X. X && Y").unwrap();
 
         let mut variables = vec![];
-        apply(input.formula, |frm| {
+        apply_statefrm(input.formula, |frm| {
             if let StateFrm::Id(name, _) = frm {
                 variables.push(name.clone());
             }
