@@ -584,9 +584,7 @@ fn apply_permutation(expression: &PbesExpression, parameters: &Vec<DataVariable>
 
     let result = replace_variables(expression, sigma);
 
-    let pi = (0..parameters.len())
-        .map(|i| pi.value(i))
-        .collect::<Vec<usize>>();
+    let pi = (0..parameters.len()).map(|i| pi.value(i)).collect::<Vec<usize>>();
 
     replace_propositional_variables(&result, &pi)
 }
