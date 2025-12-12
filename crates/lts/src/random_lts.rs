@@ -67,9 +67,9 @@ pub fn random_lts_monolithic(
         }
     }
 
-    if builder.num_of_transitions() == 0 {
-        // Ensure there is at least one transition (otherwise it would be an LTS without initial state).
-        builder.add_transition_index(StateIndex::new(0), LabelIndex::new(0), StateIndex::new(0));
+    if builder.num_of_states() == 0 {
+        // Ensure there is at least one state (otherwise it would be an LTS without initial state).
+        builder.require_num_of_states(1);
     }
 
     builder.finish(StateIndex::new(0), true)

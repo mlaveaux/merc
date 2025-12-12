@@ -123,6 +123,11 @@ pub fn product_lts(left: &impl LTS, right: &impl LTS) -> LabelledTransitionSyste
         }
     }
 
+    if lts_builder.num_of_states() == 0 {
+        // The product has no states, but an LTS requires at least one state (the initial state).
+        lts_builder.require_num_of_states(1);
+    }
+
     lts_builder.finish(StateIndex::new(0), true)
 }
 

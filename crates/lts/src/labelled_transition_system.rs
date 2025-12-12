@@ -379,7 +379,7 @@ impl fmt::Display for LtsMetrics {
 
 impl fmt::Debug for LabelledTransitionSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Initial state: {}", self.initial_state)?;
+        writeln!(f, "Initial state: {} (total: {})", self.initial_state, self.num_of_states())?;
 
         for state_index in self.iter_states() {
             for transition in self.outgoing_transitions(state_index) {
