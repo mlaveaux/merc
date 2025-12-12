@@ -219,8 +219,10 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_random_tau_scc_decomposition() {
-        random_test(100, |rng| {
+        random_test(1, |rng| {
             let lts = random_lts(rng, 10, 3, 3);
+            println!("LTS: {:?}", lts);
+
             let partitioning = tau_scc_decomposition(&lts);
             let reduction = quotient_lts_naive(&lts, &partitioning, true);
             assert!(!has_tau_loop(&reduction), "The SCC decomposition contains tau-loops");

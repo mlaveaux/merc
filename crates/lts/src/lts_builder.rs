@@ -124,6 +124,18 @@ impl LtsBuilder {
         self.transition_from.len()
     }
 
+    /// Returns the number of states added to the builder.
+    pub fn num_of_states(&self) -> usize {
+        self.num_of_states
+    }
+
+    /// Ensures that the builder has at least the given number of states.
+    pub fn require_num_of_states(&mut self, num_of_states: usize) {
+        if num_of_states > self.num_of_states {
+            self.num_of_states = num_of_states;
+        }
+    }
+
     /// Returns an iterator over all transitions as (from, label, to) tuples.
     pub fn iter(&self) -> impl Iterator<Item = (StateIndex, LabelIndex, StateIndex)> {
         self.transition_from
