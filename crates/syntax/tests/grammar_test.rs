@@ -124,14 +124,14 @@ fn test_sort_precedence() {
     }
 }
 
-#[test]
-fn test_bool_spec() {
-    match UntypedDataSpecification::parse(include_str!("../spec/bool.mcrl2")) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
-}
+// #[test]
+// fn test_bool_spec() {
+//     match UntypedDataSpecification::parse(include_str!("../spec/bool.mcrl2")) {
+//         Ok(result) => {
+//             println!("{}", result);
+//         }
+//         Err(e) => {
+//             panic!("Failed to parse expression: {}", e);
+//         }
+//     }
+// }

@@ -112,6 +112,8 @@ pub struct CubeIterAll<'a> {
 
     cube: Vec<OptBool>,
 
+    stop: bool,
+
     variables: &'a Vec<BDDFunction>,
 }
 
@@ -119,7 +121,7 @@ impl<'a> CubeIterAll<'a> {
     /// Creates a new cube iterator that iterates over the single cube
     pub fn new(variables: &'a Vec<BDDFunction>, bdd: &'a BDDFunction) -> CubeIterAll<'a> {
         let cube = Vec::from_iter((0..variables.len()).map(|_| OptBool::False));
-        Self { bdd, cube, variables }
+        Self { bdd, cube, variables, stop: false }
     }
 }
 
@@ -127,8 +129,7 @@ impl Iterator for CubeIterAll<'_> {
     type Item = Result<(Vec<OptBool>, BDDFunction), MercError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cube.iter().all(|x| *x == OptBool::True) {
-            // All variables are true, we are done
+        if self.stop {
             return None;
         }
 
@@ -152,39 +153,48 @@ impl Iterator for CubeIterAll<'_> {
                 }
 
                 if !tmp.satisfiable() {
-                    // This cube is not satisfying, try the next one
-                    increment(&mut self.cube);
+                    // This cube is not satisfying, try the next one, or quit if overflow
+                    if !increment(&mut self.cube) {
+                        return None;
+                    }
                     break;
                 }
             }
 
             if tmp.satisfiable() {
                 let result = self.cube.clone();
-                increment(&mut self.cube);
+                // The next iteration overflows, we are done
+                self.stop = !increment(&mut self.cube);
                 return Some(Ok((result, tmp)));
             }
         }
     }
 }
 
-/// Perform the binary increment.
-fn increment(cube: &mut Vec<OptBool>) {
+/// Perform the binary increment, returns false if overflow occurs.
+fn increment(cube: &mut Vec<OptBool>) -> bool {
     for value in cube.iter_mut() {
         // Set each variable to true until we find one that is false
         if *value == OptBool::False {
             *value = OptBool::True;
-            break;
+            return true;
         }
 
         *value = OptBool::False;
     }
+
+    // ALl variables were true, overflow
+    false
 }
 
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
 
+    use merc_utilities::MercError;
     use merc_utilities::random_test;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::util::OptBool;
 
     use crate::CubeIterAll;
     use crate::FormatConfig;
@@ -193,9 +203,9 @@ mod tests {
     use crate::random_bitvectors;
 
     #[test]
-    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_cube_iter() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
             let set = random_bitvectors(rng, 5, 20);
             println!("Set: {:?}", set.iter().format_with(", ", |v, f| f(&FormatConfig(v))));
@@ -205,16 +215,16 @@ mod tests {
             let bdd = from_iter(&manager_ref, &variables, set.iter()).unwrap();
 
             // Check that the cube iterator yields all the expected cubes
-            let mut num_cubes = 0;
-            for cube in CubeIterAll::new(&variables, &bdd) {
-                let (bits, _) = cube.unwrap();
-                println!("Cube: {:?}", bits);
+            let result: Result<Vec<(Vec<OptBool>, BDDFunction)>, MercError> = CubeIterAll::new(&variables, &bdd).collect();
+            let cubes: Vec<(Vec<OptBool>, BDDFunction)> = result.unwrap();
+            for (bits, _) in &cubes{
                 assert!(set.contains(&bits), "Cube {} not in expected set", FormatConfig(&bits));
-                num_cubes += 1;
             }
 
-            // Check that the number of cubes is correct
-            assert_eq!(num_cubes, set.len(), "Number of cubes does not match expected");
+            for cube in &set {
+                let found = cubes.iter().find(|(bits, _)| bits == cube);
+                assert!(found.is_some(), "Expected cube {} not found", FormatConfig(cube));
+            }
         })
     }
 }

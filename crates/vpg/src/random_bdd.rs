@@ -10,7 +10,7 @@ use rand::Rng;
 /// Generate `num_vectors` random bitvectors of length `num_vars`.
 pub fn random_bitvectors(rng: &mut impl Rng, num_vars: usize, num_vectors: usize) -> Vec<Vec<OptBool>> {
     let mut vectors = Vec::new();
-    for _ in 0..num_vectors {
+    for _ in 0..rng.random_range(0..num_vectors) {
         let mut vec = Vec::new();
         for _ in 0..num_vars {
             vec.push(if rng.random_bool(0.5) {

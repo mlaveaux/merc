@@ -100,6 +100,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_variability_parity_game() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);

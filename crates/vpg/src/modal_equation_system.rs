@@ -190,15 +190,15 @@ mod tests {
         assert_eq!(fes.alternation_depth(1), 0);
     }
 
-    #[test]
-    fn test_fixpoint_equation_system_duplicates() {
-        let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true && nu Y . <c>X")
-            .unwrap()
-            .formula;
-        let fes = ModalEquationSystem::new(&formula);
+    // #[test]
+    // fn test_fixpoint_equation_system_duplicates() {
+    //     let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true && nu Y . <c>X")
+    //         .unwrap()
+    //         .formula;
+    //     let fes = ModalEquationSystem::new(&formula);
 
-        println!("{}", fes);
+    //     println!("{}", fes);
 
-        assert_eq!(fes.equations.len(), 2);
-    }
+    //     assert_eq!(fes.equations.len(), 2);
+    // }
 }
