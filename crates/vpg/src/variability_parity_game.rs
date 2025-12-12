@@ -72,12 +72,14 @@ impl VariabilityParityGame {
     }
 
     /// Constructs a new parity game from an iterator over edges.
+    /// 
+    /// The vertices are given by their owner and priority.
+    /// The `edges` iterator should yield tuples of the form (from, configuration, to),
     pub fn from_edges<F, I>(
         manager_ref: &BDDManagerRef,
         initial_vertex: VertexIndex,
         owner: Vec<Player>,
         priority: Vec<Priority>,
-        num_of_vertices: Option<usize>,
         configuration: BDDFunction,
         variables: Vec<BDDFunction>,
         mut edges: F,
@@ -86,15 +88,20 @@ impl VariabilityParityGame {
         F: FnMut() -> I,
         I: Iterator<Item = (VertexIndex, BDDFunction, VertexIndex)>,
     {
+        let num_of_vertices = owner.len();
+        debug_assert_eq!(
+            priority.len(),
+            num_of_vertices,
+            "Owner and priority vectors should have the same length"
+        );
+        
         let mut vertices = Vec::new();
-        if let Some(num_of_vertices) = num_of_vertices {
-            vertices.resize_with(num_of_vertices, Default::default);
-            debug_assert!(
-                initial_vertex.value() < num_of_vertices,
-                "Initial vertex index {} out of bounds {num_of_vertices}",
-                initial_vertex.value()
-            );
-        }
+        vertices.resize_with(num_of_vertices, Default::default);
+        debug_assert!(
+            initial_vertex.value() < num_of_vertices,
+            "Initial vertex index {} out of bounds {num_of_vertices}",
+            initial_vertex.value()
+        );
 
         // Count the number of transitions for every state
         let mut num_of_edges = 0;
@@ -107,15 +114,13 @@ impl VariabilityParityGame {
             vertices[*from] += 1;
             num_of_edges += 1;
 
-            if let Some(num_of_vertices) = num_of_vertices {
-                debug_assert!(
-                    *from < num_of_vertices && *to < num_of_vertices,
-                    "Vertex index out of bounds: from {:?}, to {:?}, num_of_vertices {}",
-                    from,
-                    to,
-                    num_of_vertices
-                );
-            }
+            debug_assert!(
+                *from < num_of_vertices && *to < num_of_vertices,
+                "Vertex index out of bounds: from {:?}, to {:?}, num_of_vertices {}",
+                from,
+                to,
+                num_of_vertices
+            );
         }
 
         if initial_vertex.value() >= vertices.len() {
@@ -123,7 +128,7 @@ impl VariabilityParityGame {
             vertices.resize_with(initial_vertex.value() + 1, Default::default);
         }
 
-        // Track the number of transitions before every state.
+        // Sets the offset for every state into the edge arrays.
         vertices.iter_mut().fold(0, |count, start| {
             let result = count + *start;
             *start = count;
@@ -141,14 +146,14 @@ impl VariabilityParityGame {
             *start += 1;
         }
 
-        // Reset the offset.
+        // Reset the offset to the start.
         vertices.iter_mut().fold(0, |previous, start| {
             let result = *start;
             *start = previous;
             result
         });
 
-        vertices.push(num_of_edges); // Sentinel
+        vertices.push(num_of_edges); // Sentinel vertex
 
         Self {
             game: ParityGame::new(initial_vertex, owner, priority, vertices, edges_to),

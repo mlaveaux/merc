@@ -64,13 +64,11 @@ pub fn translate(
     // Convert the feature diagram (with names) to a VPG
     let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
 
-    let num_of_vertices = vertices.len();
     Ok(VariabilityParityGame::from_edges(
         manager_ref,
         VertexIndex::new(0),
         vertices.iter().map(|(p, _)| p).cloned().collect(),
         vertices.into_iter().map(|(_, pr)| pr).collect(),
-        Some(num_of_vertices),
         fts.configuration().clone(),
         variables,
         || edges.iter().cloned(),
@@ -354,6 +352,19 @@ fn alternation_depth(formula: &StateFrm) -> usize {
 }
 
 /// Returns the alternation depth of the given state formula.
+/// 
+/// `current_op` is the operator of the outer fixed-point formula.
+/// `name` is the variable declaration of the outer fixed-point formula.
+/// 
+/// # Details
+/// 
+/// This implements the following function:
+///   - AD(X) = 1 if X is the outer variable, and 0 otherwise.
+///   - AD(μ X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
+///   - AD(ν X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
+///   - AD(Ψ_1 op Ψ_2) = max(AD(Ψ_1), AD(Ψ_2))
+///   - AD([a] Ψ) = AD(Ψ)
+///   - AD(<a> Ψ) = AD(Ψ)
 fn alternation_depth_rec(formula: &StateFrm, current_op: FixedPointOperator, name: &StateVarDecl) -> usize {
     match formula {
         StateFrm::Id(id, _) => {
@@ -363,7 +374,12 @@ fn alternation_depth_rec(formula: &StateFrm, current_op: FixedPointOperator, nam
                 0
             }
         }
-        StateFrm::FixedPoint { operator, body, .. } => {
+        StateFrm::FixedPoint { operator, variable, body } => {
+            if variable.identifier == name.identifier {
+                // Do not count inner fixed-point variables with the same name
+                return 0;
+            }
+
             let depth = alternation_depth_rec(body, *operator, name);
             if depth > 0 {
                 (if *operator != current_op { 1 } else { 0 }) + depth
@@ -402,6 +418,10 @@ mod tests {
         );
         assert_eq!(
             alternation_depth(&UntypedStateFrmSpec::parse("nu X. mu Z. X && Z").unwrap().formula),
+            2
+        );
+        assert_eq!(
+            alternation_depth(&UntypedStateFrmSpec::parse("nu X. mu Z. X && nu X. X").unwrap().formula),
             2
         );
     }
