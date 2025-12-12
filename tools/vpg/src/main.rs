@@ -199,7 +199,7 @@ fn main() -> Result<ExitCode, MercError> {
                         time_reachable.finish();
 
                         for (old_index, new_index) in mapping.iter().enumerate() {
-                            debug!("{} -> {}", old_index, new_index);
+                            debug!("{} -> {:?}", old_index, new_index);
                         }
 
                         let mut output_file = File::create(&args.output)?;
@@ -217,7 +217,7 @@ fn main() -> Result<ExitCode, MercError> {
                         time_reachable.finish();
 
                         for (old_index, new_index) in mapping.iter().enumerate() {
-                            debug!("{} -> {}", old_index, new_index);
+                            debug!("{} -> {:?}", old_index, new_index);
                         }
 
                         let mut output_file = File::create(&args.output)?;
