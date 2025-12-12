@@ -38,8 +38,8 @@ use crate::VertexIndex;
 /// The format starts with a header, followed by the vertices
 ///
 /// parity <num_of_vertices>;
-/// `\<index\> \<priority\> \<owner\> \<outgoing_vertex\>,\<outgoing_vertex\>,...;`
-/// Each outgoing edge is represented as `\<\to>|\<configuration_set\>`. For the
+/// `<index> <priority> <owner> <outgoing_vertex>,<outgoing_vertex>,...;`
+/// Each outgoing edge is represented as `<to>|<configuration_set>`. For the
 /// format of the configuration set see [parse_configuration_set]
 pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<VariabilityParityGame, MercError> {
     let mut lines = LineIterator::new(reader);
@@ -111,7 +111,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
         // Store the offset for the vertex
         vertices.push(edges_configuration.len());
 
-        if let Some(succesors) = parts.next() {
+        while let Some(succesors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
             for successor in succesors
                 .trim_end_matches(';')
