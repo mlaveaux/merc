@@ -27,7 +27,7 @@ COMMENT = _{ "%" ~ (!NEWLINE ~ ANY)* }
 WHITESPACE = _{ " " | "\t" | NEWLINE }
 
 /// Identifiers
-Id = @{ (ASCII_ALPHANUMERIC|"_"|"'")+ }
+Id = @{ (ASCII_ALPHANUMERIC|"@"|"_"|"'")+ }
 
 /// List of identifiers
 IdList = { Id ~ ( "," ~ Id )* }
