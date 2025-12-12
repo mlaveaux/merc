@@ -19,15 +19,13 @@ members = [
     "pbes",
 ]
 
-[patch.crates-io]
-cmake = { git = "https://github.com/reflectronic/cmake-rs/", branch = "vs-18" }
-
 [workspace.dependencies]
 clap = { version = "4.5", features = ["derive"] }
 env_logger = "0.11"
 log = "0.4"
 itertools = "0.14"
 cmake = "0.1"
+parking_lot = "0.12"
 
 # Dependencies for building the mCRL2 C++ bindings.
 cxx = "1.0"
