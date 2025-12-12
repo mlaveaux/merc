@@ -202,3 +202,19 @@ impl ZielonkaSolver<'_> {
         (Priority::new(highest), Priority::new(lowest))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use merc_utilities::random_test;
+
+    use crate::random_parity_game;
+    use crate::solve_zielonka;
+
+    #[test]
+    fn test_random_parity_game() {
+        random_test(100, |rng| {
+            let pg = random_parity_game(rng, 10, 5, 3);
+            solve_zielonka(&pg);
+        })
+    }
+}

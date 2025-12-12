@@ -460,7 +460,7 @@ impl Hash for MultiAction {
         // Sort the action ids to ensure that the hash is independent of the order.
         actions.sort();
         for action in actions {
-            action.hash(state);            
+            action.hash(state);
         }
     }
 }
