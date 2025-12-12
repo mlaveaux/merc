@@ -37,8 +37,8 @@ fn apply_statefrm_rec(
 
     match formula {
         StateFrm::Binary { op, lhs, rhs } => {
-            let new_lhs = apply_statefrm_rec(*lhs, apply_statefrm)?;
-            let new_rhs = apply_statefrm_rec(*rhs, apply_statefrm)?;
+            let new_lhs = apply_statefrm_rec(*lhs, apply)?;
+            let new_rhs = apply_statefrm_rec(*rhs, apply)?;
             Ok(StateFrm::Binary {
                 op,
                 lhs: Box::new(new_lhs),
@@ -50,7 +50,7 @@ fn apply_statefrm_rec(
             variable,
             body,
         } => {
-            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
+            let new_body = apply_statefrm_rec(*body, apply)?;
             Ok(StateFrm::FixedPoint {
                 operator,
                 variable,
@@ -58,7 +58,7 @@ fn apply_statefrm_rec(
             })
         }
         StateFrm::Bound { bound, variables, body } => {
-            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
+            let new_body = apply_statefrm_rec(*body, apply)?;
             Ok(StateFrm::Bound {
                 bound,
                 variables,
@@ -70,7 +70,7 @@ fn apply_statefrm_rec(
             formula,
             expr,
         } => {
-            let expr = apply_statefrm_rec(*expr, apply_statefrm)?;
+            let expr = apply_statefrm_rec(*expr, apply)?;
             Ok(StateFrm::Modality {
                 operator,
                 formula,
@@ -82,7 +82,7 @@ fn apply_statefrm_rec(
             variables,
             body,
         } => {
-            let new_body = apply_statefrm_rec(*body, apply_statefrm)?;
+            let new_body = apply_statefrm_rec(*body, apply)?;
             Ok(StateFrm::Quantifier {
                 quantifier,
                 variables,
@@ -90,15 +90,15 @@ fn apply_statefrm_rec(
             })
         }
         StateFrm::DataValExprRightMult(expr, data_val) => {
-            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
+            let new_expr = apply_statefrm_rec(*expr, apply)?;
             Ok(StateFrm::DataValExprRightMult(Box::new(new_expr), data_val))
         }
         StateFrm::DataValExprLeftMult(data_val, expr) => {
-            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
+            let new_expr = apply_statefrm_rec(*expr, apply)?;
             Ok(StateFrm::DataValExprLeftMult(data_val, Box::new(new_expr)))
         }
         StateFrm::Unary { op, expr } => {
-            let new_expr = apply_statefrm_rec(*expr, apply_statefrm)?;
+            let new_expr = apply_statefrm_rec(*expr, apply)?;
             Ok(StateFrm::Unary {
                 op,
                 expr: Box::new(new_expr),
