@@ -1,4 +1,8 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
+use std::fmt;
+
+use itertools::Itertools;
+
 use merc_utilities::TagIndex;
 
 use crate::Player;
@@ -96,9 +100,28 @@ impl PG for ParityGame {
     }
 }
 
+impl fmt::Debug for ParityGame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "ParityGame {{")?;
+        writeln!(f, "  num_vertices: {},", self.num_of_vertices())?;
+        writeln!(f, "  num_edges: {},", self.num_of_edges())?;
+        writeln!(f, "  initial_vertex: v{},", *self.initial_vertex)?;
+        writeln!(f, "  vertices: [")?;
+        for v in self.iter_vertices() {
+            let owner = self.owner(v);
+            let prio = self.priority(v);
+            write!(f, "    {}: ({:?}, priority: {}, outgoing: [", *v, owner, *prio)?;
+
+            write!(f, "{}", self.outgoing_edges(v).format(", "))?;
+            writeln!(f, "]),")?;
+        }
+        writeln!(f, "  ]")?;
+        writeln!(f, "}}")
+    }
+}
+
 /// A trait for types that can be interpreted as parity games.
 pub trait PG {
-    
     /// Returns the initial vertex of the parity game.
     fn initial_vertex(&self) -> VertexIndex;
 
