@@ -16,6 +16,7 @@ use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
+use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
@@ -204,7 +205,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                         // 10. a := gamma(v)
                         a = gamma[v].clone();
                         // 11. for w' \in vE such that gamma(v) && theta(v, w') && \gamma(w') != \emptyset do
-                        for edge in self.game.outgoing_edges(v) {
+                        for edge in self.game.outgoing_conf_edges(v) {
                             let tmp = gamma[v].and(edge.configuration())?.and(&gamma[edge.to()])?;
 
                             if tmp.satisfiable() {

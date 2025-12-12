@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use bitvec::bitvec;
 use bitvec::order::Lsb0;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::VertexIndex;
 
@@ -12,7 +13,7 @@ use crate::VertexIndex;
 ///
 /// Returns a new parity game containing only reachable vertices and a mapping
 /// from old vertex indices to new vertex indices (-1 for unreachable vertices).
-pub fn compute_reachable(game: &ParityGame) -> (ParityGame, Vec<isize>) {
+pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
     let num_vertices = game.num_of_vertices();
 
     // Mapping from old vertex indices to new vertices (-1 means unreachable)

@@ -4,7 +4,7 @@ use merc_syntax::ActFrm;
 use merc_syntax::ActFrmBinaryOp;
 use merc_syntax::Action;
 use merc_syntax::StateVarDecl;
-use merc_syntax::visit;
+use merc_syntax::apply;
 use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
@@ -148,7 +148,7 @@ pub fn translate_vertex<'a>(
             match operator {
                 FixedPointOperator::Least => {
                     // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1
-                    vertices.push((Player::Odd, Priority::new(2 * alternation_depth(formula) / 2 + 1)));
+                    vertices.push((Player::Odd, Priority::new(2 * (alternation_depth(formula) / 2) + 1)));
 
                     let s_psi = translate_vertex(
                         vertex_map,
@@ -157,7 +157,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &visit(*body.clone(), |subformula| {
+                        &apply(*body.clone(), |subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
@@ -191,7 +191,7 @@ pub fn translate_vertex<'a>(
                 }
                 FixedPointOperator::Greatest => {
                     // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2 * floor(AD(Ψ)/2)
-                    vertices.push((Player::Even, Priority::new(2 * alternation_depth(formula) / 2)));
+                    vertices.push((Player::Even, Priority::new(2 * (alternation_depth(formula) / 2))));
 
                     let s_psi = translate_vertex(
                         vertex_map,
@@ -200,7 +200,7 @@ pub fn translate_vertex<'a>(
                         s,
                         fts,
                         parsed_labels,
-                        &visit(*body.clone(), |subformula| {
+                        &apply(*body.clone(), |subformula| {
                             match &subformula {
                                 StateFrm::Id(name, arguments) => {
                                     assert!(
@@ -354,7 +354,7 @@ fn alternation_depth(formula: &StateFrm) -> usize {
 }
 
 /// Returns the alternation depth of the given state formula.
-fn alternation_depth_rec(formula: &StateFrm, op: FixedPointOperator, name: &StateVarDecl) -> usize {
+fn alternation_depth_rec(formula: &StateFrm, current_op: FixedPointOperator, name: &StateVarDecl) -> usize {
     match formula {
         StateFrm::Id(id, _) => {
             if id == &name.identifier {
@@ -366,15 +366,15 @@ fn alternation_depth_rec(formula: &StateFrm, op: FixedPointOperator, name: &Stat
         StateFrm::FixedPoint { operator, body, .. } => {
             let depth = alternation_depth_rec(body, *operator, name);
             if depth > 0 {
-                (if *operator != op { 1 } else { 0 }) + depth
+                (if *operator != current_op { 1 } else { 0 }) + depth
             } else {
                 0
             }
         }
         StateFrm::Binary { lhs, rhs, .. } => {
-            alternation_depth_rec(lhs, op, name).max(alternation_depth_rec(rhs, op, name))
+            alternation_depth_rec(lhs, current_op, name).max(alternation_depth_rec(rhs, current_op, name))
         }
-        StateFrm::Modality { expr, .. } => alternation_depth_rec(expr, op, name),
+        StateFrm::Modality { expr, .. } => alternation_depth_rec(expr, current_op, name),
         _ => {
             unimplemented!("Cannot determine alternation depth of formula {}", formula)
         }
@@ -383,7 +383,6 @@ fn alternation_depth_rec(formula: &StateFrm, op: FixedPointOperator, name: &Stat
 
 #[cfg(test)]
 mod tests {
-
     use merc_syntax::UntypedStateFrmSpec;
 
     use crate::FeatureDiagram;

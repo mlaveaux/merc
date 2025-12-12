@@ -8,6 +8,7 @@ use oxidd::bdd::BDDManagerRef;
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::bytevec;
 
+use crate::PG;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
 
@@ -28,7 +29,7 @@ impl VariabilityPredecessors {
 
         // Count the number of incoming transitions for each state
         for state_index in game.iter_vertices() {
-            for edge in game.outgoing_edges(state_index) {
+            for edge in game.outgoing_conf_edges(state_index) {
                 state2incoming.update(*edge.to(), |start| *start += 1);
             }
         }
@@ -42,7 +43,7 @@ impl VariabilityPredecessors {
 
         // Place the transitions
         for state_index in game.iter_vertices() {
-            for edge in game.outgoing_edges(state_index) {
+            for edge in game.outgoing_conf_edges(state_index) {
                 state2incoming.update(*edge.to(), |start| {
                     edges_from.set(*start, state_index);
                     edges_configuration.push(edge.configuration().clone());

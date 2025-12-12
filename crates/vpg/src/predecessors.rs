@@ -3,6 +3,7 @@
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::bytevec;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::VertexIndex;
 
