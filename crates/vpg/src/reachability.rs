@@ -12,12 +12,12 @@ use crate::VertexIndex;
 /// Computes the reachable portion of a parity game from the initial vertex.
 ///
 /// Returns a new parity game containing only reachable vertices and a mapping
-/// from old vertex indices to new vertex indices (-1 for unreachable vertices).
-pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
+/// from old vertex indices to new vertex indices (None for unreachable vertices).
+pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<Option<usize>>) {
     let num_vertices = game.num_of_vertices();
 
-    // Mapping from old vertex indices to new vertices (-1 means unreachable)
-    let mut mapping = vec![-1isize; num_vertices];
+    // Mapping from old vertex indices to new vertices (None means unreachable)
+    let mut mapping = vec![None; num_vertices];
     let mut visited = bitvec![usize, Lsb0; 0; num_vertices];
 
     // New game data structures
@@ -28,8 +28,8 @@ pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
 
     // Helper closure to add a vertex to the new game
     let mut add_vertex = |v: VertexIndex| -> usize {
-        if mapping[*v] != -1 {
-            return mapping[*v] as usize;
+        if let Some(idx) = mapping[*v] {
+            return idx;
         }
 
         // Add a new vertex
@@ -38,7 +38,7 @@ pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
         new_priorities.push(game.priority(v));
 
         // Update mapping
-        mapping[*v] = new_v as isize;
+        mapping[*v] = Some(new_v);
         new_v
     };
 
@@ -49,6 +49,10 @@ pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
     visited.set(*initial, true);
 
     while let Some(v) = queue.pop_front() {
+        // Ensure the current vertex exists in the new game
+        let _new_v = add_vertex(v);
+        debug_assert_eq!(_new_v, new_vertices.len() - 1);
+
         // Process all outgoing edges
         for w in game.outgoing_edges(v) {
             let new_w = add_vertex(w);
@@ -65,11 +69,9 @@ pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<isize>) {
     }
 
     // Find new initial vertex
-    assert_ne!(
-        mapping[*initial], -1isize,
-        "Initial vertex is unreachable, which should be impossible"
-    );
-    let new_initial = VertexIndex::new(mapping[*initial] as usize);
+    let new_initial_idx = mapping[*initial]
+        .expect("Initial vertex is unreachable, which should be impossible");
+    let new_initial = VertexIndex::new(new_initial_idx);
 
     let new_game = ParityGame::new(new_initial, new_owners, new_priorities, new_vertices, new_edges_to);
 

@@ -28,19 +28,20 @@ impl<'a, G: PG> fmt::Display for PgDot<'a, G> {
 
         // Emit vertices with labels and styling based on owner/priority
         for v in self.game.iter_vertices() {
-            // Shape based on owner: Odd -> square, Even -> diamond
-            let shape = match self.game.owner(v) {
-                Player::Odd => "square",
-                Player::Even => "diamond",
+            // Shape based on owner: Odd -> square, Even -> diamond. However, for the diamond
+            // we use a rotated square since it has even sides.
+            let orientation = match self.game.owner(v) {
+                Player::Odd => "0",
+                Player::Even => "45",
             };
 
             // Primary label: priority value only; external index via xlabel.
             writeln!(
                 f,
-                "  v{} [label=\"{}\", shape={}, xlabel=\"v{}\"];",
+                "  v{} [label=\"{}\", shape=square, orientation={}, xlabel=\"v{}\"];",
                 v,
                 self.game.priority(v),
-                shape,
+                orientation,
                 v
             )?;
         }
