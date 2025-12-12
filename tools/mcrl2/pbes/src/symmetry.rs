@@ -133,7 +133,10 @@ impl SymmetryAlgorithm {
         for (alpha, beta) in combined_candidates {
             let permutation = alpha.concat(&beta);
             info!("Found candidate: {}", permutation);
-            info!("Found candidate: {:?}", permutation);
+
+            if self.check_symmetry(&permutation) {
+                info!("Found symmetry: {}", permutation);
+            }
         }
     }
 
@@ -160,8 +163,8 @@ impl SymmetryAlgorithm {
                 }
 
                 if !matched {
-                    info!(
-                        "No matching summand found for summand in equation {:?}.",
+                    debug!(
+                        "No matching summand found for {summand:?} in equation {:?}.",
                         equation.variable().name()
                     );
                     return false;
