@@ -142,7 +142,7 @@ fn main() {
             ],
         ))
         .include(mcrl2_workarounds_path.clone() + "include/")
-        .include("../../../3rd-party/boost-include-only/")
+        .include("../../../../3rd-party/boost-include-only/")
         .include("dparser")
         .include(std::env::var("OUT_DIR").unwrap() + "/include/") // This is where cmake generates the headers for cpptrace.
         .files(add_prefix(
