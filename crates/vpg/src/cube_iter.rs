@@ -1,6 +1,6 @@
 use merc_utilities::MercError;
-use oxidd::BooleanFunction;
-use oxidd::bdd::BDDFunction;
+use oxidd::{BooleanFunction, ManagerRef};
+use oxidd::bdd::{BDDFunction, BDDManagerRef};
 use oxidd::util::OptBool;
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
@@ -35,7 +35,7 @@ impl Iterator for CubeIter<'_> {
             return None;
         }
 
-        // We essentially addition on binary sequences (where 1 = true, 0 =
+        // We essentially perform addition on binary sequences (where 1 = true, 0 =
         // false, and don't care is skipped). Whenever index <= last_index is
         // encountered, we flip all 1s to 0s until we find a 0 to flip to 1.
         // Furthermore, if we skip indices, we set the intermediate indices to
@@ -147,23 +147,113 @@ impl Iterator for CubeIterAll<'_> {
 
                 if !tmp.satisfiable() {
                     // This cube is not satisfying, try the next one
+                    increment(&mut self.cube);
                     break;
                 }
             }
 
             if tmp.satisfiable() {
-                for value in self.cube.iter_mut() {
-                    // Set each variable to true until we find one that is false
-                    if *value == OptBool::False {
-                        *value = OptBool::True;
-                        break;
-                    }
-
-                    *value = OptBool::False;
-                }
-
-                return Some(Ok((self.cube.clone(), tmp)));
+                let result = self.cube.clone();
+                increment(&mut self.cube);
+                return Some(Ok((result, tmp)));
             }
         }
     }
+}
+
+/// Perform the binary increment.
+fn increment(cube: &mut Vec<OptBool>) {
+    for value in cube.iter_mut() {
+        // Set each variable to true until we find one that is false
+        if *value == OptBool::False {
+            *value = OptBool::True;
+            break;
+        }
+
+        *value = OptBool::False;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+    use merc_utilities::{MercError, random_test};
+    use oxidd::{BooleanFunction, bdd::{BDDFunction, BDDManagerRef}};
+    use oxidd::ManagerRef;
+    use oxidd::Manager;
+    use rand::Rng;
+
+    use crate::FormatConfig;
+
+    use super::*;
+
+    /// Generate `num_vectors` random bitvectors of length `num_vars`.
+    fn random_bitvectors(rng: &mut impl Rng, num_vars: usize, num_vectors: usize) -> Vec<Vec<OptBool>> {
+        let mut vectors = Vec::new();
+        for _ in 0..num_vectors {
+            let mut vec = Vec::new();
+            for _ in 0..num_vars {
+                vec.push(if rng.random_bool(0.5) { OptBool::True } else { OptBool::False });
+            }
+            vectors.push(vec);
+        }
+        vectors
+    }
+
+    /// Create a BDD from the given bitvector.
+    fn from_iter<'a>(manager_ref: &BDDManagerRef, variables: &Vec<BDDFunction>, vectors: impl Iterator<Item = &'a Vec<OptBool>>) -> Result<BDDFunction, MercError> {
+        let mut bdd = manager_ref.with_manager_shared(|manager| BDDFunction::t(manager));
+        for bits in vectors {
+            let mut cube = manager_ref.with_manager_shared(|manager| BDDFunction::t(manager));
+            // Create a cube for this bitvector
+            for (i, bit) in bits.iter().enumerate() {
+                let var = variables[i].clone();
+                let literal = match *bit {
+                    OptBool::True  => var,
+                    OptBool::False => {
+                        var.not()?
+                    },
+                    OptBool::None  => continue,
+                };
+                cube = cube.and(&literal)?;
+            }
+
+            bdd = bdd.or(&cube)?;
+        }
+
+        Ok(bdd)
+    }
+
+    /// Create the given number of variables in the BDD manager.
+    fn create_variables(manager_ref: &BDDManagerRef, num_vars: u32) -> Result<Vec<BDDFunction>, MercError> {
+        Ok(manager_ref.with_manager_exclusive(|manager| {
+            manager
+                .add_vars(num_vars)
+                .map(|i| BDDFunction::var(manager, i))
+                .collect::<Result<Vec<_>, _>>()
+        })?)
+    }
+
+    #[test]
+    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_cube_iter() {
+        random_test(1, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let set = random_bitvectors(rng, 5, 20);
+            println!("Set: {:?}", set.iter().format_with(", ", |v, f| f(&FormatConfig(v))));
+
+            let variables = create_variables(&manager_ref, 5).unwrap();
+
+            let bdd = from_iter(&manager_ref, &variables, set.iter()).unwrap();
+
+            // Check that the cube iterator yields all the expected cubes
+            for cube in CubeIterAll::new(&variables, &bdd) {
+                let (bits, _) = cube.unwrap();
+                assert!(set.contains(&bits), "Cube {} not in expected set", FormatConfig(&bits));
+            }
+        })
+
+
+    }
+
 }
