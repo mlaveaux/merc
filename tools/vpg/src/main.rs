@@ -7,6 +7,9 @@ use clap::Parser;
 use clap::Subcommand;
 
 use merc_vpg::CubeIterAll;
+use merc_vpg::PgDot;
+use merc_vpg::compute_reachable;
+use merc_vpg::write_pg;
 use oxidd::BooleanFunction;
 
 use log::debug;
@@ -53,6 +56,7 @@ enum Commands {
     Solve(SolveArgs),
     Reachable(ReachableArgs),
     Translate(TranslateArgs),
+    Display(DisplayArgs),
 }
 
 /// Arguments for solving a parity game
@@ -72,7 +76,11 @@ struct SolveArgs {
 #[derive(clap::Args, Debug)]
 struct ReachableArgs {
     filename: String,
+
     output: String,
+
+    #[arg(long, short)]
+    format: Option<ParityGameFormat>,
 }
 
 /// Arguments for translating a feature transition system and a modal formula into a variability parity game
@@ -89,6 +97,16 @@ struct TranslateArgs {
 
     /// The variability parity game output filename
     output: String,
+}
+
+/// Arguments for displaying a (variability) parity game
+#[derive(clap::Args, Debug)]
+struct DisplayArgs {
+    filename: String,
+
+    /// The parity game file format
+    #[arg(long, short)]
+    format: Option<ParityGameFormat>,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -164,22 +182,48 @@ fn main() -> Result<ExitCode, MercError> {
             }
             Commands::Reachable(args) => {
                 // Read a parity game, compute its reachable part, and write it to a new file.
-                let mut file = File::open(&args.filename)?;
+                let path = Path::new(&args.filename);
+                let mut file = File::open(&path)?;
 
-                let mut time_read = timing.start("read_pg");
-                let game = read_pg(&mut file)?;
-                time_read.finish();
+                let format =
+                    guess_format_from_extension(&path, args.format).ok_or("Unknown parity game file format.")?;
 
-                let mut time_reachable = timing.start("compute_reachable");
-                let (reachable_game, mapping) = merc_vpg::compute_reachable(&game);
-                time_reachable.finish();
+                match format {
+                    ParityGameFormat::PG => {
+                        let mut time_read = timing.start("read_pg");
+                        let game = read_pg(&mut file)?;
+                        time_read.finish();
 
-                for (old_index, new_index) in mapping.iter().enumerate() {
-                    debug!("{} -> {}", old_index, new_index);
+                        let mut time_reachable = timing.start("compute_reachable");
+                        let (reachable_game, mapping) = compute_reachable(&game);
+                        time_reachable.finish();
+
+                        for (old_index, new_index) in mapping.iter().enumerate() {
+                            debug!("{} -> {}", old_index, new_index);
+                        }
+
+                        let mut output_file = File::create(&args.output)?;
+                        write_pg(&mut output_file, &reachable_game)?;
+                    }
+                    ParityGameFormat::VPG => {
+                        let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+
+                        let mut time_read = timing.start("read_vpg");
+                        let game = read_vpg(&manager_ref, &mut file)?;
+                        time_read.finish();
+
+                        let mut time_reachable = timing.start("compute_reachable_vpg");
+                        let (reachable_game, mapping) = compute_reachable(&game);
+                        time_reachable.finish();
+
+                        for (old_index, new_index) in mapping.iter().enumerate() {
+                            debug!("{} -> {}", old_index, new_index);
+                        }
+
+                        let mut output_file = File::create(&args.output)?;
+                        write_pg(&mut output_file, &reachable_game)?;
+                    }
                 }
-
-                let mut output_file = File::create(&args.output)?;
-                merc_vpg::write_pg(&mut output_file, &reachable_game)?;
             }
             Commands::Translate(args) => {
                 // Read a feature diagram and a feature transition system, encode it into a variability parity game, and write it to a new file.
@@ -219,6 +263,33 @@ fn main() -> Result<ExitCode, MercError> {
                 let vpg = translate(&manager_ref, &fts, &formula_spec.formula)?;
                 let mut output_file = File::create(&args.output)?;
                 write_vpg(&mut output_file, &vpg)?;
+            }
+            Commands::Display(args) => {
+                // Read and display a (variability) parity game.
+                let path = Path::new(&args.filename);
+                let mut file = File::open(path)?;
+                let format =
+                    guess_format_from_extension(path, args.format).ok_or("Unknown parity game file format.")?;
+
+                if format == ParityGameFormat::PG {
+                    // Read and display a standard parity game.
+                    let mut time_read = timing.start("read_pg");
+                    let game = read_pg(&mut file)?;
+                    time_read.finish();
+
+                    println!("{}", PgDot::new(&game));
+
+                    // If we can find 'dot' in the PATH, we can also generate a pdf image.
+                } else {
+                    // Read and display a variability parity game.
+                    let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+
+                    let mut time_read = timing.start("read_vpg");
+                    let _game = read_vpg(&manager_ref, &mut file)?;
+                    time_read.finish();
+
+                    unimplemented!("Displaying variability parity games is not yet implemented.")
+                }
             }
         }
     }
