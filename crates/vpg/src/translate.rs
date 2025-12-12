@@ -407,6 +407,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_running_example() {
         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
 
