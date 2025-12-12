@@ -29,11 +29,7 @@ impl LtsBuilderFast {
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(
-        mut labels: Vec<String>,
-        hidden_labels: Vec<String>,
-        num_of_transitions: usize,
-    ) -> Self {
+    pub fn with_capacity(mut labels: Vec<String>, hidden_labels: Vec<String>, num_of_transitions: usize) -> Self {
         // Remove duplicates from the labels.
         labels.sort();
         labels.dedup();
@@ -110,7 +106,7 @@ impl LtsBuilderFast {
     pub fn num_of_transitions(&self) -> usize {
         self.transitions.len()
     }
-    
+
     /// Returns the number of states that the builder currently found.
     pub fn num_of_states(&self) -> usize {
         self.num_of_states
@@ -123,7 +119,6 @@ impl LtsBuilderFast {
             self.num_of_states = num_states;
         }
     }
-
 
     /// Removes duplicated transitions from the added transitions.
     fn remove_duplicates(&mut self) {

@@ -129,7 +129,7 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
             );
         }
     }
-    
+
     builder.require_num_of_states(partition.num_of_blocks());
     builder.finish(
         StateIndex::new(partition.block_number(lts.initial_state_index()).value()),

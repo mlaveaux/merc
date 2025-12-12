@@ -1,9 +1,15 @@
+//! Iterator over cubes in a BDD.
+
 use merc_utilities::MercError;
-use oxidd::{BooleanFunction, ManagerRef};
-use oxidd::bdd::{BDDFunction, BDDManagerRef};
+use oxidd::BooleanFunction;
+use oxidd::bdd::BDDFunction;
 use oxidd::util::OptBool;
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
+///
+/// The returned cubes contain don't care values (OptBool::None) for variables
+/// that can be either true or false without affecting the satisfaction of the
+/// BDD.
 pub struct CubeIter<'a> {
     /// The BDD to iterate over.
     bdd: &'a BDDFunction,
@@ -177,10 +183,13 @@ fn increment(cube: &mut Vec<OptBool>) {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use merc_utilities::{MercError, random_test};
-    use oxidd::{BooleanFunction, bdd::{BDDFunction, BDDManagerRef}};
-    use oxidd::ManagerRef;
+    use merc_utilities::MercError;
+    use merc_utilities::random_test;
+    use oxidd::BooleanFunction;
     use oxidd::Manager;
+    use oxidd::ManagerRef;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::bdd::BDDManagerRef;
     use rand::Rng;
 
     use crate::FormatConfig;
@@ -193,7 +202,11 @@ mod tests {
         for _ in 0..num_vectors {
             let mut vec = Vec::new();
             for _ in 0..num_vars {
-                vec.push(if rng.random_bool(0.5) { OptBool::True } else { OptBool::False });
+                vec.push(if rng.random_bool(0.5) {
+                    OptBool::True
+                } else {
+                    OptBool::False
+                });
             }
             vectors.push(vec);
         }
@@ -201,19 +214,21 @@ mod tests {
     }
 
     /// Create a BDD from the given bitvector.
-    fn from_iter<'a>(manager_ref: &BDDManagerRef, variables: &Vec<BDDFunction>, vectors: impl Iterator<Item = &'a Vec<OptBool>>) -> Result<BDDFunction, MercError> {
-        let mut bdd = manager_ref.with_manager_shared(|manager| BDDFunction::t(manager));
+    fn from_iter<'a>(
+        manager_ref: &BDDManagerRef,
+        variables: &Vec<BDDFunction>,
+        vectors: impl Iterator<Item = &'a Vec<OptBool>>,
+    ) -> Result<BDDFunction, MercError> {
+        let mut bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
         for bits in vectors {
             let mut cube = manager_ref.with_manager_shared(|manager| BDDFunction::t(manager));
             // Create a cube for this bitvector
             for (i, bit) in bits.iter().enumerate() {
                 let var = variables[i].clone();
                 let literal = match *bit {
-                    OptBool::True  => var,
-                    OptBool::False => {
-                        var.not()?
-                    },
-                    OptBool::None  => continue,
+                    OptBool::True => var,
+                    OptBool::False => var.not()?,
+                    OptBool::None => continue,
                 };
                 cube = cube.and(&literal)?;
             }
@@ -247,13 +262,16 @@ mod tests {
             let bdd = from_iter(&manager_ref, &variables, set.iter()).unwrap();
 
             // Check that the cube iterator yields all the expected cubes
+            let mut num_cubes = 0;
             for cube in CubeIterAll::new(&variables, &bdd) {
                 let (bits, _) = cube.unwrap();
+                println!("Cube: {:?}", bits);
                 assert!(set.contains(&bits), "Cube {} not in expected set", FormatConfig(&bits));
+                num_cubes += 1;
             }
+
+            // Check that the number of cubes is correct
+            assert_eq!(num_cubes, set.len(), "Number of cubes does not match expected");
         })
-
-
     }
-
 }
