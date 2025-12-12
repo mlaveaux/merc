@@ -181,7 +181,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
     fn attractor(&mut self, alpha: Player, gamma: &Submap, mut A: Submap) -> Result<Submap, MercError> {
         self.temp_queue.clear();
 
-        // 2. Queue Q := {v \in V | U(v) != \emptset }
+        // 2. Queue Q := {v \in V | U(v) != \emptyset }
         for v in gamma.iter_vertices() {
             self.temp_queue.push(v);
         }
@@ -420,6 +420,7 @@ mod tests {
     use crate::VertexIndex;
 
     #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_submap() {
         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
         let vars: Vec<BDDFunction> = manager_ref
