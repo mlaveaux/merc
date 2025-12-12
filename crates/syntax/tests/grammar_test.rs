@@ -1,5 +1,4 @@
 use indoc::indoc;
-use merc_syntax::UntypedDataSpecification;
 use pest::Parser;
 
 use merc_syntax::Mcrl2Parser;
