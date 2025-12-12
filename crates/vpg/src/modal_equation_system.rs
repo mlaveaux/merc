@@ -102,7 +102,7 @@ impl ModalEquationSystem {
     /// Returns the alternation depth of the ith equation
     pub fn alternation_depth(&self, i: usize) -> usize {
         let equation = &self.equations[i];
-        self.alternation_depth_rec(i, equation.operator, &equation.variable.identifier)
+        self.alternation_depth_rec(i + 1, equation.operator, &equation.variable.identifier)
     }
 
     /// Finds an equation by its variable identifier.
@@ -121,17 +121,18 @@ impl ModalEquationSystem {
     /// equation sigma X = f.
     ///
     ///  AD(X) = CAD(sigma, X, E), which is inductively defined as:
-    ///  - CAD(sigma, X, (sigma' Y)E') = 0, if sigma = sigma' and X = Y
+    ///  - CAD(sigma, X, epsilon) = 0
     ///  - CAD(sigma, X, (sigma' Y)E') = CAD(sigma, X, E'), if sigma == sigma' and X != Y
     ///  - CAD(sigma, X, (sigma' Y)E') = 1 + CAD(sigma', Y, E'), if sigma != sigma'
     fn alternation_depth_rec(&self, i: usize, sigma: FixedPointOperator, variable: &String) -> usize {
+        if i >= self.equations.len() {
+            // Epsilon case
+            return 0;
+        }
+
         let equation = &self.equations[i];
         if sigma == equation.operator {
-            if equation.variable.identifier == *variable {
-                0
-            } else {
-                self.alternation_depth_rec(i + 1, sigma, variable)
-            }
+            self.alternation_depth_rec(i + 1, sigma, variable)
         } else {
             1 + self.alternation_depth_rec(i + 1, equation.operator, &equation.variable.identifier)
         }
