@@ -63,9 +63,9 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
 
     // Read the values for the process parameters.
     for _parameter in process_parameters {
-        let num_of_enties = stream.read_integer()?;
+        let num_of_entries = stream.read_integer()?;
 
-        for _ in 0..num_of_enties {
+        for _ in 0..num_of_entries {
             let _value = stream.read_aterm()?;
         }
     }
@@ -80,21 +80,14 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
     let mut summand_groups = Vec::new();
     let num_of_groups = stream.read_integer()?;
     for _ in 0..num_of_groups {
-        let num_of_reads = stream.read_integer()?;
-        for _ in 0..num_of_reads {
-            let _read = stream.read_aterm()?;
-        }
-
-        let num_of_writes = stream.read_integer()?;
-        for _ in 0..num_of_writes {
-            let _write = stream.read_aterm()?;
-        }
+        let read_parameters: Vec<ATerm> = stream.read_aterm_iter()?.collect::<Result<Vec<_>, _>>()?;
+        let write_parameters: Vec<ATerm> = stream.read_aterm_iter()?.collect::<Result<Vec<_>, _>>()?;
 
         let relation = stream.read_ldd(storage)?;
 
         summand_groups.push(SummandGroup {
-            read_parameters: Vec::new(),
-            write_parameters: Vec::new(),
+            read_parameters,
+            write_parameters,
             relation,
         });
     }
