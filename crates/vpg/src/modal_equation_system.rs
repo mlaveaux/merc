@@ -46,6 +46,76 @@ impl ModalEquationSystem {
 
         ModalEquationSystem { equations }
     }
+
+    /// Returns the alternation depth of the fixpoint equation system.
+    pub fn alternation_depth(&self) -> usize {
+        if self.equations.is_empty() {
+            return 0;
+        }
+        
+        let first = &self.equations[0];
+        self.alternation_depth_rec(&first.rhs, first.operator, &first.variable)
+    }
+
+    /// Returns the alternation depth of the given state formula.
+    ///
+    /// `current_op` is the operator of the current equation.
+    /// `current_var` is the variable declaration of the current equation.
+    ///
+    /// # Details
+    ///
+    /// This implements the following function:
+    ///   - AD(X) = AD of equation for X (if found), with alternation if operator changes
+    ///   - AD(μ X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
+    ///   - AD(ν X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
+    ///   - AD(Ψ_1 op Ψ_2) = max(AD(Ψ_1), AD(Ψ_2))
+    ///   - AD([a] Ψ) = AD(Ψ)
+    ///   - AD(<a> Ψ) = AD(Ψ)
+    fn alternation_depth_rec(&self, formula: &StateFrm, current_op: FixedPointOperator, current_var: &StateVarDecl) -> usize {
+        match formula {
+            StateFrm::Id(id, _) => {
+                // Check if this is a recursive reference to the current variable
+                if id == &current_var.identifier {
+                    return 1;
+                }
+                
+                // Find the equation corresponding to this variable and continue recursion
+                if let Some(equation) = self.equations.iter().find(|eq| &eq.variable.identifier == id) {
+                    let depth = self.alternation_depth_rec(&equation.rhs, equation.operator, &equation.variable);
+                    if depth > 0 {
+                        (if equation.operator != current_op { 1 } else { 0 }) + depth
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                }
+            }
+            StateFrm::FixedPoint {
+                operator,
+                variable,
+                body,
+            } => {
+                if variable.identifier == current_var.identifier {
+                    // Do not count inner fixed-point variables with the same name
+                    return 0;
+                }
+
+                let depth = self.alternation_depth_rec(body, *operator, variable);
+                if depth > 0 {
+                    (if *operator != current_op { 1 } else { 0 }) + depth
+                } else {
+                    0
+                }
+            }
+            StateFrm::Binary { lhs, rhs, .. } => {
+                self.alternation_depth_rec(lhs, current_op, current_var)
+                    .max(self.alternation_depth_rec(rhs, current_op, current_var))
+            }
+            StateFrm::Modality { expr, .. } => self.alternation_depth_rec(expr, current_op, current_var),
+            _ => 0,
+        }
+    }
 }
 
 /// Applies `RHS` to the given formula.

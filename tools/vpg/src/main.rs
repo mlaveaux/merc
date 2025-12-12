@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::fs::read_to_string;
+use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
-use std::io::Write;
 
 use clap::Parser;
 use clap::Subcommand;
@@ -106,7 +106,7 @@ struct TranslateArgs {
 #[derive(clap::Args, Debug)]
 struct DisplayArgs {
     filename: String,
-    
+
     /// The .dot file output filename
     output: String,
 
@@ -299,8 +299,7 @@ fn main() -> Result<ExitCode, MercError> {
 
                 if let Ok(dot_path) = which::which("dot") {
                     info!("Generating PDF using dot...");
-                    cmd!(dot_path, "-Tpdf", &args.output, "-O")
-                        .run()?;
+                    cmd!(dot_path, "-Tpdf", &args.output, "-O").run()?;
                 }
             }
         }
