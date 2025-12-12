@@ -69,8 +69,7 @@ pub fn compute_reachable(game: &impl PG) -> (ParityGame, Vec<Option<usize>>) {
     }
 
     // Find new initial vertex
-    let new_initial_idx = mapping[*initial]
-        .expect("Initial vertex is unreachable, which should be impossible");
+    let new_initial_idx = mapping[*initial].expect("Initial vertex is unreachable, which should be impossible");
     let new_initial = VertexIndex::new(new_initial_idx);
 
     let new_game = ParityGame::new(new_initial, new_owners, new_priorities, new_vertices, new_edges_to);

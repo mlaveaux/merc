@@ -71,10 +71,10 @@ impl VariabilityParityGame {
         }
     }
 
-    /// Constructs a new parity game from an iterator over edges.
-    /// 
+    /// Constructs a new variability parity game from an iterator over edges.
+    ///
     /// The vertices are given by their owner and priority.
-    /// The `edges` iterator should yield tuples of the form (from, configuration, to),
+    /// The `edges` iterator should yield tuples of the form (from, configuration, to).
     pub fn from_edges<F, I>(
         manager_ref: &BDDManagerRef,
         initial_vertex: VertexIndex,
@@ -94,7 +94,7 @@ impl VariabilityParityGame {
             num_of_vertices,
             "Owner and priority vectors should have the same length"
         );
-        
+
         let mut vertices = Vec::new();
         vertices.resize_with(num_of_vertices, Default::default);
         debug_assert!(
@@ -165,11 +165,11 @@ impl VariabilityParityGame {
 
     /// Returns an iterator over the outgoing edges of the given vertex.
     pub fn outgoing_conf_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = Edge<'_>> + '_ {
-        let start = self.game.vertices[*state_index];
-        let end = self.game.vertices[*state_index + 1];
+        let start = self.game.vertices()[*state_index];
+        let end = self.game.vertices()[*state_index + 1];
         self.edges_configuration[start..end]
             .iter()
-            .zip(self.game.edges_to[start..end].iter())
+            .zip(self.game.edges_to()[start..end].iter())
             .map(|(configuration, &to)| Edge { to, configuration })
     }
 

@@ -28,10 +28,9 @@ pub struct ParityGame {
     /// Stores the priority of every vertex.
     priority: Vec<Priority>,
 
-    // TODO: These should only be accessible in VariabilityParityGame
     /// Offsets into the transition array for every vertex.
-    pub vertices: Vec<usize>,
-    pub edges_to: Vec<VertexIndex>,
+    vertices: Vec<usize>,
+    edges_to: Vec<VertexIndex>,
 
     initial_vertex: VertexIndex,
 }
@@ -65,6 +64,103 @@ impl ParityGame {
             edges_to,
             initial_vertex,
         }
+    }
+
+    /// Constructs a new parity game from an iterator over edges.
+    ///
+    /// The vertices are given by their owner and priority.
+    /// The `edges` iterator should yield tuples of the form (from, to).
+    pub fn from_edges<F, I>(
+        initial_vertex: VertexIndex,
+        owner: Vec<Player>,
+        priority: Vec<Priority>,
+        mut edges: F,
+    ) -> Self
+    where
+        F: FnMut() -> I,
+        I: Iterator<Item = (VertexIndex, VertexIndex)>,
+    {
+        let num_of_vertices = owner.len();
+        debug_assert_eq!(
+            priority.len(),
+            num_of_vertices,
+            "Owner and priority vectors should have the same length"
+        );
+
+        let mut vertices = Vec::new();
+        vertices.resize_with(num_of_vertices, Default::default);
+        debug_assert!(
+            initial_vertex.value() < num_of_vertices,
+            "Initial vertex index {} out of bounds {num_of_vertices}",
+            initial_vertex.value()
+        );
+
+        // Count the number of transitions for every state
+        let mut num_of_edges = 0;
+        for (from, to) in edges() {
+            // Ensure that the states vector is large enough.
+            if vertices.len() <= *from.max(to) {
+                vertices.resize_with(*from.max(to) + 1, || 0);
+            }
+
+            vertices[*from] += 1;
+            num_of_edges += 1;
+
+            debug_assert!(
+                *from < num_of_vertices && *to < num_of_vertices,
+                "Vertex index out of bounds: from {:?}, to {:?}, num_of_vertices {}",
+                from,
+                to,
+                num_of_vertices
+            );
+        }
+
+        if initial_vertex.value() >= vertices.len() {
+            // Ensure that the initial state is a valid state (and all states before it exist).
+            vertices.resize_with(initial_vertex.value() + 1, Default::default);
+        }
+
+        // Sets the offset for every state into the edge arrays.
+        vertices.iter_mut().fold(0, |count, start| {
+            let result = count + *start;
+            *start = count;
+            result
+        });
+
+        // Place the transitions, and increment the end for every state.
+        let mut edges_to = vec![VertexIndex::new(0); num_of_edges];
+        for (from, to) in edges() {
+            let start = &mut vertices[*from];
+            edges_to[*start] = to;
+            *start += 1;
+        }
+
+        // Reset the offset to the start.
+        vertices.iter_mut().fold(0, |previous, start| {
+            let result = *start;
+            *start = previous;
+            result
+        });
+
+        vertices.push(num_of_edges); // Sentinel vertex
+
+        Self {
+            initial_vertex,
+            owner,
+            priority,
+            vertices,
+            edges_to,
+        }
+    }
+
+    /// Returns the vertices array.
+    pub(crate) fn vertices(&self) -> &Vec<usize> {
+        &self.vertices
+    }
+
+    /// Returns the edges_to array.
+    pub(crate) fn edges_to(&self) -> &Vec<VertexIndex> {
+        &self.edges_to
     }
 }
 
