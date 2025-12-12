@@ -7,7 +7,7 @@ use merc_syntax::apply;
 use merc_syntax::visit;
 
 /// A fixpoint equation system representing a ranked set of fixpoint equations.
-pub struct FixpointEquationSystem {
+pub struct ModalEquationSystem {
     equations: Vec<Equation>,
 }
 
@@ -18,8 +18,7 @@ struct Equation {
     rhs: StateFrm,
 }
 
-
-impl FixpointEquationSystem {
+impl ModalEquationSystem {
     /// Converts a plain state formula into a fixpoint equation system.
     pub fn new(formula: &StateFrm) -> Self {
         let mut equations = Vec::new();
@@ -45,19 +44,21 @@ impl FixpointEquationSystem {
         })
         .expect("No error expected during fixpoint equation system construction");
 
-        FixpointEquationSystem { equations }
+        ModalEquationSystem { equations }
     }
 }
 
-// RHS(true) = true
-// RHS(false) = false
-// RHS(<a>f) = <a>RHS(f)
-// RHS([a]f) = [a]RHS(f)
-// RHS(f1 && f2) = RHS(f1) && RHS(f2)
-// RHS(f1 || f2) = RHS(f1) || RHS(f2)
-// RHS(X) = X
-// RHS(mu X. f) = X(args)
-// RHS(nu X. f) = X(args)
+/// Applies `RHS` to the given formula.
+/// 
+/// RHS(true) = true
+/// RHS(false) = false
+/// RHS(<a>f) = <a>RHS(f)
+/// RHS([a]f) = [a]RHS(f)
+/// RHS(f1 && f2) = RHS(f1) && RHS(f2)
+/// RHS(f1 || f2) = RHS(f1) || RHS(f2)
+/// RHS(X) = X
+/// RHS(mu X. f) = X(args)
+/// RHS(nu X. f) = X(args)
 fn rhs(formula: &StateFrm) -> StateFrm {
     apply(formula.clone(), |formula| match formula {
         // RHS(mu X. phi) = X(args)
@@ -70,7 +71,7 @@ fn rhs(formula: &StateFrm) -> StateFrm {
     .expect("No error expected during RHS extraction")
 }
 
-impl fmt::Display for FixpointEquationSystem {
+impl fmt::Display for ModalEquationSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for equation in &self.equations {
             writeln!(
@@ -94,7 +95,7 @@ mod tests {
         let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true")
             .unwrap()
             .formula;
-        let fes = FixpointEquationSystem::new(&formula);
+        let fes = ModalEquationSystem::new(&formula);
 
         println!("{}", fes);
     }
