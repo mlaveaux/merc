@@ -21,6 +21,7 @@ use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
 use crate::FeatureTransitionSystem;
+use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
@@ -32,10 +33,6 @@ pub fn translate(
     fts: &FeatureTransitionSystem,
     formula: &StateFrm,
 ) -> Result<VariabilityParityGame, MercError> {
-    let mut vertex_map: IndexedSet<(StateIndex, StateFrm)> = IndexedSet::new();
-    let mut vertices: Vec<(Player, Priority)> = Vec::new();
-    let mut edges: Vec<(VertexIndex, BDDFunction, VertexIndex)> = Vec::new();
-
     // Parses all labels into MultiAction once
     let parsed_labels: Result<Vec<MultiAction>, MercError> =
         fts.labels().iter().map(|label| MultiAction::parse(label)).collect();
@@ -50,246 +47,298 @@ pub fn translate(
         info!("label: {}", label);
     }
 
-    // Translate the initial vertex
-    translate_vertex(
-        &mut vertex_map,
-        &mut vertices,
-        &mut edges,
-        fts.initial_state_index(),
-        fts,
-        &simplified_labels,
-        formula,
-    )?;
+    let mut algorithm = Translation::new(fts, &simplified_labels, true);
+    algorithm.translate_vertex(fts.initial_state_index(), formula)?;
 
     // Convert the feature diagram (with names) to a VPG
     let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
 
-    Ok(VariabilityParityGame::from_edges(
+    let result = VariabilityParityGame::from_edges(
         manager_ref,
         VertexIndex::new(0),
-        vertices.iter().map(|(p, _)| p).cloned().collect(),
-        vertices.into_iter().map(|(_, pr)| pr).collect(),
+        algorithm.vertices.iter().map(|(p, _)| p).cloned().collect(),
+        algorithm.vertices.into_iter().map(|(_, pr)| pr).collect(),
         fts.configuration().clone(),
         variables,
-        || edges.iter().cloned(),
-    ))
+        || algorithm.edges.iter().cloned(),
+    );
+
+    // Check that the result is a total VPG.
+    if cfg!(debug_assertions) {
+        for v in result.iter_vertices() {
+            debug_assert!(
+                result.outgoing_edges(v).next().is_some(),
+                "VPG is not total: vertex {} has no outgoing edges",
+                v
+            );
+        }
+    }
+
+    Ok(result)
 }
 
-/// Translate a single vertex (s, Ψ) into the variability parity game vertex and its outgoing edges.
-///
-/// These are stored in the provided `vertices` and `edges` vectors.
-pub fn translate_vertex<'a>(
-    vertex_map: &mut IndexedSet<(StateIndex, StateFrm)>,
-    vertices: &mut Vec<(Player, Priority)>,
-    edges: &mut Vec<(VertexIndex, BDDFunction, VertexIndex)>,
-    s: StateIndex,
-    fts: &FeatureTransitionSystem,
-    parsed_labels: &Vec<MultiAction>,
-    formula: &StateFrm,
-) -> Result<VertexIndex, MercError> {
-    let (index, inserted) = vertex_map.insert((s, formula.clone()));
-    let vertex_index = VertexIndex::new(*index);
+// Local struct to keep track of the translation state
+struct Translation<'a> {
+    vertex_map: IndexedSet<(StateIndex, StateFrm)>,
+    vertices: Vec<(Player, Priority)>,
+    edges: Vec<(VertexIndex, BDDFunction, VertexIndex)>,
 
-    if !inserted {
-        // Returns the existing vertex.
-        return Ok(vertex_index);
-    }
+    /// Set to true to ensure that the resulting VPG edge relation is total
+    make_total: bool,
 
-    // New vertex should be created, and this mapping is dense
-    debug_assert_eq!(
-        vertex_index,
-        vertices.len(),
-        "Vertex indices should be assigned sequentially"
-    );
+    /// The parsed labels of the FTS.
+    parsed_labels: &'a Vec<MultiAction>,
 
-    trace!("Translating vertex ({}, {})", s, formula);
+    fts: &'a FeatureTransitionSystem,
+}
 
-    match formula {
-        StateFrm::True => {
-            // (s, true) → odd, 0
-            vertices.push((Player::Odd, Priority::new(0)));
-        }
-        StateFrm::False => {
-            // (s, false) → even, 0
-            vertices.push((Player::Even, Priority::new(0)));
-        }
-        StateFrm::Binary { op, lhs, rhs } => {
-            match op {
-                StateFrmOp::Conjunction => {
-                    // (s, Ψ_1 ∧ Ψ_2) →_P odd, (s, Ψ_1) and (s, Ψ_2), 0
-                    vertices.push((Player::Odd, Priority::new(0)));
-                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, lhs)?;
-                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, rhs)?;
-
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi_1));
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi_2));
-                }
-                StateFrmOp::Disjunction => {
-                    // (s, Ψ_1 ∨ Ψ_2) →_P even, (s, Ψ_1) and (s, Ψ_2), 0
-                    vertices.push((Player::Even, Priority::new(0)));
-                    let s_psi_1 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, lhs)?;
-                    let s_psi_2 = translate_vertex(vertex_map, vertices, edges, s, fts, parsed_labels, rhs)?;
-
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi_1));
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi_2));
-                }
-                _ => {
-                    unimplemented!("Cannot translate binary operator in {}", formula);
-                }
-            }
-        }
-        StateFrm::FixedPoint {
-            operator,
-            variable,
-            body,
-        } => {
-            match operator {
-                FixedPointOperator::Least => {
-                    // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1
-                    vertices.push((Player::Odd, Priority::new(2 * (alternation_depth(formula) / 2) + 1)));
-
-                    let s_psi = translate_vertex(
-                        vertex_map,
-                        vertices,
-                        edges,
-                        s,
-                        fts,
-                        parsed_labels,
-                        &apply(*body.clone(), |subformula| {
-                            match &subformula {
-                                StateFrm::Id(name, arguments) => {
-                                    assert!(
-                                        arguments.is_empty(),
-                                        "State formula variables with arguments are not supported in VPG translation"
-                                    );
-                                    if variable.identifier == *name {
-                                        return Ok(Some(formula.clone()));
-                                    }
-                                }
-                                StateFrm::FixedPoint {
-                                    operator: _,
-                                    variable: inner_variable,
-                                    body: _,
-                                } => {
-                                    // Prevent capturing inner fixed-point variables with the same name
-                                    if variable.identifier == *inner_variable.identifier {
-                                        return Ok(Some(subformula.clone()));
-                                    }
-                                }
-                                _ => {
-                                    // Do nothing
-                                }
-                            }
-
-                            Ok(None)
-                        })?,
-                    )?;
-
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi));
-                }
-                FixedPointOperator::Greatest => {
-                    // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2 * floor(AD(Ψ)/2)
-                    vertices.push((Player::Even, Priority::new(2 * (alternation_depth(formula) / 2))));
-
-                    let s_psi = translate_vertex(
-                        vertex_map,
-                        vertices,
-                        edges,
-                        s,
-                        fts,
-                        parsed_labels,
-                        &apply(*body.clone(), |subformula| {
-                            match &subformula {
-                                StateFrm::Id(name, arguments) => {
-                                    assert!(
-                                        arguments.is_empty(),
-                                        "State formula variables with arguments are not supported in VPG translation"
-                                    );
-                                    if variable.identifier == *name {
-                                        return Ok(Some(formula.clone()));
-                                    }
-                                }
-                                StateFrm::FixedPoint {
-                                    operator: _,
-                                    variable: inner_variable,
-                                    body: _,
-                                } => {
-                                    // Prevent capturing inner fixed-point variables with the same name
-                                    if variable.identifier == *inner_variable.identifier {
-                                        return Ok(Some(subformula.clone()));
-                                    }
-                                }
-                                _ => {
-                                    // Do nothing
-                                }
-                            }
-
-                            Ok(None)
-                        })?,
-                    )?;
-
-                    edges.push((vertex_index, fts.configuration().clone(), s_psi));
-                }
-            }
-        }
-        StateFrm::Modality {
-            operator,
-            formula,
-            expr,
-        } => {
-            match operator {
-                ModalityOperator::Box => {
-                    // (s, [a] Ψ) → odd, (s', Ψ) for all s' with s -a-> s', 0
-                    vertices.push((Player::Odd, Priority::new(0)));
-
-                    for transition in fts.outgoing_transitions(s) {
-                        let action = &parsed_labels[*transition.label];
-
-                        trace!("Matching action {} against formula {}", action, formula);
-
-                        if match_regular_formula(formula, &action) {
-                            let s_prime_psi =
-                                translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
-
-                            edges.push((
-                                vertex_index,
-                                fts.configuration().and(fts.feature_label(transition.label))?,
-                                s_prime_psi,
-                            ));
-                        }
-                    }
-                }
-                ModalityOperator::Diamond => {
-                    // (s, <a> Ψ) → even, (s', Ψ) for all s' with s -a-> s', 0
-                    vertices.push((Player::Even, Priority::new(0)));
-
-                    for transition in fts.outgoing_transitions(s) {
-                        let action = &parsed_labels[*transition.label];
-
-                        if match_regular_formula(formula, &action) {
-                            let s_prime_psi =
-                                translate_vertex(vertex_map, vertices, edges, transition.to, fts, parsed_labels, expr)?;
-
-                            edges.push((
-                                vertex_index,
-                                fts.configuration().and(fts.feature_label(transition.label))?,
-                                s_prime_psi,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-        _ => {
-            unimplemented!("Cannot translate formula {}", formula);
+impl Translation<'_> {
+    fn new<'a>(fts: &'a FeatureTransitionSystem, parsed_labels: &'a Vec<MultiAction>, make_total: bool) -> Translation<'a> {
+        Translation {
+            vertex_map: IndexedSet::new(),
+            vertices: Vec::new(),
+            edges: Vec::new(),
+            fts,
+            parsed_labels,
+            make_total,
         }
     }
 
-    debug_assert!(
-        vertex_index <= vertices.len() - 1,
-        "New vertex must have been added for {formula}"
-    );
-    Ok(vertex_index)
+    /// Translate a single vertex (s, Ψ) into the variability parity game vertex and its outgoing edges.
+    ///
+    /// The `fts` and `parsed_labels` are used to find the outgoing transitions matching the modalities in the formula.
+    ///
+    /// These are stored in the provided `vertices` and `edges` vectors.
+    /// The `vertex_map` is used to keep track of already translated vertices.
+    ///
+    /// This function is recursively called for subformulas.
+    pub fn translate_vertex(&mut self, s: StateIndex, formula: &StateFrm) -> Result<VertexIndex, MercError> {
+        let (index, inserted) = self.vertex_map.insert((s, formula.clone()));
+        let vertex_index = VertexIndex::new(*index);
+
+        if !inserted {
+            // Returns the existing vertex.
+            return Ok(vertex_index);
+        }
+
+        // New vertex should be created, and this mapping is dense
+        debug_assert_eq!(
+            vertex_index,
+            self.vertices.len(),
+            "Vertex indices should be assigned sequentially"
+        );
+
+        trace!("Translating vertex ({}, {})", s, formula);
+
+        match formula {
+            StateFrm::True => {
+                // (s, true) → odd, 0
+                self.vertices.push((Player::Odd, Priority::new(0)));
+
+                if self.make_total {
+                    // Self-loop
+                    self.edges
+                        .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                }
+            }
+            StateFrm::False => {
+                // (s, false) → even, 0
+                self.vertices.push((Player::Even, Priority::new(0)));
+
+                if self.make_total {
+                    // Self-loop
+                    self.edges
+                        .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                }
+            }
+            StateFrm::Binary { op, lhs, rhs } => {
+                match op {
+                    StateFrmOp::Conjunction => {
+                        // (s, Ψ_1 ∧ Ψ_2) →_P odd, (s, Ψ_1) and (s, Ψ_2), 0
+                        self.vertices.push((Player::Odd, Priority::new(0)));
+                        let s_psi_1 = self.translate_vertex(s, lhs)?;
+                        let s_psi_2 = self.translate_vertex(s, rhs)?;
+
+                        self.edges
+                            .push((vertex_index, self.fts.configuration().clone(), s_psi_1));
+                        self.edges
+                            .push((vertex_index, self.fts.configuration().clone(), s_psi_2));
+                    }
+                    StateFrmOp::Disjunction => {
+                        // (s, Ψ_1 ∨ Ψ_2) →_P even, (s, Ψ_1) and (s, Ψ_2), 0
+                        self.vertices.push((Player::Even, Priority::new(0)));
+                        let s_psi_1 = self.translate_vertex(s, lhs)?;
+                        let s_psi_2 = self.translate_vertex(s, rhs)?;
+
+                        self.edges
+                            .push((vertex_index, self.fts.configuration().clone(), s_psi_1));
+                        self.edges
+                            .push((vertex_index, self.fts.configuration().clone(), s_psi_2));
+                    }
+                    _ => {
+                        unimplemented!("Cannot translate binary operator in {}", formula);
+                    }
+                }
+            }
+            StateFrm::FixedPoint {
+                operator,
+                variable,
+                body,
+            } => {
+                match operator {
+                    FixedPointOperator::Least => {
+                        // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1. In Rust division is already floor.
+                        self.vertices
+                            .push((Player::Odd, Priority::new(2 * (alternation_depth(formula) / 2) + 1)));
+
+                        let s_psi = self.translate_vertex(
+                            s,
+                            &apply(*body.clone(), |subformula| {
+                                match &subformula {
+                                    StateFrm::Id(name, arguments) => {
+                                        assert!(
+                                            arguments.is_empty(),
+                                            "State formula variables with arguments are not supported in VPG translation"
+                                        );
+                                        if variable.identifier == *name {
+                                            return Ok(Some(formula.clone()));
+                                        }
+                                    }
+                                    StateFrm::FixedPoint {
+                                        operator: _,
+                                        variable: inner_variable,
+                                        body: _,
+                                    } => {
+                                        // Prevent capturing inner fixed-point variables with the same name
+                                        if variable.identifier == *inner_variable.identifier {
+                                            return Ok(Some(subformula.clone()));
+                                        }
+                                    }
+                                    _ => {
+                                        // Do nothing
+                                    }
+                                }
+
+                                Ok(None)
+                            })?,
+                        )?;
+
+                        self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+                    }
+                    FixedPointOperator::Greatest => {
+                        // (s, ν X. Ψ) →_P even, (s, Ψ[X := ν X. Ψ]), 2 * floor(AD(Ψ)/2). In Rust division is already floor.
+                        self.vertices
+                            .push((Player::Even, Priority::new(2 * (alternation_depth(formula) / 2))));
+
+                        let s_psi = self.translate_vertex(
+                            s,
+                            &apply(*body.clone(), |subformula| {
+                                match &subformula {
+                                    StateFrm::Id(name, arguments) => {
+                                        assert!(
+                                            arguments.is_empty(),
+                                            "State formula variables with arguments are not supported in VPG translation"
+                                        );
+                                        if variable.identifier == *name {
+                                            return Ok(Some(formula.clone()));
+                                        }
+                                    }
+                                    StateFrm::FixedPoint {
+                                        operator: _,
+                                        variable: inner_variable,
+                                        body: _,
+                                    } => {
+                                        // Prevent capturing inner fixed-point variables with the same name
+                                        if variable.identifier == *inner_variable.identifier {
+                                            return Ok(Some(subformula.clone()));
+                                        }
+                                    }
+                                    _ => {
+                                        // Do nothing
+                                    }
+                                }
+
+                                Ok(None)
+                            })?,
+                        )?;
+
+                        self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+                    }
+                }
+            }
+            StateFrm::Modality {
+                operator,
+                formula,
+                expr,
+            } => {
+                match operator {
+                    ModalityOperator::Box => {
+                        // (s, [a] Ψ) → odd, (s', Ψ) for all s' with s -a-> s', 0
+                        self.vertices.push((Player::Odd, Priority::new(0)));
+
+                        let mut matched = false;
+                        for transition in self.fts.outgoing_transitions(s) {
+                            let action = &self.parsed_labels[*transition.label];
+
+                            trace!("Matching action {} against formula {}", action, formula);
+
+                            if match_regular_formula(formula, &action) {
+                                matched = true;
+                                let s_prime_psi = self.translate_vertex(transition.to, expr)?;
+
+                                self.edges.push((
+                                    vertex_index,
+                                    self.fts.configuration().and(self.fts.feature_label(transition.label))?,
+                                    s_prime_psi,
+                                ));
+                            }
+                        }
+
+                        if !matched && self.make_total {
+                            // No matching transitions, add a self-loop to ensure totality
+                            self.edges
+                                .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                        }
+                    }
+                    ModalityOperator::Diamond => {
+                        // (s, <a> Ψ) → even, (s', Ψ) for all s' with s -a-> s', 0
+                        self.vertices.push((Player::Even, Priority::new(0)));
+
+                        let mut matched = false;
+                        for transition in self.fts.outgoing_transitions(s) {
+                            let action = &self.parsed_labels[*transition.label];
+
+                            if match_regular_formula(formula, &action) {
+                                matched = true;
+                                let s_prime_psi = self.translate_vertex(transition.to, expr)?;
+
+                                self.edges.push((
+                                    vertex_index,
+                                    self.fts.configuration().and(self.fts.feature_label(transition.label))?,
+                                    s_prime_psi,
+                                ));
+                            }
+                        }
+
+                        if !matched && self.make_total {
+                            // No matching transitions, add a self-loop to ensure totality
+                            self.edges
+                                .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                        }
+                    }
+                }
+            }
+            _ => {
+                unimplemented!("Cannot translate formula {}", formula);
+            }
+        }
+
+        debug_assert!(
+            vertex_index <= self.vertices.len() - 1,
+            "New vertex must have been added for {formula}"
+        );
+        Ok(vertex_index)
+    }
 }
 
 /// Removes the BDD information from the multi-action, i.e., only keeps the action labels.
@@ -352,12 +401,12 @@ fn alternation_depth(formula: &StateFrm) -> usize {
 }
 
 /// Returns the alternation depth of the given state formula.
-/// 
+///
 /// `current_op` is the operator of the outer fixed-point formula.
 /// `name` is the variable declaration of the outer fixed-point formula.
-/// 
+///
 /// # Details
-/// 
+///
 /// This implements the following function:
 ///   - AD(X) = 1 if X is the outer variable, and 0 otherwise.
 ///   - AD(μ X. Ψ) = AD(Ψ) + 1 if there is a change in operator.
@@ -374,7 +423,11 @@ fn alternation_depth_rec(formula: &StateFrm, current_op: FixedPointOperator, nam
                 0
             }
         }
-        StateFrm::FixedPoint { operator, variable, body } => {
+        StateFrm::FixedPoint {
+            operator,
+            variable,
+            body,
+        } => {
             if variable.identifier == name.identifier {
                 // Do not count inner fixed-point variables with the same name
                 return 0;
