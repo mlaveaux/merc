@@ -3,7 +3,10 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use mcrl2_sys::atermpp::ffi;
+use mcrl2_sys::atermpp::ffi::mcrl2_lock_exclusive;
+use mcrl2_sys::atermpp::ffi::mcrl2_lock_shared;
+use mcrl2_sys::atermpp::ffi::mcrl2_unlock_exclusive;
+use mcrl2_sys::atermpp::ffi::mcrl2_unlock_shared;
 
 /// Provides access to the mCRL2 busy forbidden protocol, where there
 /// are thread local busy flags and one central storage for the forbidden
@@ -27,7 +30,7 @@ impl<T> BfTermPool<T> {
 impl<'a, T: ?Sized> BfTermPool<T> {
     /// Provides read access to the underlying object.
     pub fn read(&'a self) -> BfTermPoolRead<'a, T> {
-        ffi::lock_shared();
+        mcrl2_lock_shared();
         BfTermPoolRead {
             mutex: self,
             _marker: Default::default(),
@@ -36,7 +39,7 @@ impl<'a, T: ?Sized> BfTermPool<T> {
 
     /// Provides write access to the underlying object.
     pub fn write(&'a self) -> BfTermPoolWrite<'a, T> {
-        ffi::lock_exclusive();
+        mcrl2_lock_exclusive();
 
         BfTermPoolWrite {
             mutex: self,
@@ -62,7 +65,7 @@ impl<'a, T: ?Sized> BfTermPool<T> {
     /// set to false.
     pub unsafe fn write_exclusive(&'a self) -> BfTermPoolThreadWrite<'a, T> {
         // This is a lock shared, but assuming that only ONE thread uses this function.
-        ffi::lock_shared();
+        mcrl2_lock_shared();
 
         BfTermPoolThreadWrite {
             mutex: self,

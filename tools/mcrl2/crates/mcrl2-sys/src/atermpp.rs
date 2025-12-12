@@ -38,7 +38,7 @@ pub mod ffi {
 
         /// Returns true iff the unlock was successful, otherwise the recursive count was non-zero.
         fn mcrl2_unlock_shared() -> bool;
-        
+
         /// Locks and unlocks the global aterm pool for exclusive access.
         fn mcrl2_lock_exclusive();
         fn mcrl2_unlock_exclusive();

@@ -70,6 +70,14 @@ rust::String mcrl2_pbes_to_string(const pbes& pbesspec)
   return ss.str();
 }
 
+inline
+rust::String mcrl2_pbes_expression_to_string(const atermpp::aterm& expr)
+{
+  std::stringstream ss;
+  ss << expr;
+  return ss.str();
+}
+
 class stategraph_algorithm : private detail::stategraph_local_algorithm
 {
   using super = detail::stategraph_local_algorithm;

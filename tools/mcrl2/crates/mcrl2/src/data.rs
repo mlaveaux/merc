@@ -4,10 +4,7 @@ use mcrl2_sys::cxx::UniquePtr;
 use mcrl2_sys::data::ffi::RewriterJitty;
 use mcrl2_sys::data::ffi::data_specification;
 use mcrl2_sys::data::ffi::mcrl2_create_rewriter_jitty;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_to_string;
 use mcrl2_sys::data::ffi::mcrl2_sort_to_string;
-use mcrl2_sys::data::ffi::mcrl2_variable_name;
-use mcrl2_sys::data::ffi::mcrl2_variable_sort;
 
 #[cfg(feature = "mcrl2_jittyc")]
 use mcrl2_sys::data::ffi::RewriterCompilingJitty;
@@ -15,42 +12,6 @@ use mcrl2_sys::data::ffi::RewriterCompilingJitty;
 use mcrl2_sys::data::ffi::mcrl2_create_rewriter_jittyc;
 
 use crate::Aterm;
-use crate::AtermString;
-
-/// Represents a data::variable from the mCRL2 toolset.
-#[derive(Clone)]
-pub struct DataVariable {
-    term: Aterm,
-}
-
-impl DataVariable {
-    /// Returns the name of the variable.
-    pub fn name(&self) -> AtermString {
-        AtermString::new(Aterm::new(mcrl2_variable_name(self.term.get())))
-    }
-
-    /// Returns the sort of the variable.
-    pub fn sort(&self) -> DataSort {
-        DataSort::new(Aterm::new(mcrl2_variable_sort(self.term.get())))
-    }
-
-    /// Creates a new data::variable from the given aterm.
-    pub(crate) fn new(term: Aterm) -> Self {
-        DataVariable { term }
-    }
-}
-
-impl fmt::Debug for DataVariable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {:?}", self.name(), self.sort())
-    }
-}
-
-impl From<Aterm> for DataVariable {
-    fn from(term: Aterm) -> Self {
-        DataVariable::new(term)
-    }
-}
 
 /// Represents a data::sort from the mCRL2 toolset.
 #[derive(PartialEq, Eq)]
@@ -68,36 +29,6 @@ impl DataSort {
 impl fmt::Debug for DataSort {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", mcrl2_sort_to_string(self.term.get()))
-    }
-}
-
-/// Represents a data::data_expression from the mCRL2 toolset.
-#[derive(Clone, PartialEq, Eq)]
-pub struct DataExpression {
-    term: Aterm,
-}
-
-impl DataExpression {
-    /// Returns a reference to the underlying Aterm.
-    pub fn get(&self) -> &Aterm {
-        &self.term
-    }
-
-    /// Creates a new data::data_expression from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
-        DataExpression { term }
-    }
-}
-
-impl From<DataVariable> for DataExpression {
-    fn from(var: DataVariable) -> Self {
-        DataExpression::new(var.term)
-    }
-}
-
-impl fmt::Debug for DataExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", mcrl2_data_expression_to_string(self.term.get()))
     }
 }
 
@@ -119,14 +50,14 @@ impl DataSpecification {
 
 /// Represents a mcrl2::data::detail::RewriterJitty from the mCRL2 toolset.
 pub struct Mcrl2RewriterJitty {
-    rewriter: UniquePtr<RewriterJitty>,
+    _rewriter: UniquePtr<RewriterJitty>,
 }
 
 impl Mcrl2RewriterJitty {
     /// Creates a new Jitty rewriter from the given data specification.
     pub fn new(data_spec: &DataSpecification) -> Self {
         let rewriter = mcrl2_create_rewriter_jitty(data_spec.get());
-        Self { rewriter }
+        Self { _rewriter: rewriter }
     }
 }
 

@@ -151,7 +151,7 @@ pub mod ffi {
             expression: &aterm,
             substitutions: &Vec<assignment_pair>,
         ) -> UniquePtr<aterm>;
-        
+
         /// Replace propositional variables in a pbes expression according to the given substitutions.
         fn mcrl2_pbes_expression_replace_propositional_variables(
             expression: &aterm,
