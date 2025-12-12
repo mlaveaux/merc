@@ -11,6 +11,7 @@ use duct::cmd;
 use log::info;
 use merc_vpg::CubeIterAll;
 use merc_vpg::PgDot;
+use merc_vpg::VpgDot;
 use merc_vpg::compute_reachable;
 use merc_vpg::write_pg;
 use oxidd::BooleanFunction;
@@ -294,7 +295,7 @@ fn main() -> Result<ExitCode, MercError> {
                     time_read.finish();
 
                     let mut output_file = File::create(&args.output)?;
-                    write!(&mut output_file, "{}", PgDot::new(&game))?;
+                    write!(&mut output_file, "{}", VpgDot::new(&game))?;
                 }
 
                 if let Ok(dot_path) = which::which("dot") {
