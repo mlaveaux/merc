@@ -1,8 +1,11 @@
 use log::trace;
 use merc_utilities::IndexedSet;
 
-use crate::{LTS, LabelIndex, LabelledTransitionSystem, LtsBuilderFast, StateIndex};
-
+use crate::LTS;
+use crate::LabelIndex;
+use crate::LabelledTransitionSystem;
+use crate::LtsBuilderFast;
+use crate::StateIndex;
 
 /// Computes the synchronous product LTS of two given LTSs.
 ///

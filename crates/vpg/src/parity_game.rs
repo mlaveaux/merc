@@ -61,41 +61,62 @@ impl ParityGame {
             initial_vertex,
         }
     }
+}
 
-    /// Returns the initial vertex of the parity game.
-    pub fn initial_vertex(&self) -> VertexIndex {
+impl PG for ParityGame {
+    fn initial_vertex(&self) -> VertexIndex {
         self.initial_vertex
     }
 
-    /// Returns the number of vertices in the parity game.
-    pub fn num_of_vertices(&self) -> usize {
+    fn num_of_vertices(&self) -> usize {
         self.owner.len()
     }
 
-    pub fn num_of_edges(&self) -> usize {
+    fn num_of_edges(&self) -> usize {
         self.edges_to.len()
     }
 
-    /// Returns an iterator over all vertices in the parity game.
-    pub fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_ {
+    fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_ {
         (0..self.num_of_vertices()).map(VertexIndex::new)
     }
 
-    /// Returns an iterator over the outgoing edges for the given vertex.
-    pub fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_ {
+    fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_ {
         let start = self.vertices[*state_index];
         let end = self.vertices[*state_index + 1];
 
         (start..end).map(move |i| self.edges_to[i])
     }
 
-    /// Returns the owner of the given vertex.
-    pub fn owner(&self, vertex: VertexIndex) -> Player {
+    fn owner(&self, vertex: VertexIndex) -> Player {
         self.owner[*vertex]
     }
 
-    /// Returns the priority of the given vertex.
-    pub fn priority(&self, vertex: VertexIndex) -> Priority {
+    fn priority(&self, vertex: VertexIndex) -> Priority {
         self.priority[*vertex]
     }
+}
+
+/// A trait for types that can be interpreted as parity games.
+pub trait PG {
+    
+    /// Returns the initial vertex of the parity game.
+    fn initial_vertex(&self) -> VertexIndex;
+
+    /// Returns the number of vertices in the parity game.
+    fn num_of_vertices(&self) -> usize;
+
+    /// Returns the number of edges in the parity game.
+    fn num_of_edges(&self) -> usize;
+
+    /// Returns an iterator over all vertices in the parity game.
+    fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_;
+
+    /// Returns an iterator over the outgoing edges for the given vertex.
+    fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_;
+
+    /// Returns the owner of the given vertex.
+    fn owner(&self, vertex: VertexIndex) -> Player;
+
+    /// Returns the priority of the given vertex.
+    fn priority(&self, vertex: VertexIndex) -> Priority;
 }

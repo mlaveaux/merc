@@ -6,6 +6,7 @@ use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
@@ -158,7 +159,7 @@ impl VariabilityParityGame {
     }
 
     /// Returns an iterator over the outgoing edges of the given vertex.
-    pub fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = Edge<'_>> + '_ {
+    pub fn outgoing_conf_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = Edge<'_>> + '_ {
         let start = self.game.vertices[*state_index];
         let end = self.game.vertices[*state_index + 1];
         self.edges_configuration[start..end]
@@ -176,15 +177,18 @@ impl VariabilityParityGame {
     pub fn variables(&self) -> &Vec<BDDFunction> {
         &self.variables
     }
+}
 
+impl PG for VariabilityParityGame {
     delegate! {
         to self.game {
-            pub fn initial_vertex(&self) -> VertexIndex;
-            pub fn num_of_vertices(&self) -> usize;
-            pub fn num_of_edges(&self) -> usize;
-            pub fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_;
-            pub fn owner(&self, vertex: VertexIndex) -> Player;
-            pub fn priority(&self, vertex: VertexIndex) -> Priority;
+            fn initial_vertex(&self) -> VertexIndex;
+            fn num_of_vertices(&self) -> usize;
+            fn num_of_edges(&self) -> usize;
+            fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_;
+            fn owner(&self, vertex: VertexIndex) -> Player;
+            fn priority(&self, vertex: VertexIndex) -> Priority;
+            fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_;
         }
     }
 }

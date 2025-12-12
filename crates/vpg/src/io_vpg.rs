@@ -23,6 +23,7 @@ use merc_utilities::MercError;
 
 use crate::CubeIter;
 use crate::IOError;
+use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
@@ -223,7 +224,7 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
         write!(
             writer,
             "{}",
-            game.outgoing_edges(v).format_with(",", |edge, fmt| {
+            game.outgoing_conf_edges(v).format_with(",", |edge, fmt| {
                 fmt(&format_args!("{}|{}", edge.to(), FormatConfigSet(edge.configuration())))
             })
         )?;
