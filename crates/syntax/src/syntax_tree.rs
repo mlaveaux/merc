@@ -63,7 +63,7 @@ pub struct IdDecl {
 }
 
 /// Expression representing a sort (type).
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum SortExpression {
     /// Product of two sorts (A # B)
     Product {
@@ -87,7 +87,7 @@ pub enum SortExpression {
 }
 
 /// Constructor declaration
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ConstructorDecl {
     pub name: String,
     pub args: Vec<(Option<String>, SortExpression)>,
@@ -95,7 +95,7 @@ pub struct ConstructorDecl {
 }
 
 /// Built-in simple sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Sort {
     Bool,
     Pos,
@@ -105,7 +105,7 @@ pub enum Sort {
 }
 
 /// Complex (parameterized) sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum ComplexSort {
     List,
     Set,
@@ -126,7 +126,7 @@ pub struct SortDecl {
 }
 
 /// Variable declaration
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VarDecl {
     pub identifier: String,
     pub sort: SortExpression,
@@ -165,14 +165,14 @@ pub struct ProcDecl {
     pub span: Span,
 }
 
-#[derive(Arbitrary, Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprUnaryOp {
     Negation,
     Minus,
     Size,
 }
 
-#[derive(Arbitrary, Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprBinaryOp {
     Conj,
     Disj,
@@ -197,7 +197,7 @@ pub enum DataExprBinaryOp {
 }
 
 /// Data expression
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExpr {
     Id(String),
     Number(String), // Is string because the number can be any size.
@@ -244,19 +244,19 @@ pub enum DataExpr {
     },
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct BagElement {
     pub expr: DataExpr,
     pub multiplicity: DataExpr,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct DataExprUpdate {
     pub expr: DataExpr,
     pub update: DataExpr,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Assignment {
     pub identifier: String,
     pub expr: DataExpr,
@@ -425,7 +425,7 @@ pub struct MultiActionLabel {
     pub actions: Vec<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Action {
     pub id: String,
     pub args: Vec<DataExpr>,
@@ -438,10 +438,12 @@ pub struct MultiAction {
 
 impl PartialEq for MultiAction {
     fn eq(&self, other: &Self) -> bool {
+        // Check whether both multi-actions contain the same actions
         if self.actions.len() != other.actions.len() {
             return false;
         }
 
+        // Map every action onto the other, equal length means they must be the same.
         for action in self.actions.iter() {
             if !other.actions.contains(action) {
                 return false;
@@ -454,15 +456,16 @@ impl PartialEq for MultiAction {
 
 impl Hash for MultiAction {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let mut action_ids: Vec<&String> = self.actions.iter().map(|a| &a.id).collect();
-        action_ids.sort();
-        for action_id in action_ids {
-            action_id.hash(state);
+        let mut actions = self.actions.clone();
+        // Sort the action ids to ensure that the hash is independent of the order.
+        actions.sort();
+        for action in actions {
+            action.hash(state);            
         }
     }
 }
 
-#[derive(Arbitrary, Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Quantifier {
     Exists,
     Forall,
@@ -630,7 +633,7 @@ pub enum ActionRHS {
 }
 
 /// Source location information, spanning from start to end in the source text.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
