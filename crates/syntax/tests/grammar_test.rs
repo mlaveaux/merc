@@ -1,4 +1,5 @@
 use indoc::indoc;
+use merc_syntax::UntypedDataSpecification;
 use pest::Parser;
 
 use merc_syntax::Mcrl2Parser;
@@ -26,8 +27,14 @@ fn test_parse_ifthen() {
 fn test_parse_keywords() {
     let expr = "map or : Boolean # Boolean -> Boolean ;";
 
-    let result = UntypedProcessSpecification::parse(expr).unwrap();
-    print!("{}", result);
+    match UntypedProcessSpecification::parse(expr) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
+    }
 }
 
 #[test]
@@ -41,16 +48,27 @@ fn test_parse_sort_spec() {
         Error = struct e;
     "};
 
-    let result = UntypedProcessSpecification::parse(sort_spec).unwrap();
-    print!("{}", result);
+    match UntypedProcessSpecification::parse(sort_spec) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
+    }
 }
 
 #[test]
 fn test_parse_regular_expression() {
     let spec = "[true++false]true";
 
-    if let Err(y) = UntypedStateFrmSpec::parse(spec) {
-        panic!("{}", y);
+    match UntypedStateFrmSpec::parse(spec) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
     }
 }
 
@@ -64,7 +82,14 @@ fn test_parse_procexpr() {
         true -> delta <> delta;
     "};
 
-    println!("{}", UntypedProcessSpecification::parse(spec).unwrap());
+    match UntypedProcessSpecification::parse(spec) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
+    }
 }
 
 #[test]
@@ -75,18 +100,38 @@ fn test_parse_statefrm() {
 
     let spec: &str = indoc! {"<b> <a> exists b: Bool . b && !b"};
 
-    println!("{}", UntypedStateFrmSpec::parse(spec).unwrap());
+    match UntypedStateFrmSpec::parse(spec) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
+    }
 }
 
 #[test]
 fn test_sort_precedence() {
     let term = "Bool # Int -> Int -> Bool";
 
-    let result = Mcrl2Parser::parse(Rule::SortExpr, term).unwrap();
-    print!("{}", parse_sortexpr(result).unwrap());
+    match Mcrl2Parser::parse(Rule::SortExpr, term) {
+        Ok(result) => {
+            print!("{}", parse_sortexpr(result).unwrap());
+        }
+        Err(e) => {
+            panic!("{}", e);
+        }
+    }
 }
 
-// #[test]
-// fn test_bool_spec() {
-//     let _result = UntypedDataSpecification::parse(include_str!("../spec/bool.mcrl2")).unwrap();
-// }
+#[test]
+fn test_bool_spec() {
+    match UntypedDataSpecification::parse(include_str!("../spec/bool.mcrl2")) {
+        Ok(result) => {
+            println!("{}", result);
+        }
+        Err(e) => {
+            panic!("Failed to parse expression: {}", e);
+        }
+    }
+}
