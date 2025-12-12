@@ -93,7 +93,11 @@ struct Translation<'a> {
 }
 
 impl Translation<'_> {
-    fn new<'a>(fts: &'a FeatureTransitionSystem, parsed_labels: &'a Vec<MultiAction>, make_total: bool) -> Translation<'a> {
+    fn new<'a>(
+        fts: &'a FeatureTransitionSystem,
+        parsed_labels: &'a Vec<MultiAction>,
+        make_total: bool,
+    ) -> Translation<'a> {
         Translation {
             vertex_map: IndexedSet::new(),
             vertices: Vec::new(),
