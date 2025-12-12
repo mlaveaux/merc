@@ -47,9 +47,7 @@ pub fn random_lts_monolithic(
     let mut builder = LtsBuilderFast::with_capacity(
         labels,
         Vec::new(),
-        num_of_states,
-        num_of_labels as usize,
-        num_of_states * outdegree,
+        num_of_states
     );
 
     for state_index in 0..num_of_states {

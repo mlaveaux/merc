@@ -25,15 +25,13 @@ pub struct LtsBuilderFast {
 impl LtsBuilderFast {
     /// Initializes a new empty builder.
     pub fn new(labels: Vec<String>, hidden_labels: Vec<String>) -> Self {
-        Self::with_capacity(labels, hidden_labels, 0, 0, 0)
+        Self::with_capacity(labels, hidden_labels, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
     pub fn with_capacity(
         mut labels: Vec<String>,
         hidden_labels: Vec<String>,
-        _num_of_states: usize,
-        _num_of_labels: usize,
         num_of_transitions: usize,
     ) -> Self {
         // Remove duplicates from the labels.

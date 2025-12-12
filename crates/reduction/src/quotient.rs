@@ -47,10 +47,7 @@ pub fn quotient_lts_naive(
     let mut builder = LtsBuilderFast::with_capacity(
         lts.labels().into(),
         Vec::new(),
-        partition.num_of_blocks(),
-        lts.num_of_labels(),
-        // At least one transition per block
-        partition.num_of_blocks(),
+        partition.num_of_blocks(), // We expect one transition per state.
     );
 
     for state_index in lts.iter_states() {
@@ -74,6 +71,7 @@ pub fn quotient_lts_naive(
         }
     }
 
+    builder.require_num_of_states(partition.num_of_blocks());
     builder.finish(
         StateIndex::new(partition.block_number(lts.initial_state_index()).value()),
         true,
@@ -131,7 +129,8 @@ pub fn quotient_lts_block<const BRANCHING: bool>(
             );
         }
     }
-
+    
+    builder.require_num_of_states(partition.num_of_blocks());
     builder.finish(
         StateIndex::new(partition.block_number(lts.initial_state_index()).value()),
         true,
