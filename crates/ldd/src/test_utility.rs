@@ -1,13 +1,13 @@
 //! Functions in this module are only relevant for testing purposes.
 
+use rand::Rng;
+use std::collections::HashSet;
+
 use crate::Ldd;
 use crate::Storage;
 use crate::Value;
 use crate::iterators::*;
 use crate::operations::*;
-
-use rand::Rng;
-use std::collections::HashSet;
 
 /// Returns a vector of the given length with random u64 values (from 0..max_value).
 pub fn random_vector(rng: &mut impl Rng, length: usize, max_value: Value) -> Vec<Value> {

@@ -411,7 +411,7 @@ pub fn len(storage: &mut Storage, set: &LddRef) -> usize {
 }
 
 /// Returns the height of the LDD tree.
-pub fn height(storage: &Storage, ldd: &LddRef) -> u64 {
+pub fn height(storage: &Storage, ldd: &LddRef) -> usize {
     if ldd == storage.empty_set() || ldd == storage.empty_vector() {
         0
     } else {

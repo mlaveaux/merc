@@ -33,6 +33,7 @@ members = [
     "crates/reduction",
     "crates/sabre",
     "crates/sabre/benchmarks",
+    "crates/symbolic",
     "crates/sharedmutex",
     "crates/sharedmutex/benchmarks",
     "crates/syntax",

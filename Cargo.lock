@@ -1065,6 +1065,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "merc_symbolic"
+version = "1.0.0"
+dependencies = [
+ "merc_aterm",
+ "merc_data",
+ "merc_io",
+ "merc_ldd",
+ "merc_utilities",
+ "oxidd",
+]
+
+[[package]]
 name = "merc_syntax"
 version = "1.0.0"
 dependencies = [
