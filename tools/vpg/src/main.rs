@@ -2,10 +2,13 @@ use std::fs::File;
 use std::fs::read_to_string;
 use std::path::Path;
 use std::process::ExitCode;
+use std::io::Write;
 
 use clap::Parser;
 use clap::Subcommand;
 
+use duct::cmd;
+use log::info;
 use merc_vpg::CubeIterAll;
 use merc_vpg::PgDot;
 use merc_vpg::compute_reachable;
@@ -103,6 +106,9 @@ struct TranslateArgs {
 #[derive(clap::Args, Debug)]
 struct DisplayArgs {
     filename: String,
+    
+    /// The .dot file output filename
+    output: String,
 
     /// The parity game file format
     #[arg(long, short)]
@@ -277,18 +283,24 @@ fn main() -> Result<ExitCode, MercError> {
                     let game = read_pg(&mut file)?;
                     time_read.finish();
 
-                    println!("{}", PgDot::new(&game));
-
-                    // If we can find 'dot' in the PATH, we can also generate a pdf image.
+                    let mut output_file = File::create(&args.output)?;
+                    write!(&mut output_file, "{}", PgDot::new(&game))?;
                 } else {
                     // Read and display a variability parity game.
                     let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
 
                     let mut time_read = timing.start("read_vpg");
-                    let _game = read_vpg(&manager_ref, &mut file)?;
+                    let game = read_vpg(&manager_ref, &mut file)?;
                     time_read.finish();
 
-                    unimplemented!("Displaying variability parity games is not yet implemented.")
+                    let mut output_file = File::create(&args.output)?;
+                    write!(&mut output_file, "{}", PgDot::new(&game))?;
+                }
+
+                if let Ok(dot_path) = which::which("dot") {
+                    info!("Generating PDF using dot...");
+                    cmd!(dot_path, "-Tpdf", &args.output, "-O")
+                        .run()?;
                 }
             }
         }

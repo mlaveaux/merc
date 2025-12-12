@@ -120,9 +120,20 @@ impl FeatureDiagram {
     ///
     /// # Details
     ///
-    /// The first line is a list of variable names, separated by commas.
-    /// The second line is the initial configuration, represented as a data expression.
+    /// The first line is a list of variable names, separated by commas. The
+    /// second line is the initial configuration, represented as a data
+    /// expression. This function will initialize the BDD manager with the
+    /// variables read from the first line, and assumes that the manager has no
+    /// variables yet defined.
     pub fn from_reader(manager_ref: &BDDManagerRef, input: impl Read) -> Result<Self, MercError> {
+        manager_ref.with_manager_exclusive(|manager| {
+            debug_assert_eq!(
+                manager.num_vars(),
+                0,
+                "A BDD manager can only hold the variables for a single feature diagram"
+            )
+        });
+
         let input = BufReader::new(input);
         let mut line_iter = input.lines();
         let first_line = line_iter.next().ok_or("Expected variable names line")??;

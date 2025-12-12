@@ -42,6 +42,14 @@ use crate::VertexIndex;
 /// Each outgoing edge is represented as `<to>|<configuration_set>`. For the
 /// format of the configuration set see [parse_configuration_set]
 pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<VariabilityParityGame, MercError> {
+    manager.with_manager_exclusive(|manager| {
+        debug_assert_eq!(
+            manager.num_vars(),
+            0,
+            "A BDD manager can only hold the variables for a single variability parity game"
+        )
+    });
+
     let mut lines = LineIterator::new(reader);
     lines.advance();
     let header = lines

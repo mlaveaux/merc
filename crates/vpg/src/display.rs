@@ -20,9 +20,11 @@ impl<'a, G: PG> fmt::Display for PgDot<'a, G> {
         // Header
         writeln!(f, "digraph parity_game {{")?;
 
-        // Global defaults (optional, simple styling)
+        // Global defaults and improved styling
         writeln!(f, "  rankdir=LR;")?;
-        writeln!(f, "  node [shape=circle];")?;
+        writeln!(f, "  graph [fontname=\"DejaVu Sans\", splines=true];")?;
+        writeln!(f, "  node [fontname=\"DejaVu Sans\"];")?;
+        writeln!(f, "  edge [fontname=\"DejaVu Sans\", color=\"#444444\", arrowsize=0.9, penwidth=1.2];")?;
 
         let initial = self.game.initial_vertex();
 
@@ -35,10 +37,10 @@ impl<'a, G: PG> fmt::Display for PgDot<'a, G> {
                 Player::Even => "45",
             };
 
-            // Primary label: priority value only; external index via xlabel.
+            // Primary label: priority value only; external index via smaller-font xlabel.
             writeln!(
                 f,
-                "  v{} [label=\"{}\", shape=square, orientation={}, xlabel=\"v{}\"];",
+                "  v{} [label=\"{}\", shape=square, orientation={}, xlabel=< <FONT POINT-SIZE=\"9\">v{}</FONT> >];",
                 v,
                 self.game.priority(v),
                 orientation,
