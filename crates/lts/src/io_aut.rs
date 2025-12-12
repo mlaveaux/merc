@@ -9,8 +9,8 @@ use thiserror::Error;
 
 use merc_io::LineIterator;
 use merc_io::TimeProgress;
-use merc_utilities::debug_trace;
 use merc_utilities::MercError;
+use merc_utilities::debug_trace;
 
 use crate::LTS;
 use crate::LabelledTransitionSystem;
