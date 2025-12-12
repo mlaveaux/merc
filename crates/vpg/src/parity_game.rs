@@ -56,6 +56,7 @@ impl ParityGame {
             owner.len() + 1,
             "There should be an offset for every vertex, and the sentinel state"
         );
+        debug_assert!(initial_vertex == 0, "The initial vertex should be vertex 0");
 
         Self {
             owner,

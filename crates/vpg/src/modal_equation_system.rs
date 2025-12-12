@@ -49,7 +49,7 @@ impl ModalEquationSystem {
 }
 
 /// Applies `RHS` to the given formula.
-/// 
+///
 /// RHS(true) = true
 /// RHS(false) = false
 /// RHS(<a>f) = <a>RHS(f)
@@ -74,11 +74,7 @@ fn rhs(formula: &StateFrm) -> StateFrm {
 impl fmt::Display for ModalEquationSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for equation in &self.equations {
-            writeln!(
-                f,
-                "{} {} = {}",
-                equation.operator, equation.variable, equation.rhs
-            )?;
+            writeln!(f, "{} {} = {}", equation.operator, equation.variable, equation.rhs)?;
         }
         Ok(())
     }
