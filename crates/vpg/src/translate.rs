@@ -20,7 +20,6 @@ use merc_utilities::MercError;
 
 use crate::FeatureTransitionSystem;
 use crate::ModalEquationSystem;
-use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
@@ -67,16 +66,9 @@ pub fn translate(
     );
 
     // Check that the result is a total VPG.
-    if cfg!(debug_assertions) {
-        for v in result.iter_vertices() {
-            debug_assert!(
-                result.outgoing_edges(v).next().is_some(),
-                "VPG is not total: vertex {} has no outgoing edges",
-                v
-            );
-        }
-    }
-
+    debug_assert!(result.is_total(),
+        "Resulting VPG is not total after translation",
+    );
     // Check that all vertices are reachable from the initial vertex.
     if cfg!(debug_assertions) {
         let (_, reachable_vertices) = compute_reachable(&result);

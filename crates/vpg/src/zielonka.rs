@@ -20,6 +20,8 @@ type Set = BitVec<usize, Lsb0>;
 
 /// Solves the given parity game using the Zielonka algorithm.
 pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
+    debug_assert!(game.is_total(), "Zielonka solver requires a total parity game");
+
     let mut V = bitvec![usize, Lsb0; 0; game.num_of_vertices()];
     V.set_elements(usize::MAX);
 
@@ -228,9 +230,9 @@ mod tests {
     use crate::solve_zielonka;
 
     #[test]
-    fn test_random_parity_game() {
+    fn test_random_parity_game_solve() {
         random_test(100, |rng| {
-            let pg = random_parity_game(rng, 10, 5, 3);
+            let pg = random_parity_game(rng, true, 10, 5, 3);
             println!("{:?}", pg);
 
             solve_zielonka(&pg);

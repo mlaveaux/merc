@@ -17,7 +17,8 @@ pub fn project_variability_parity_game(
 
     for v in vpg.iter_vertices() {
         for edge in vpg.outgoing_conf_edges(v) {
-            if !feature_selection.and(&edge.configuration())?.satisfiable() {
+            // Check if the edge is enabled by the feature selection, if so, include it.
+            if feature_selection.and(&edge.configuration())?.satisfiable() {
                 edges.push((v, edge.to()));
             }
         }
@@ -27,6 +28,7 @@ pub fn project_variability_parity_game(
         vpg.initial_vertex(),
         vpg.owners().clone(),
         vpg.priorities().clone(),
+        true, // It can be that after removing edges the result is not a total partity game.
         || edges.iter().cloned(),
     ))
 }

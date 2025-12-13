@@ -41,6 +41,8 @@ pub fn solve_variability_zielonka(
     variant: ZielonkaVariant,
     alternative_solving: bool,
 ) -> Result<[Submap; 2], MercError> {
+    debug_assert!(game.is_total(), "Zielonka solver requires a total parity game");
+
     let mut zielonka = VariabilityZielonkaSolver::new(manager_ref, game, alternative_solving);
 
     // Determine the initial set of vertices V
@@ -55,7 +57,7 @@ pub fn solve_variability_zielonka(
         game.num_of_vertices(),
     );
 
-    let W = match variant {
+    let mut W = match variant {
         ZielonkaVariant::Standard => zielonka.solve_recursive(V)?,
         ZielonkaVariant::Optimised => zielonka.solve_optimised_recursive(V)?,
         ZielonkaVariant::OptimisedLeft => zielonka.solve_optimised_left_recursive(V)?,
@@ -63,6 +65,13 @@ pub fn solve_variability_zielonka(
 
     debug!("Performed {} recursive calls", zielonka.recursive_calls);
     zielonka.check_partition(&W)?;
+
+    if alternative_solving {
+        // Intersect the results with the game's configuration
+        let config = game.configuration();
+        W[0].and_function(&config)?;
+        W[1].and_function(&config)?;
+    }
 
     Ok(W)
 }
@@ -170,7 +179,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         if omega_prime[not_x.to_index()].is_empty() {
             // 11. omega_x := omega'_x \cup alpha
             omega_prime[x.to_index()] = gamma;
-            omega_prime[not_x.to_index()].clear();
+            omega_prime[not_x.to_index()].clear()?;
             // 20. return (omega_0, omega_1)
             debug!("return (omega'_0, omega'_1)");
             self.check_partition(&omega_prime)?;
@@ -179,7 +188,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 14. \beta := attr_notalpha(\omega'_notalpha)
         let mut omega_prime_opponent = std::mem::take(&mut omega_prime[not_x.to_index()]);
-        let beta = self.attractor(not_x, &gamma, omega_prime_opponent.clone())?;
+        let beta = self.attractor(not_x, &gamma, omega_prime_opponent)?;
 
         // 15. (omega''_0, omega''_1) := solve(gamma \ beta)
         debug!("begin solve_rec(gamma \\ beta)");
@@ -187,7 +196,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         debug!("end solve_rec(gamma \\ beta)");
 
         // 17. omega_notx := omega'_notx \cup \beta
-        omega_double_prime[not_x.to_index()] = omega_prime_opponent.or(&beta)?;
+        let mut omega_double_prime_opponent = std::mem::take(&mut omega_double_prime[not_x.to_index()]);
+        omega_double_prime[not_x.to_index()] = omega_double_prime_opponent.or(&beta)?;
 
         // 20. return (omega_0, omega_1)
         debug!("return (omega''_0, omega''_1)");
@@ -450,7 +460,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 2. Queue Q := {v \in V | U(v) != \emptyset }
         self.temp_vertices.fill(false);
-        for v in gamma.iter_vertices() {
+        for v in A.iter_vertices() {
             self.temp_queue.push(v);
             self.temp_vertices.set(*v, true);
         }
@@ -499,6 +509,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                         // 17. if v not in Q then Q.push(v)
                         if !self.temp_vertices[*v] {
                             self.temp_queue.push(v);
+                            self.temp_vertices.set(*v, true);
                         }
                     }
                 }
@@ -553,7 +564,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 }
 
 /// A mapping from vertices to configurations.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct Submap {
     /// The mapping from vertex indices to BDD functions.
     mapping: Vec<BDDFunction>,
@@ -590,7 +601,6 @@ impl Submap {
     pub fn number_of_non_empty(&self) -> usize {
         self.non_empty_count
     }
-
 
     /// Sets the function for the given vertex index.
     fn set(&mut self, index: VertexIndex, func: BDDFunction) {
@@ -657,6 +667,20 @@ impl Submap {
         Ok(self)
     }
 
+    /// Computes the intersection between this submap and another function.
+    fn and_function(&mut self, configuration: &BDDFunction) -> Result<(), MercError> {
+        for (i, func) in self.mapping.iter_mut().enumerate() {
+            let was_satisfiable = func.satisfiable();
+            *func = func.and(&configuration)?;
+            let is_satisfiable = func.satisfiable();
+
+            if was_satisfiable && !is_satisfiable {
+                self.non_empty_count -= 1;
+            }
+        }
+
+        Ok(())
+    }
     /// Returns an iterator over all entries.
     pub fn iter(&self) -> impl Iterator<Item = (VertexIndex, &BDDFunction)> {
         self.mapping
@@ -722,13 +746,13 @@ mod tests {
     }
 
     #[merc_test]
-    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_variability_parity_game_solve() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
-            let vpg = random_variability_parity_game(&manager_ref, rng, 20, 3, 3, 3).unwrap();
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
             println!("Solving VPG {}", vpg);
-            
+
             crate::write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
             let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
@@ -744,6 +768,36 @@ mod tests {
                     }
                 }
             }
+        })
+    }
+
+    #[merc_test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_variability_parity_game_solve_optimised() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+
+            let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Optimised, false).unwrap();
+            let solution_expected = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
+
+            debug_assert_eq!(solution[0], solution_expected[0]);
+            debug_assert_eq!(solution[1], solution_expected[1]);
+        })
+    }
+
+    #[merc_test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_variability_parity_game_solve_optimised_left() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+
+            let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::OptimisedLeft, false).unwrap();
+            let solution_expected = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
+
+            debug_assert_eq!(solution[0], solution_expected[0]);
+            debug_assert_eq!(solution[1], solution_expected[1]);
         })
     }
 }

@@ -176,6 +176,17 @@ impl VariabilityParityGame {
             .map(|(configuration, &to)| Edge { to, configuration })
     }
 
+    /// Return strue iff the parity game is total, checks all vertices have at least one outgoing edge.
+    pub fn is_total(&self) -> bool {       
+        for v in self.iter_vertices() {
+            if self.outgoing_edges(v).next().is_none() {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Returns the overall configuration BDD of the variability parity game.
     pub fn configuration(&self) -> &BDDFunction {
         &self.configuration
@@ -219,7 +230,7 @@ impl fmt::Display for VariabilityParityGame {
         for v in self.iter_vertices() {
             write!(
                 f,
-                "v{}: {:?}, p={}, edges=[",
+                "v{}: {:?}, priority={}, edges=[",
                 v,
                 self.owner(v).to_index(),
                 self.priority(v)
