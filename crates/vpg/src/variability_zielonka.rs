@@ -696,6 +696,7 @@ mod tests {
 
     use crate::PG;
     use crate::VertexIndex;
+    use crate::ZielonkaVariant;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
     use crate::solve_variability_zielonka;
@@ -730,7 +731,7 @@ mod tests {
             
             crate::write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
-            let solution = solve_variability_zielonka(&manager_ref, &vpg, false).unwrap();
+            let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
 
             for game in project_variability_parity_games_iter(&vpg) {
                 let (cube, pg) = game.unwrap();
