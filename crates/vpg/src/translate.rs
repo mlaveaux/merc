@@ -25,6 +25,7 @@ use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
+use crate::compute_reachable;
 
 /// Translates a feature transition system into a variability parity game.
 pub fn translate(
@@ -74,6 +75,15 @@ pub fn translate(
                 v
             );
         }
+    }
+
+    // Check that all vertices are reachable from the initial vertex.
+    if cfg!(debug_assertions) {
+        let (_, reachable_vertices) = compute_reachable(&result);
+        debug_assert!(
+            reachable_vertices.iter().all(|v| v.is_some()),
+            "Not all vertices are reachable from the initial vertex"
+        );
     }
 
     Ok(result)

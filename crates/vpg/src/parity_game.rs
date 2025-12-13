@@ -217,7 +217,7 @@ impl fmt::Debug for ParityGame {
         for v in self.iter_vertices() {
             let owner = self.owner(v);
             let prio = self.priority(v);
-            write!(f, "    {}: ({:?}, priority: {}, outgoing: [", *v, owner, *prio)?;
+            write!(f, "    {}: ({:?}, p: {}, outgoing: [", *v, owner.to_index(), *prio)?;
 
             write!(f, "{}", self.outgoing_edges(v).format(", "))?;
             writeln!(f, "]),")?;

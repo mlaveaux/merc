@@ -11,6 +11,7 @@ use duct::cmd;
 use log::info;
 use merc_vpg::CubeIterAll;
 use merc_vpg::PgDot;
+use merc_vpg::Player;
 use merc_vpg::VpgDot;
 use merc_vpg::compute_reachable;
 use merc_vpg::write_pg;
@@ -146,7 +147,13 @@ fn main() -> Result<ExitCode, MercError> {
                     time_read.finish();
 
                     let mut time_solve = timing.start("solve_zielonka");
-                    println!("{}", solve_zielonka(&game).solution());
+                    let solution = solve_zielonka(&game);
+                    if solution[0][0] {
+                        println!("{}", Player::Even.solution())
+                    } else {
+                        println!("{}", Player::Odd.solution())
+                    }
+
                     time_solve.finish();
                 } else {
                     // Read and solve a variability parity game and solve it.

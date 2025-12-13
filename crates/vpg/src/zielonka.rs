@@ -19,7 +19,7 @@ use crate::VertexIndex;
 type Set = BitVec<usize, Lsb0>;
 
 /// Solves the given parity game using the Zielonka algorithm.
-pub fn solve_zielonka(game: &ParityGame) -> Player {
+pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
     let mut V = bitvec![usize, Lsb0; 0; game.num_of_vertices()];
     V.set_elements(usize::MAX);
 
@@ -57,11 +57,7 @@ pub fn solve_zielonka(game: &ParityGame) -> Player {
         "The winning sets do not cover all vertices"
     );
 
-    if W[0][*game.initial_vertex()] {
-        Player::Even
-    } else {
-        Player::Odd
-    }
+    W
 }
 
 struct ZielonkaSolver<'a> {

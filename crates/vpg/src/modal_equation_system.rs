@@ -99,10 +99,21 @@ impl ModalEquationSystem {
         &self.equations[i]
     }
 
-    /// Returns the alternation depth of the ith equation
+    /// The alternation depth is a complexity measure of the given formula.
+    ///
+    /// # Details
+    ///
+    /// The alternation depth of mu X . psi is defined as the maximum chain X <= X_1 <= ... <= X_n,
+    /// where X <= Y iff X appears freely in the corresponding equation sigma Y . phi. And furthermore,
+    /// X_0, X_2, ... are bound by mu and X_1, X_3, ... are bound by nu. Similarly, for nu X . psi.
     pub fn alternation_depth(&self, i: usize) -> usize {
         let equation = &self.equations[i];
-        self.alternation_depth_rec(i + 1, equation.operator, &equation.variable.identifier)
+        let result = self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier);
+        if result == 1 {
+            0 // A formula contained X, but no alternations occured (X <= Y but Y has same operator as X)
+        } else {
+            result
+        }
     }
 
     /// Finds an equation by its variable identifier.
@@ -113,28 +124,47 @@ impl ModalEquationSystem {
             .find(|(_, eq)| eq.variable.identifier == id)
     }
 
-    /// Returns the alternation depth of the given state formula.
-    ///
-    /// # Details
-    ///
-    /// Let `E` be the set of equations in the system and `X` be the variable coresponding to the
-    /// equation sigma X = f.
-    ///
-    ///  AD(X) = CAD(sigma, X, E), which is inductively defined as:
-    ///  - CAD(sigma, X, epsilon) = 0
-    ///  - CAD(sigma, X, (sigma' Y)E') = CAD(sigma, X, E'), if sigma == sigma' and X != Y
-    ///  - CAD(sigma, X, (sigma' Y)E') = 1 + CAD(sigma', Y, E'), if sigma != sigma'
-    fn alternation_depth_rec(&self, i: usize, sigma: FixedPointOperator, variable: &String) -> usize {
-        if i >= self.equations.len() {
-            // Epsilon case
-            return 0;
-        }
-
+    /// Recursive helper function to compute the alternation depth of equation `i`.
+    fn alternation_depth_rec(
+        &self,
+        i: usize,
+        formula: &StateFrm,
+        op: FixedPointOperator,
+        identifier: &String,
+    ) -> usize {
         let equation = &self.equations[i];
-        if sigma == equation.operator {
-            self.alternation_depth_rec(i + 1, sigma, variable)
-        } else {
-            1 + self.alternation_depth_rec(i + 1, equation.operator, &equation.variable.identifier)
+
+        match formula {
+            StateFrm::Id(id, _) => {
+                if id == identifier {
+                    1
+                } else {
+                    let (j, inner_equation) = self
+                        .find_equation_by_identifier(id)
+                        .expect("Equation not found for identifier");
+                    if j > i {
+                        let depth =
+                            self.alternation_depth_rec(j, &inner_equation.rhs, inner_equation.operator, identifier);
+                        depth
+                            + (if inner_equation.operator != equation.operator {
+                                1 // Alternation occurs.
+                            } else {
+                                0
+                            })
+                    } else {
+                        // Only consider nested equations
+                        0
+                    }
+                }
+            }
+            StateFrm::Binary { lhs, rhs, .. } => self
+                .alternation_depth_rec(i, lhs, op, identifier)
+                .max(self.alternation_depth_rec(i, rhs, op, identifier)),
+            StateFrm::Modality { expr, .. } => self.alternation_depth_rec(i, expr, op, identifier),
+            StateFrm::True | StateFrm::False => 0,
+            _ => {
+                unimplemented!("Cannot determine alternation depth of formula {}", formula)
+            }
         }
     }
 }
@@ -164,8 +194,8 @@ fn rhs(formula: &StateFrm) -> StateFrm {
 
 impl fmt::Display for ModalEquationSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for equation in &self.equations {
-            writeln!(f, "{} {} = {}", equation.operator, equation.variable, equation.rhs)?;
+        for (i, equation) in self.equations.iter().enumerate() {
+            writeln!(f, "{i}: {} {} = {}", equation.operator, equation.variable, equation.rhs)?;
         }
         Ok(())
     }
@@ -187,7 +217,21 @@ mod tests {
         println!("{}", fes);
 
         assert_eq!(fes.equations.len(), 2);
-        assert_eq!(fes.alternation_depth(0), 1);
+        assert_eq!(fes.alternation_depth(0), 0);
+        assert_eq!(fes.alternation_depth(1), 0);
+    }
+
+    #[test]
+    fn test_fixpoint_equation_system_example() {
+        let formula = UntypedStateFrmSpec::parse(include_str!("../../../examples/vpg/running_example.mcf"))
+            .unwrap()
+            .formula;
+        let fes = ModalEquationSystem::new(&formula);
+
+        println!("{}", fes);
+
+        assert_eq!(fes.equations.len(), 2);
+        assert_eq!(fes.alternation_depth(0), 2);
         assert_eq!(fes.alternation_depth(1), 0);
     }
 
