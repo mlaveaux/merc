@@ -244,7 +244,7 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
 }
 
 /// A helper structure to format configuration sets for output.
-pub struct FormatConfigSet<'a>(&'a BDDFunction);
+pub struct FormatConfigSet<'a>(pub &'a BDDFunction);
 
 impl fmt::Display for FormatConfigSet<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

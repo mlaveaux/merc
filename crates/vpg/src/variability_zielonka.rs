@@ -23,10 +23,22 @@ use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
 use crate::VertexIndex;
 
-/// Solves the given variability parity game using the Zielonka algorithm.
+/// Variant of the Zielonka algorithm to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZielonkaVariant {
+    /// Standard Zielonka algorithm.
+    Standard,
+    /// Optimised Zielonka variant.
+    Optimised,
+    /// Left-optimised Zielonka variant.
+    OptimisedLeft,
+}
+
+/// Solves the given variability parity game using the specified Zielonka algorithm variant.
 pub fn solve_variability_zielonka(
     manager_ref: &BDDManagerRef,
     game: &VariabilityParityGame,
+    variant: ZielonkaVariant,
     alternative_solving: bool,
 ) -> Result<[Submap; 2], MercError> {
     let mut zielonka = VariabilityZielonkaSolver::new(manager_ref, game, alternative_solving);
@@ -43,8 +55,13 @@ pub fn solve_variability_zielonka(
         game.num_of_vertices(),
     );
 
-    let W = zielonka.solve_recursive(V)?;
+    let W = match variant {
+        ZielonkaVariant::Standard => zielonka.solve_recursive(V)?,
+        ZielonkaVariant::Optimised => zielonka.solve_optimised_recursive(V)?,
+        ZielonkaVariant::OptimisedLeft => zielonka.solve_optimised_left_recursive(V)?,
+    };
 
+    debug!("Performed {} recursive calls", zielonka.recursive_calls);
     zielonka.check_partition(&W)?;
 
     Ok(W)
@@ -61,7 +78,7 @@ struct VariabilityZielonkaSolver<'a> {
     /// Reused temporary queue for attractor computation.
     temp_queue: Vec<VertexIndex>,
 
-    /// Reused temporary vertices for attractor computation.
+    /// Keep track of the vertices in the temp_queue above in the attractor computation.
     temp_vertices: BitVec<usize, Lsb0>,
 
     /// Stores the predecessors of the game.
@@ -130,7 +147,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         }
 
         debug!(
-            "solve_rec(gamma) |gamma| = {}, highest prio = {}, lowest prio = {}, player = {}, |mu| = {}",
+            "solve_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
             gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
             highest_prio,
             lowest_prio,
@@ -173,8 +190,258 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         omega_double_prime[not_x.to_index()] = omega_prime_opponent.or(&beta)?;
 
         // 20. return (omega_0, omega_1)
+        debug!("return (omega''_0, omega''_1)");
         self.check_partition(&omega_double_prime)?;
         Ok(omega_double_prime)
+    }
+
+    /// Optimised Zielonka recursion adapted from C++ `solve_optimised_rec`.
+    fn solve_optimised_recursive(&mut self, gamma: Submap) -> Result<[Submap; 2], MercError> {
+        self.recursive_calls += 1;
+
+        if gamma.is_empty() {
+            debug!("empty subgame");
+            return Ok([gamma.clone(), gamma]);
+        }
+
+        let (highest_prio, lowest_prio) = self.get_highest_lowest_prio(&gamma);
+        let x = Player::from_priority(&highest_prio);
+        let not_x = x.opponent();
+
+        // mu collects configurations at max priority vertices
+        let mut mu = Submap::new(
+            self.manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)),
+            self.game.num_of_vertices(),
+        );
+        for v in &self.priority_vertices[*highest_prio] {
+            mu.set(*v, gamma[*v].clone());
+        }
+
+        debug!(
+            "solve_optimised_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
+            gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
+            highest_prio,
+            lowest_prio,
+            x,
+            mu.number_of_non_empty()
+        );
+
+        // A := attr_x(mu)
+        let mut A = self.attractor(x, &gamma, mu)?;
+
+        // Solve on gamma \ A
+        debug!("begin solve_optimised_rec(gamma \\ A)");
+        let mut W_prime = self.solve_optimised_recursive(gamma.clone().minus(&A)?)?;
+        debug!("end solve_optimised_rec(gamma \\ A)");
+
+        if W_prime[not_x.to_index()].is_empty() {
+            // Winner x gets everything remaining
+            debug!("return (W'_0, W'_1)");
+            W_prime[x.to_index()] = gamma;
+            W_prime[not_x.to_index()].clear()?;
+            self.check_partition(&W_prime)?;
+            return Ok(W_prime);
+        }
+
+        // B := attr_not_x(W'_not_x)
+        let mut W_prime_not_x = std::mem::take(&mut W_prime[not_x.to_index()]);
+        let B = self.attractor(not_x, &gamma, W_prime_not_x.clone())?;
+
+        // Compute C := union of configurations present in B over all vertices
+        let mut C = self.manager_ref.with_manager_shared(|m| BDDFunction::f(m));
+        for (v, func) in B.iter() {
+            C = C.or(func)?;
+        }
+
+        // Adjust A := ((A ∪ W'_x) \ B) \ C
+        A = A.or(&W_prime[x.to_index()])?;
+        A = A.minus(&B)?;
+        // A := A \ C (pointwise)
+        {
+            let mut updated = A.clone();
+            let indices: Vec<_> = updated.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = updated[v].clone();
+                let adjusted = func.and(&C.not()?)?;
+                updated.set(v, adjusted);
+            }
+            A = updated;
+        }
+
+        // Solve on gamma \ (A ∪ B)
+        let mut gamma_reduced = gamma.clone().minus(&A)?;
+        gamma_reduced = gamma_reduced.minus(&B)?;
+        debug!("begin solve_optimised_rec(gamma - (A \\cup B))");
+        let mut W_double = self.solve_optimised_recursive(gamma_reduced)?;
+        debug!("end solve_optimised_rec(gamma - (A \\cup B))");
+
+        // Combine results (clone then assign)
+        {
+            let tmp = W_double[x.to_index()].clone().or(&A)?;
+            W_double[x.to_index()] = tmp;
+        }
+        {
+            let tmp = W_double[not_x.to_index()].clone().or(&B)?;
+            W_double[not_x.to_index()] = tmp;
+        }
+
+        debug!("return (W''_0, W''_1)");
+        self.check_partition(&W_double)?;
+        Ok(W_double)
+    }
+
+    /// Left-optimised Zielonka recursion adapted from C++ `solve_optimised_left_rec`.
+    fn solve_optimised_left_recursive(&mut self, gamma: Submap) -> Result<[Submap; 2], MercError> {
+        self.recursive_calls += 1;
+        let gamma_copy = gamma.clone();
+
+        if gamma.is_empty() {
+            debug!("empty subgame");
+            return Ok([gamma.clone(), gamma]);
+        }
+
+        let (highest_prio, lowest_prio) = self.get_highest_lowest_prio(&gamma);
+        let x = Player::from_priority(&highest_prio);
+        let not_x = x.opponent();
+
+        // mu and C from max-priority vertices
+        let mut mu = Submap::new(
+            self.manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)),
+            self.game.num_of_vertices(),
+        );
+        let mut C = self.manager_ref.with_manager_shared(|m| BDDFunction::f(m));
+        for v in &self.priority_vertices[*highest_prio] {
+            mu.set(*v, gamma[*v].clone());
+            C = C.or(&gamma[*v])?;
+        }
+
+        debug!(
+            "solve_optimised_left_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
+            gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
+            highest_prio,
+            lowest_prio,
+            x,
+            mu.number_of_non_empty()
+        );
+
+        // alpha := attr_x(mu)
+        let alpha = self.attractor(x, &gamma, mu)?;
+
+        // Solve on gamma \ alpha
+        debug!("begin solve_optimised_left_rec(gamma \\ alpha)");
+        let mut omega_prime = self.solve_optimised_left_recursive(gamma.clone().minus(&alpha)?)?;
+        debug!("end solve_optimised_left_rec(gamma \\ alpha)");
+
+        // Restrict opponent part to C
+        let mut omega_prime_not_x_restricted = omega_prime[not_x.to_index()].clone();
+        {
+            let indices: Vec<_> = omega_prime_not_x_restricted.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = omega_prime_not_x_restricted[v].clone();
+                let newf = func.and(&C)?;
+                omega_prime_not_x_restricted.set(v, newf);
+            }
+        }
+
+        if omega_prime_not_x_restricted.is_empty() {
+            // Winner x gets alpha as well
+            debug!("return (omega'_0, omega'_1)");
+            let tmp = omega_prime[x.to_index()].clone().or(&alpha)?;
+            omega_prime[x.to_index()] = tmp;
+            self.check_partition(&omega_prime)?;
+            return Ok(omega_prime);
+        }
+
+        // C' := { c in C | exists v: c in omega'_not_x(v) }
+        let mut C_prime = self.manager_ref.with_manager_shared(|m| BDDFunction::f(m));
+        for (v, func) in omega_prime[not_x.to_index()].iter() {
+            C_prime = C_prime.or(func)?;
+        }
+        C_prime = C_prime.and(&C)?;
+
+        // Restrict omega'_not_x to C'
+        let mut omega_prime_not_x_restricted_prime = omega_prime[not_x.to_index()].clone();
+        {
+            let indices: Vec<_> = omega_prime_not_x_restricted_prime.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = omega_prime_not_x_restricted_prime[v].clone();
+                let newf = func.and(&C_prime)?;
+                omega_prime_not_x_restricted_prime.set(v, newf);
+            }
+        }
+
+        // beta := attr_not_x(omega'_not_x | C')
+        let alpha_prime = self.attractor(not_x, &gamma, omega_prime_not_x_restricted_prime)?;
+
+        // Solve on (gamma | C') \ alpha'
+        // First restrict gamma to C'
+        let mut gamma_restricted = gamma.clone();
+        {
+            let indices: Vec<_> = gamma_restricted.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = gamma_restricted[v].clone();
+                let newf = func.and(&C_prime)?;
+                gamma_restricted.set(v, newf);
+            }
+        }
+        debug!("begin solve_optimised_left_rec((gamma | C') \\ alpha')");
+        let omega_doubleprime = self.solve_optimised_left_recursive(gamma_restricted.minus(&alpha_prime)?)?;
+        debug!("end solve_optimised_left_rec((gamma | C') \\ alpha')");
+
+        // Compose final sets
+        let mut omega_x = omega_prime[x.to_index()].clone();
+        {
+            let cp_not = C_prime.not()?;
+            let indices: Vec<_> = omega_x.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = omega_x[v].clone();
+                let newf = func.and(&cp_not)?;
+                omega_x.set(v, newf);
+            }
+        }
+        let mut omega_notx = omega_prime[not_x.to_index()].clone();
+        {
+            let cp_not = C_prime.not()?;
+            let indices: Vec<_> = omega_notx.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = omega_notx[v].clone();
+                let newf = func.and(&cp_not)?;
+                omega_notx.set(v, newf);
+            }
+        }
+
+        let mut result = omega_doubleprime;
+        {
+            let tmp = result[x.to_index()].clone().or(&omega_x)?;
+            result[x.to_index()] = tmp;
+        }
+        // alpha minus C'
+        let mut alpha_no_Cp = alpha.clone();
+        {
+            let cp_not = C_prime.not()?;
+            let indices: Vec<_> = alpha_no_Cp.iter().map(|(v, _)| v).collect();
+            for v in indices {
+                let func = alpha_no_Cp[v].clone();
+                let newf = func.and(&cp_not)?;
+                alpha_no_Cp.set(v, newf);
+            }
+        }
+        {
+            let tmp = result[x.to_index()].clone().or(&alpha_no_Cp)?;
+            result[x.to_index()] = tmp;
+        }
+        {
+            let tmp = result[not_x.to_index()].clone().or(&omega_notx)?;
+            result[not_x.to_index()] = tmp;
+        }
+        {
+            let tmp = result[not_x.to_index()].clone().or(&alpha_prime)?;
+            result[not_x.to_index()] = tmp;
+        }
+
+        debug!("return (omega''_0, omega''_1)");
+        self.check_partition(&result)?;
+        Ok(result)
     }
 
     /// Computes the attractor for `player` to the set `A` within the set of vertices `gamma`.
@@ -182,11 +449,13 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         self.temp_queue.clear();
 
         // 2. Queue Q := {v \in V | U(v) != \emptyset }
+        self.temp_vertices.fill(false);
         for v in gamma.iter_vertices() {
             self.temp_queue.push(v);
+            self.temp_vertices.set(*v, true);
         }
 
-        /// 3. A := U
+        // 3. A := U
         // 4. While Q not empty do
         // 5. w := Q.pop()
         while let Some(w) = self.temp_queue.pop() {
@@ -230,7 +499,6 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                         // 17. if v not in Q then Q.push(v)
                         if !self.temp_vertices[*v] {
                             self.temp_queue.push(v);
-                            self.temp_vertices.set(*v, true);
                         }
                     }
                 }
@@ -254,6 +522,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         (Priority::new(highest), Priority::new(lowest))
     }
 
+    /// Checks that the given partition is valid.
     fn check_partition(&self, W: &[Submap; 2]) -> Result<(), MercError> {
         // Check that the result is a valid partition
         if cfg!(debug_assertions) {
@@ -298,11 +567,15 @@ impl Submap {
     fn new(initial: BDDFunction, num_of_vertices: usize) -> Self {
         Self {
             mapping: vec![initial.clone(); num_of_vertices],
-            non_empty_count: 0,
+            non_empty_count: if initial.satisfiable() {
+                num_of_vertices // If the initial function is satisfiable, all entries are non-empty.
+            } else {
+                0
+            },
         }
     }
 
-    /// Returns an iterator over the vertices in the submap that are non-empty.
+    /// Returns an iterator over the vertices in the submap whose configuration is satisfiable.
     pub fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_ {
         self.mapping.iter().enumerate().filter_map(|(i, func)| {
             if func.satisfiable() {
@@ -318,13 +591,6 @@ impl Submap {
         self.non_empty_count
     }
 
-    /// Returns an iterator over the entries in the submap.
-    pub fn iter(&self) -> impl Iterator<Item = (VertexIndex, &BDDFunction)> {
-        self.mapping
-            .iter()
-            .enumerate()
-            .map(|(i, func)| (VertexIndex::new(i), func))
-    }
 
     /// Sets the function for the given vertex index.
     fn set(&mut self, index: VertexIndex, func: BDDFunction) {
@@ -390,6 +656,14 @@ impl Submap {
 
         Ok(self)
     }
+
+    /// Returns an iterator over all entries.
+    pub fn iter(&self) -> impl Iterator<Item = (VertexIndex, &BDDFunction)> {
+        self.mapping
+            .iter()
+            .enumerate()
+            .map(|(i, func)| (VertexIndex::new(i), func))
+    }
 }
 
 impl Index<VertexIndex> for Submap {
@@ -411,15 +685,23 @@ impl fmt::Debug for Submap {
 
 #[cfg(test)]
 mod tests {
+    use merc_macros::merc_test;
     use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
     use oxidd::bdd::BDDFunction;
     use oxidd::util::AllocResult;
 
-    use crate::VertexIndex;
+    use merc_utilities::random_test;
 
-    #[test]
+    use crate::PG;
+    use crate::VertexIndex;
+    use crate::project_variability_parity_games_iter;
+    use crate::random_variability_parity_game;
+    use crate::solve_variability_zielonka;
+    use crate::solve_zielonka;
+
+    #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_submap() {
         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
@@ -436,5 +718,31 @@ mod tests {
         submap.set(VertexIndex::new(1), vars[0].clone());
 
         assert_eq!(submap.non_empty_count, 1);
+    }
+
+    #[merc_test]
+    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_variability_parity_game_solve() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, 20, 3, 3, 3).unwrap();
+            println!("Solving VPG {}", vpg);
+            
+            crate::write_vpg(&mut std::io::stdout(), &vpg).unwrap();
+
+            let solution = solve_variability_zielonka(&manager_ref, &vpg, false).unwrap();
+
+            for game in project_variability_parity_games_iter(&vpg) {
+                let (cube, pg) = game.unwrap();
+                let pg_solution = solve_zielonka(&pg);
+
+                for v in pg.iter_vertices() {
+                    if pg_solution[0].get(*v).is_some() {
+                        // Won by Even
+                        debug_assert!(solution[0][v].and(&cube).unwrap().satisfiable());
+                    }
+                }
+            }
+        })
     }
 }

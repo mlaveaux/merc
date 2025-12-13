@@ -1,11 +1,14 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
 
+use std::fmt;
+
 use delegate::delegate;
 use oxidd::BooleanFunction;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
+use crate::FormatConfigSet;
 use crate::PG;
 use crate::ParityGame;
 use crate::Player;
@@ -205,5 +208,40 @@ impl PG for VariabilityParityGame {
             fn priority(&self, vertex: VertexIndex) -> Priority;
             fn outgoing_edges(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_;
         }
+    }
+}
+
+impl fmt::Display for VariabilityParityGame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Variability Parity Game:\n")?;
+        write!(f, "Configuration BDD: {}\n", FormatConfigSet(self.configuration()))?;
+
+        for v in self.iter_vertices() {
+            write!(
+                f,
+                "v{}: {:?}, p={}, edges=[",
+                v,
+                self.owner(v).to_index(),
+                self.priority(v)
+            )?;
+
+            let mut first = true;
+            for edge in self.outgoing_conf_edges(v) {
+                if !first {
+                    write!(f, ", ")?;
+                }
+                write!(
+                    f,
+                    "(v{}, {})",
+                    edge.to(),
+                    FormatConfigSet(edge.configuration())
+                )?;
+                first = false;
+            }
+
+            write!(f, "]\n")?;
+        }
+
+        Ok(())
     }
 }

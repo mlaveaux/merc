@@ -2,6 +2,7 @@ use merc_utilities::MercError;
 use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 
+use crate::CubeIterAll;
 use crate::PG;
 use crate::ParityGame;
 use crate::VariabilityParityGame;
@@ -30,7 +31,11 @@ pub fn project_variability_parity_game(
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    
+/// Projects all configurations of a variability parity game into standard parity games.
+pub fn project_variability_parity_games_iter(vpg: &VariabilityParityGame) -> impl Iterator<Item = Result<(BDDFunction, ParityGame), MercError>> {
+    CubeIterAll::new(vpg.variables(), &vpg.configuration()).map(|cube| {
+        let (_, bdd) = cube?;
+        let pg = project_variability_parity_game(vpg, &bdd)?;
+        Ok((bdd, pg))
+    })
 }
