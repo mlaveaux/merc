@@ -1,0 +1,5 @@
+des(0, 4, 3)
+(0, "ins(tt)", 1)
+(1, "std(node(Euro, tt, ff))", 0)
+(1, "ins(node(Dollar, tt, ff))", 2)
+(2, "xxl(tt)", 0)

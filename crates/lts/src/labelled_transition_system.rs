@@ -20,8 +20,9 @@ pub type LabelIndex = TagIndex<usize, LabelTag>;
 /// The index for a state.
 pub type StateIndex = TagIndex<usize, StateTag>;
 
-pub trait LTS 
-    where Self: Sized
+pub trait LTS
+where
+    Self: Sized,
 {
     /// Returns the index of the initial state
     fn initial_state_index(&self) -> StateIndex;
@@ -97,6 +98,11 @@ impl LabelledTransitionSystem {
         let mut states = ByteCompressedVec::new();
         if let Some(num_of_states) = num_of_states {
             states.resize_with(num_of_states, Default::default);
+            debug_assert!(
+                initial_state.value() < num_of_states,
+                "Initial vertex index {} out of bounds {num_of_states}",
+                initial_state.value()
+            );
         }
 
         // Count the number of transitions for every state
@@ -373,7 +379,12 @@ impl fmt::Display for LtsMetrics {
 
 impl fmt::Debug for LabelledTransitionSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Initial state: {}", self.initial_state)?;
+        writeln!(
+            f,
+            "Initial state: {} (total: {})",
+            self.initial_state,
+            self.num_of_states()
+        )?;
 
         for state_index in self.iter_states() {
             for transition in self.outgoing_transitions(state_index) {

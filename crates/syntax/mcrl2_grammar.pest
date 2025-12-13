@@ -29,6 +29,9 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 /// Identifiers
 Id = @{ (ASCII_ALPHANUMERIC|"_"|"'")+ }
 
+// Special identifiers
+IdAt = @{ (ASCII_ALPHANUMERIC|"@"|"_"|"'")+ }
+
 /// List of identifiers
 IdList = { Id ~ ( "," ~ Id )* }
 

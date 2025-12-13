@@ -879,13 +879,16 @@ name = "merc-vpg"
 version = "1.0.0"
 dependencies = [
  "clap",
+ "duct",
  "env_logger",
  "log",
+ "merc_syntax",
  "merc_tools",
  "merc_unsafety",
  "merc_utilities",
  "merc_vpg",
  "oxidd",
+ "which",
 ]
 
 [[package]]
@@ -1139,6 +1142,7 @@ dependencies = [
  "merc_syntax",
  "merc_utilities",
  "oxidd",
+ "rand",
  "regex",
  "streaming-iterator",
  "thiserror",

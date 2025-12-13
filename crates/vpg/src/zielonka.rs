@@ -9,6 +9,7 @@ use bitvec::order::Lsb0;
 use bitvec::vec::BitVec;
 use log::debug;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Predecessors;
@@ -18,7 +19,9 @@ use crate::VertexIndex;
 type Set = BitVec<usize, Lsb0>;
 
 /// Solves the given parity game using the Zielonka algorithm.
-pub fn solve_zielonka(game: &ParityGame) -> Player {
+pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
+    debug_assert!(game.is_total(), "Zielonka solver requires a total parity game");
+
     let mut V = bitvec![usize, Lsb0; 0; game.num_of_vertices()];
     V.set_elements(usize::MAX);
 
@@ -28,19 +31,35 @@ pub fn solve_zielonka(game: &ParityGame) -> Player {
 
     // Check that the result is a valid partition
     debug_assert!(
-        W[0].clone().bitand(&W[1]).not_any(),
+        {
+            let intersection = W[0].clone() & &W[1];
+            if intersection.any() {
+                let non_disjoint: Vec<_> = intersection.iter_ones().collect();
+                panic!(
+                    "The winning sets are not disjoint. Vertices in both sets: {:?}",
+                    non_disjoint
+                );
+            }
+            true
+        },
         "The winning sets are not disjoint"
     );
     debug_assert!(
-        (W[0].clone() | W[1].clone()).all(),
+        {
+            let both = W[0].clone() | &W[1];
+            if !both.all() {
+                let missing: Vec<_> = both.iter_zeros().take(game.num_of_vertices()).collect();
+                panic!(
+                    "The winning sets do not cover all vertices. Missing vertices: {:?}",
+                    missing
+                );
+            }
+            true
+        },
         "The winning sets do not cover all vertices"
     );
 
-    if W[0][*game.initial_vertex()] {
-        Player::Even
-    } else {
-        Player::Odd
-    }
+    W
 }
 
 struct ZielonkaSolver<'a> {
@@ -94,6 +113,7 @@ impl ZielonkaSolver<'_> {
 
         let (highest_prio, lowest_prio) = self.get_highest_lowest_prio(&V);
         let alpha = Player::from_priority(&highest_prio);
+        let not_alpha = alpha.opponent();
 
         // Collect the set U of vertices with the highest priority in V
         let mut U = bitvec![usize, Lsb0; 0; self.game.num_of_vertices()];
@@ -123,13 +143,13 @@ impl ZielonkaSolver<'_> {
         );
         debug!("end solve_rec(V \\ A)");
 
-        if !W_prime[alpha.opponent().to_index()].any() {
+        if !W_prime[not_alpha.to_index()].any() {
             W_prime[alpha.to_index()] |= A;
             W_prime
         } else {
             // Get ownershop of a single element in the array.
-            let W_prime_opponent = std::mem::take(&mut W_prime[alpha.opponent().to_index()]);
-            let B = self.attractor(alpha.opponent(), &V, W_prime_opponent);
+            let W_prime_opponent = std::mem::take(&mut W_prime[not_alpha.to_index()]);
+            let B = self.attractor(not_alpha, &V, W_prime_opponent);
 
             // Computes V \ B in place
             for (index, value) in V.iter_mut().enumerate() {
@@ -141,33 +161,38 @@ impl ZielonkaSolver<'_> {
             let mut W_double_prime = self.solve_recursive(V); // V has been updated to V \ B
             debug!("end solve_rec(V \\ B)");
 
-            W_double_prime[alpha.to_index()] |= B;
+            W_double_prime[not_alpha.to_index()] |= B;
             W_double_prime
         }
     }
 
-    /// Computes the attractor for `player` to the set `U` within the vertices `V`.
-    fn attractor(&mut self, player: Player, V: &Set, mut A: Set) -> Set {
-        let initial_size = A.count_ones();
-
+    /// Computes the attractor for `alpha` to the set `U` within the vertices `V`.
+    fn attractor(&mut self, alpha: Player, V: &Set, mut A: Set) -> Set {
+        // 2. Q = {v \in A}
         self.temp_queue.clear();
         for v in A.iter_ones() {
             self.temp_queue.push(VertexIndex::new(v));
         }
 
-        while let Some(v) = self.temp_queue.pop() {
-            for u in self.predecessors.predecessors(v) {
+        let initial_size = A.count_ones();
+
+        // 4. While Q is not empty do
+        // 5. w := Q.pop()
+        while let Some(w) = self.temp_queue.pop() {
+            // For every v \in Ew do
+            for v in self.predecessors.predecessors(w) {
                 if V[*v] {
-                    let attracted = if self.game.owner(u) == player {
+                    let attracted = if self.game.owner(v) == alpha {
+                        // v \in V and v in V_\alpha
                         true
                     } else {
                         // Check if all successors of u are in the attractor
-                        self.game.outgoing_edges(u).all(|to| V[*to] && !A[*to])
+                        self.game.outgoing_edges(v).all(|w_prime| V[*w_prime] && !A[*w_prime])
                     };
 
-                    if attracted && !A[*u] {
-                        A.set(*u, true);
-                        self.temp_queue.push(u);
+                    if attracted && !A[*v] {
+                        A.set(*v, true);
+                        self.temp_queue.push(v);
                     }
                 }
             }
@@ -194,5 +219,23 @@ impl ZielonkaSolver<'_> {
         }
 
         (Priority::new(highest), Priority::new(lowest))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use merc_utilities::random_test;
+
+    use crate::random_parity_game;
+    use crate::solve_zielonka;
+
+    #[test]
+    fn test_random_parity_game_solve() {
+        random_test(100, |rng| {
+            let pg = random_parity_game(rng, true, 10, 5, 3);
+            println!("{:?}", pg);
+
+            solve_zielonka(&pg);
+        })
     }
 }

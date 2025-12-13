@@ -14,6 +14,7 @@ use merc_io::LineIterator;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
@@ -89,7 +90,7 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         // Store the offset for the vertex
         vertices.push(transitions_to.len());
 
-        if let Some(succesors) = parts.next() {
+        while let Some(succesors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
             for successor in succesors
                 .trim_end_matches(';')

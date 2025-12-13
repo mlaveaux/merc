@@ -3,10 +3,11 @@
 use merc_utilities::ByteCompressedVec;
 use merc_utilities::bytevec;
 
+use crate::PG;
 use crate::ParityGame;
 use crate::VertexIndex;
 
-/// Stores the incoming transitions for a given labelled transition system.
+/// Stores the predecessors for a given parity game.
 pub struct Predecessors {
     edges_from: ByteCompressedVec<VertexIndex>,
     vertex_to_predecessors: ByteCompressedVec<usize>,

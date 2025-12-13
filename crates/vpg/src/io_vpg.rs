@@ -1,9 +1,11 @@
 //! Authors: Maurice Laveaux and Sjef van Loo
 
+use std::fmt;
 use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
 
+use itertools::Itertools;
 use log::info;
 use log::trace;
 use oxidd::BooleanFunction;
@@ -19,7 +21,10 @@ use merc_io::LineIterator;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
+use crate::CubeIter;
 use crate::IOError;
+use crate::PG;
+use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
@@ -33,8 +38,18 @@ use crate::VertexIndex;
 /// The format starts with a header, followed by the vertices
 ///
 /// parity <num_of_vertices>;
-/// <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
+/// `<index> <priority> <owner> <outgoing_vertex>,<outgoing_vertex>,...;`
+/// Each outgoing edge is represented as `<to>|<configuration_set>`. For the
+/// format of the configuration set see [parse_configuration_set]
 pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<VariabilityParityGame, MercError> {
+    manager.with_manager_exclusive(|manager| {
+        debug_assert_eq!(
+            manager.num_vars(),
+            0,
+            "A BDD manager can only hold the variables for a single variability parity game"
+        )
+    });
+
     let mut lines = LineIterator::new(reader);
     lines.advance();
     let header = lines
@@ -104,7 +119,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
         // Store the offset for the vertex
         vertices.push(edges_configuration.len());
 
-        if let Some(succesors) = parts.next() {
+        while let Some(succesors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
             for successor in succesors
                 .trim_end_matches(';')
@@ -133,13 +148,10 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     vertices.push(edges_configuration.len());
 
     Ok(VariabilityParityGame::new(
-        VertexIndex::new(0),
+        ParityGame::new(VertexIndex::new(0), owner, priority, vertices, edges_to),
         configurations,
-        owner,
-        priority,
-        vertices,
+        variables,
         edges_configuration,
-        edges_to,
     ))
 }
 
@@ -205,14 +217,11 @@ fn parse_configuration_set(
 }
 
 /// Writes the given parity game to the given writer in .vpg format.
-/// Note that the reader is buffered internally using a `BufWriter`.
-pub fn write_vpg(
-    _manager: &BDDManagerRef,
-    writer: &mut impl Write,
-    game: &VariabilityParityGame,
-) -> Result<(), MercError> {
+/// Note that the writer is buffered internally using a `BufWriter`.
+pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Result<(), MercError> {
     let mut writer = BufWriter::new(writer);
 
+    writeln!(writer, "confs {};", FormatConfigSet(game.configuration()))?;
     writeln!(writer, "parity {};", game.num_of_vertices())?;
 
     for v in game.iter_vertices() {
@@ -220,41 +229,48 @@ pub fn write_vpg(
         let owner = game.owner(v).to_index();
 
         write!(writer, "{} {} {} ", v.value(), prio.value(), owner)?;
-        // write!(writer, "{}", game.outgoing_edges(v).format_with(", ", |fmt| {
-        //     write_configuration_set(manager_ref, write, variables, config)
-        // })
+        write!(
+            writer,
+            "{}",
+            game.outgoing_conf_edges(v).format_with(",", |edge, fmt| {
+                fmt(&format_args!("{}|{}", edge.to(), FormatConfigSet(edge.configuration())))
+            })
+        )?;
 
-        // .map(|to| {
-        //     to.value()
-        // }).format(", "))?;
         writeln!(writer, ";")?;
     }
 
     Ok(())
 }
 
-/// Write a configuration set to its string representation.
-fn _write_configuration_set(
-    manager_ref: &BDDManagerRef,
-    write: &mut impl Write,
-    _variables: &[BDDFunction],
-    config: &BDDFunction,
-) -> Result<(), MercError> {
-    manager_ref.with_manager_shared(|_manager| -> Result<(), MercError> {
-        let choices = Vec::new();
+/// A helper structure to format configuration sets for output.
+pub struct FormatConfigSet<'a>(pub &'a BDDFunction);
 
-        while let Some(cube) = config.pick_cube(|_manager, _edge, index| choices[index as usize]) {
-            for value in cube {
-                match value {
-                    OptBool::True => write!(write, "1")?,
-                    OptBool::False => write!(write, "0")?,
-                    OptBool::None => write!(write, "-")?,
-                }
+impl fmt::Display for FormatConfigSet<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            CubeIter::new(&self.0).format_with("+", |cube, fmt| { fmt(&format_args!("{}", FormatConfig(&cube))) })
+        )
+    }
+}
+
+/// A helper structure to format a configuration for output.
+pub struct FormatConfig<'a>(pub &'a Vec<OptBool>);
+
+impl fmt::Display for FormatConfig<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for value in self.0 {
+            match value {
+                OptBool::True => write!(f, "1")?,
+                OptBool::False => write!(f, "0")?,
+                OptBool::None => write!(f, "-")?,
             }
         }
 
         Ok(())
-    })
+    }
 }
 
 #[cfg(test)]
@@ -262,7 +278,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Oxidd does not support miri (specifically the crossbeam-epoch dependency)
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_read_vpg() {
         let manager = oxidd::bdd::new_manager(2048, 1024, 8);
 

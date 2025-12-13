@@ -44,13 +44,7 @@ pub fn random_lts_monolithic(
         labels.push(char::from_digit(i + 10, 36).unwrap().to_string());
     }
 
-    let mut builder = LtsBuilderFast::with_capacity(
-        labels,
-        Vec::new(),
-        num_of_states,
-        num_of_labels as usize,
-        num_of_states * outdegree,
-    );
+    let mut builder = LtsBuilderFast::with_capacity(labels, Vec::new(), num_of_states);
 
     for state_index in 0..num_of_states {
         // Introduce outgoing transitions for this state based on the desired out degree.
@@ -67,9 +61,9 @@ pub fn random_lts_monolithic(
         }
     }
 
-    if builder.num_of_transitions() == 0 {
-        // Ensure there is at least one transition (otherwise it would be an LTS without initial state).
-        builder.add_transition_index(StateIndex::new(0), LabelIndex::new(0), StateIndex::new(0));
+    if builder.num_of_states() == 0 {
+        // Ensure there is at least one state (otherwise it would be an LTS without initial state).
+        builder.require_num_of_states(1);
     }
 
     builder.finish(StateIndex::new(0), true)

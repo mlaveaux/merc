@@ -1,8 +1,11 @@
 use log::trace;
 use merc_utilities::IndexedSet;
 
-use crate::{LTS, LabelIndex, LabelledTransitionSystem, LtsBuilderFast, StateIndex};
-
+use crate::LTS;
+use crate::LabelIndex;
+use crate::LabelledTransitionSystem;
+use crate::LtsBuilderFast;
+use crate::StateIndex;
 
 /// Computes the synchronous product LTS of two given LTSs.
 ///
@@ -118,6 +121,11 @@ pub fn product_lts(left: &impl LTS, right: &impl LTS) -> LabelledTransitionSyste
                 working.push((left_state, right_transition.to));
             }
         }
+    }
+
+    if lts_builder.num_of_states() == 0 {
+        // The product has no states, but an LTS requires at least one state (the initial state).
+        lts_builder.require_num_of_states(1);
     }
 
     lts_builder.finish(StateIndex::new(0), true)

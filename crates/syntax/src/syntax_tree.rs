@@ -20,6 +20,16 @@ pub struct UntypedDataSpecification {
     pub equation_declarations: Vec<EqnSpec>,
 }
 
+impl UntypedDataSpecification {
+    /// Returns true if the data specification is empty.
+    pub fn is_empty(&self) -> bool {
+        self.sort_declarations.is_empty()
+            && self.constructor_declarations.is_empty()
+            && self.map_declarations.is_empty()
+            && self.equation_declarations.is_empty()
+    }
+}
+
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedPbes {
     pub data_specification: UntypedDataSpecification,
@@ -53,7 +63,7 @@ pub struct IdDecl {
 }
 
 /// Expression representing a sort (type).
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum SortExpression {
     /// Product of two sorts (A # B)
     Product {
@@ -77,7 +87,7 @@ pub enum SortExpression {
 }
 
 /// Constructor declaration
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ConstructorDecl {
     pub name: String,
     pub args: Vec<(Option<String>, SortExpression)>,
@@ -85,7 +95,7 @@ pub struct ConstructorDecl {
 }
 
 /// Built-in simple sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Sort {
     Bool,
     Pos,
@@ -95,7 +105,7 @@ pub enum Sort {
 }
 
 /// Complex (parameterized) sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum ComplexSort {
     List,
     Set,
@@ -116,7 +126,7 @@ pub struct SortDecl {
 }
 
 /// Variable declaration
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VarDecl {
     pub identifier: String,
     pub sort: SortExpression,
@@ -155,14 +165,14 @@ pub struct ProcDecl {
     pub span: Span,
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprUnaryOp {
     Negation,
     Minus,
     Size,
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprBinaryOp {
     Conj,
     Disj,
@@ -187,7 +197,7 @@ pub enum DataExprBinaryOp {
 }
 
 /// Data expression
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExpr {
     Id(String),
     Number(String), // Is string because the number can be any size.
@@ -234,19 +244,19 @@ pub enum DataExpr {
     },
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct BagElement {
     pub expr: DataExpr,
     pub multiplicity: DataExpr,
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct DataExprUpdate {
     pub expr: DataExpr,
     pub update: DataExpr,
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Assignment {
     pub identifier: String,
     pub expr: DataExpr,
@@ -328,13 +338,13 @@ pub struct UntypedStateFrmSpec {
     pub formula: StateFrm,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum StateFrmUnaryOp {
     Minus,
     Negation,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum StateFrmOp {
     Addition,
     Implies,
@@ -342,33 +352,33 @@ pub enum StateFrmOp {
     Conjunction,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum FixedPointOperator {
     Least,
     Greatest,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StateVarDecl {
     pub identifier: String,
     pub arguments: Vec<StateVarAssignment>,
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StateVarAssignment {
     pub identifier: String,
     pub sort: SortExpression,
     pub expr: DataExpr,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ModalityOperator {
     Diamond,
     Box,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum StateFrm {
     True,
     False,
@@ -415,31 +425,60 @@ pub struct MultiActionLabel {
     pub actions: Vec<String>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Action {
     pub id: String,
     pub args: Vec<DataExpr>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq)]
 pub struct MultiAction {
     pub actions: Vec<Action>,
 }
 
-#[derive(Arbitrary, Debug, Eq, PartialEq, Hash)]
+impl PartialEq for MultiAction {
+    fn eq(&self, other: &Self) -> bool {
+        // Check whether both multi-actions contain the same actions
+        if self.actions.len() != other.actions.len() {
+            return false;
+        }
+
+        // Map every action onto the other, equal length means they must be the same.
+        for action in self.actions.iter() {
+            if !other.actions.contains(action) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Hash for MultiAction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut actions = self.actions.clone();
+        // Sort the action ids to ensure that the hash is independent of the order.
+        actions.sort();
+        for action in actions {
+            action.hash(state);
+        }
+    }
+}
+
+#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Quantifier {
     Exists,
     Forall,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ActFrmBinaryOp {
     Implies,
     Union,
     Intersect,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ActFrm {
     True,
     False,
@@ -490,7 +529,7 @@ pub enum Condition {
 }
 
 // TODO: What should this be called?
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Bound {
     Inf,
     Sup,
@@ -545,7 +584,7 @@ pub enum PbesExprBinaryOp {
     Conjunction,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum RegFrm {
     Action(ActFrm),
     Iteration(Box<RegFrm>),
@@ -594,7 +633,7 @@ pub enum ActionRHS {
 }
 
 /// Source location information, spanning from start to end in the source text.
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

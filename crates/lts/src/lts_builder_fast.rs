@@ -25,17 +25,11 @@ pub struct LtsBuilderFast {
 impl LtsBuilderFast {
     /// Initializes a new empty builder.
     pub fn new(labels: Vec<String>, hidden_labels: Vec<String>) -> Self {
-        Self::with_capacity(labels, hidden_labels, 0, 0, 0)
+        Self::with_capacity(labels, hidden_labels, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(
-        mut labels: Vec<String>,
-        hidden_labels: Vec<String>,
-        _num_of_states: usize,
-        _num_of_labels: usize,
-        num_of_transitions: usize,
-    ) -> Self {
+    pub fn with_capacity(mut labels: Vec<String>, hidden_labels: Vec<String>, num_of_transitions: usize) -> Self {
         // Remove duplicates from the labels.
         labels.sort();
         labels.dedup();
@@ -111,6 +105,19 @@ impl LtsBuilderFast {
     /// Returns the number of transitions added to the builder.
     pub fn num_of_transitions(&self) -> usize {
         self.transitions.len()
+    }
+
+    /// Returns the number of states that the builder currently found.
+    pub fn num_of_states(&self) -> usize {
+        self.num_of_states
+    }
+
+    /// Sets the number of states to at least the given number. All states without transitions
+    /// will simply become deadlock states.
+    pub fn require_num_of_states(&mut self, num_states: usize) {
+        if num_states > self.num_of_states {
+            self.num_of_states = num_states;
+        }
     }
 
     /// Removes duplicated transitions from the added transitions.
