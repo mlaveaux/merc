@@ -219,7 +219,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_random_tau_scc_decomposition() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let lts = random_lts(rng, 10, 3, 3);
             println!("LTS: {:?}", lts);
 

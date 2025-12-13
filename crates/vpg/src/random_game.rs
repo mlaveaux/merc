@@ -15,6 +15,7 @@ use crate::random_bdd;
 /// Creates a random parity game with the given number of vertices, priorities, and outdegree.
 pub fn random_parity_game(
     rng: &mut impl Rng,
+    make_total: bool,
     num_of_vertices: usize,
     num_of_priorities: usize,
     outdegree: usize,
@@ -49,19 +50,20 @@ pub fn random_parity_game(
     // Ensure at least the initial vertex exists.
     let initial_vertex = VertexIndex::new(0);
 
-    ParityGame::from_edges(initial_vertex, owner, priority, || edge_list.iter().cloned())
+    ParityGame::from_edges(initial_vertex, owner, priority, make_total, || edge_list.iter().cloned())
 }
 
 /// Creates a random parity game with the given number of vertices, priorities, and outdegree.
 pub fn random_variability_parity_game(
     manager_ref: &BDDManagerRef,
     rng: &mut impl Rng,
+    make_total: bool,
     num_of_vertices: usize,
     num_of_priorities: usize,
     outdegree: usize,
     number_of_variables: u32,
 ) -> Result<VariabilityParityGame, MercError> {
-    let pg = random_parity_game(rng, num_of_vertices, num_of_priorities, outdegree);
+    let pg = random_parity_game(rng, make_total, num_of_vertices, num_of_priorities, outdegree);
 
     // Create random feature variables.
     let variables: Vec<BDDFunction> = create_variables(manager_ref, number_of_variables)?;
@@ -94,7 +96,7 @@ mod tests {
     #[test]
     fn test_random_parity_game() {
         random_test(100, |rng| {
-            let pg = random_parity_game(rng, 10, 5, 3);
+            let pg = random_parity_game(rng, false, 10, 5, 3);
             assert_eq!(pg.num_of_vertices(), 10);
         })
     }
@@ -104,7 +106,7 @@ mod tests {
     fn test_random_variability_parity_game() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
-            let vpg = random_variability_parity_game(&manager_ref, rng, 10, 5, 3, 3).unwrap();
+            let vpg = random_variability_parity_game(&manager_ref, rng, false, 10, 5, 3, 3).unwrap();
             assert_eq!(vpg.num_of_vertices(), 10);
         })
     }

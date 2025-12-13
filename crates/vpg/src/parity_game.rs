@@ -55,7 +55,7 @@ impl ParityGame {
             owner.len() + 1,
             "There should be an offset for every vertex, and the sentinel state"
         );
-        debug_assert!(initial_vertex == 0, "The initial vertex should be vertex 0");
+        debug_assert_eq!(initial_vertex, 0, "The initial vertex should be vertex 0");
 
         Self {
             owner,
@@ -68,12 +68,14 @@ impl ParityGame {
 
     /// Constructs a new parity game from an iterator over edges.
     ///
-    /// The vertices are given by their owner and priority.
-    /// The `edges` iterator should yield tuples of the form (from, to).
+    /// The vertices are given by their owner and priority. The `edges` iterator
+    /// should yield tuples of the form (from, to). If `make_total` is true,
+    /// self-loops are added to vertices with no outgoing edges.
     pub fn from_edges<F, I>(
         initial_vertex: VertexIndex,
         owner: Vec<Player>,
         priority: Vec<Priority>,
+        make_total: bool,
         mut edges: F,
     ) -> Self
     where
@@ -120,6 +122,16 @@ impl ParityGame {
             vertices.resize_with(initial_vertex.value() + 1, Default::default);
         }
 
+        // If make_total is true, reserve space for self-loops on vertices with no outgoing edges
+        if make_total {
+            for count in vertices.iter_mut() {
+                if *count == 0 {
+                    *count = 1;
+                    num_of_edges += 1;
+                }
+            }
+        }
+
         // Sets the offset for every state into the edge arrays.
         vertices.iter_mut().fold(0, |count, start| {
             let result = count + *start;
@@ -133,6 +145,23 @@ impl ParityGame {
             let start = &mut vertices[*from];
             edges_to[*start] = to;
             *start += 1;
+        }
+
+        // If make_total is true, add self-loops for vertices that had no outgoing edges
+        if make_total {
+            for vertex_idx in 0..num_of_vertices {
+                let start = vertices[vertex_idx];
+                let previous = if vertex_idx > 0 {
+                    vertices[vertex_idx - 1]
+                } else {
+                    0
+                };
+                if start == previous {
+                    // No outgoing edges, add self-loop
+                    edges_to[start] = VertexIndex::new(vertex_idx);
+                    vertices[vertex_idx] += 1; // Increment end offset
+                }
+            }
         }
 
         // Reset the offset to the start.
@@ -151,6 +180,17 @@ impl ParityGame {
             vertices,
             edges_to,
         }
+    }
+
+    /// Return strue iff the parity game is total, checks all vertices have at least one outgoing edge.
+    pub fn is_total(&self) -> bool {       
+        for v in self.iter_vertices() {
+            if self.outgoing_edges(v).next().is_none() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns the vertices array.
@@ -217,7 +257,7 @@ impl fmt::Debug for ParityGame {
         for v in self.iter_vertices() {
             let owner = self.owner(v);
             let prio = self.priority(v);
-            write!(f, "    {}: ({:?}, p: {}, outgoing: [", *v, owner.to_index(), *prio)?;
+            write!(f, "    {}: ({:?}, priority: {}, outgoing: [", *v, owner.to_index(), *prio)?;
 
             write!(f, "{}", self.outgoing_edges(v).format(", "))?;
             writeln!(f, "]),")?;

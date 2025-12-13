@@ -183,7 +183,7 @@ fn increment(cube: &mut Vec<OptBool>) -> bool {
         *value = OptBool::False;
     }
 
-    // ALl variables were true, overflow
+    // All variables were true, overflow
     false
 }
 
