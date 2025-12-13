@@ -4,36 +4,41 @@
 //! progress indications.
 //!
 
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::time::Duration;
 use std::time::Instant;
 
 /// A time-based progress tracker that prints messages at regular intervals.
-pub struct TimeProgress<F: Fn(T), T> {
+pub struct TimeProgress<T> {
     interval: Duration,
-    last_update: Instant,
-    message: F,
+    last_update: RefCell<Instant>,
+    message: Box<dyn Fn(T)>,
     _marker: PhantomData<T>,
 }
 
-impl<F: Fn(T), T> TimeProgress<F, T> {
+impl<T> TimeProgress<T> {
     /// Create a new time-based progress tracker with a given interval in seconds.
-    pub fn new(message: F, interval_seconds: u64) -> TimeProgress<F, T> {
+    pub fn new(message: impl Fn(T) + 'static, interval_seconds: u64) -> TimeProgress<T> {
         TimeProgress {
-            message,
+            message: Box::new(message),
             interval: Duration::from_secs(interval_seconds),
-            last_update: Instant::now(),
+            last_update: RefCell::new(Instant::now()),
             _marker: PhantomData,
         }
     }
 
     /// Increase the progress with the given amount, prints periodic progress
     /// messages based on time intervals.
-    pub fn print(&mut self, object: T) {
+    pub fn print(&self, object: T) {
         let now = Instant::now();
-        if now.duration_since(self.last_update) >= self.interval {
+        let should_print = {
+            let last = *self.last_update.borrow();
+            now.duration_since(last) >= self.interval
+        };
+        if should_print {
             (self.message)(object);
-            self.last_update = now;
+            *self.last_update.borrow_mut() = now;
         }
     }
 }

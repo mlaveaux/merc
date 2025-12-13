@@ -30,7 +30,5 @@ fn main() -> Result<ExitCode, Box<dyn Error>> {
 
 /// Print the help message.
 fn print_help() {
-    println!(
-        "Available tasks: address-sanitizer <cargo_args>, thread-sanitizer <cargo_args>"
-    );
+    println!("Available tasks: address-sanitizer <cargo_args>, thread-sanitizer <cargo_args>");
 }

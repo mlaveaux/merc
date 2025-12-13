@@ -1,17 +1,20 @@
-
 // This is a helper trait that is object safe and allows a type-erased iterator
 // to be cloned.
 pub trait CloneIterator: Iterator {
-    
     /// Clone the iterator into a boxed trait object.
-    fn clone_boxed<'a>(&self) -> Box<dyn CloneIterator<Item = Self::Item> + 'a> where Self: 'a;
+    fn clone_boxed<'a>(&self) -> Box<dyn CloneIterator<Item = Self::Item> + 'a>
+    where
+        Self: 'a;
 }
 
 impl<T, I> CloneIterator for I
 where
     I: Iterator<Item = T> + Clone,
 {
-    fn clone_boxed<'a>(&self) -> Box<dyn CloneIterator<Item = Self::Item> + 'a> where Self: 'a {
+    fn clone_boxed<'a>(&self) -> Box<dyn CloneIterator<Item = Self::Item> + 'a>
+    where
+        Self: 'a,
+    {
         Box::new(self.clone())
     }
 }

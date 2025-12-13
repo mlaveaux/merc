@@ -9,3 +9,9 @@ rust-version.workspace = true
 mcrl2-sys.workspace = true
 merc_tools.workspace = true
 merc_utilities.workspace = true
+
+log.workspace = true
+
+[features]
+# Enables the compiling rewriter option for mCRL2.
+mcrl2_jittyc = []

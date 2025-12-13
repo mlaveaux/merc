@@ -2,30 +2,41 @@ use std::fmt;
 
 use mcrl2_sys::cxx::CxxVector;
 use mcrl2_sys::cxx::UniquePtr;
+use mcrl2_sys::pbes::ffi::assignment_pair;
 use mcrl2_sys::pbes::ffi::local_control_flow_graph;
 use mcrl2_sys::pbes::ffi::local_control_flow_graph_vertex;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_pbes_file;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text;
+use mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text_file;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_index;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_name;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_outgoing_edges;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertex_value;
 use mcrl2_sys::pbes::ffi::mcrl2_local_control_flow_graph_vertices;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_data_specification;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_expression_replace_propositional_variables;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_expression_replace_variables;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_expression_to_string;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_to_srf_pbes;
+use mcrl2_sys::pbes::ffi::mcrl2_pbes_to_string;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_name;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_parameters;
 use mcrl2_sys::pbes::ffi::mcrl2_propositional_variable_to_string;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_equations_summands;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equations;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_to_pbes;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_unify_parameters;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_equation_predicate_variables;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_cfgs;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_equations;
 use mcrl2_sys::pbes::ffi::mcrl2_stategraph_local_algorithm_run;
-use mcrl2_sys::pbes::ffi::mcrl2_to_string;
-use mcrl2_sys::pbes::ffi::mcrl2_unify_parameters;
 use mcrl2_sys::pbes::ffi::pbes;
 use mcrl2_sys::pbes::ffi::predicate_variable;
 use mcrl2_sys::pbes::ffi::srf_equation;
 use mcrl2_sys::pbes::ffi::srf_pbes;
+use mcrl2_sys::pbes::ffi::srf_summand;
 use mcrl2_sys::pbes::ffi::stategraph_algorithm;
 use mcrl2_sys::pbes::ffi::stategraph_equation;
 use merc_utilities::MercError;
@@ -34,6 +45,7 @@ use crate::Aterm;
 use crate::AtermList;
 use crate::AtermString;
 use crate::DataExpression;
+use crate::DataSpecification;
 use crate::DataVariable;
 
 /// mcrl2::pbes_system::pbes
@@ -45,22 +57,27 @@ impl Pbes {
     /// Load a PBES from a file.
     pub fn from_file(filename: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_pbes_file(filename)?,
+            pbes: mcrl2_load_pbes_from_pbes_file(filename)?,
         })
     }
 
     /// Load a PBES from a textual pbes file.
     pub fn from_text_file(filename: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text_file(filename)?,
+            pbes: mcrl2_load_pbes_from_text_file(filename)?,
         })
     }
 
     /// Load a PBES from text.
     pub fn from_text(input: &str) -> Result<Self, MercError> {
         Ok(Pbes {
-            pbes: mcrl2_sys::pbes::ffi::mcrl2_load_pbes_from_text(input)?,
+            pbes: mcrl2_load_pbes_from_text(input)?,
         })
+    }
+
+    /// Returns the data specification of the PBES.
+    pub fn data_specification(&self) -> DataSpecification {
+        DataSpecification::new(mcrl2_pbes_data_specification(&self.pbes))
     }
 
     pub(crate) fn new(pbes: UniquePtr<pbes>) -> Self {
@@ -70,7 +87,7 @@ impl Pbes {
 
 impl fmt::Display for Pbes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", mcrl2_to_string(&self.pbes))
+        write!(f, "{}", mcrl2_pbes_to_string(&self.pbes))
     }
 }
 
@@ -163,19 +180,19 @@ impl ControlFlowGraphVertex {
     /// Returns the name of the variable associated with this vertex.
     pub fn name(&self) -> AtermString {
         AtermString::new(Aterm::new(unsafe {
-            mcrl2_local_control_flow_graph_vertex_name(self.vertex)
+            mcrl2_local_control_flow_graph_vertex_name(self.vertex.as_ref().expect("Pointer should be valid"))
         }))
     }
 
     pub fn value(&self) -> DataExpression {
         DataExpression::new(Aterm::new(unsafe {
-            mcrl2_local_control_flow_graph_vertex_value(self.vertex)
+            mcrl2_local_control_flow_graph_vertex_value(self.vertex.as_ref().expect("Pointer should be valid"))
         }))
     }
 
     /// Returns the index of the variable associated with this vertex.
     pub fn index(&self) -> usize {
-        unsafe { mcrl2_local_control_flow_graph_vertex_index(self.vertex) }
+        unsafe { mcrl2_local_control_flow_graph_vertex_index(self.vertex.as_ref().expect("Pointer should be valid")) }
     }
 
     /// Returns the outgoing edges of the vertex.
@@ -193,7 +210,10 @@ impl ControlFlowGraphVertex {
     pub fn new(vertex: *const local_control_flow_graph_vertex) -> Self {
         let mut outgoing_edges_ffi = CxxVector::new();
         unsafe {
-            mcrl2_local_control_flow_graph_vertex_outgoing_edges(outgoing_edges_ffi.pin_mut(), vertex);
+            mcrl2_local_control_flow_graph_vertex_outgoing_edges(
+                outgoing_edges_ffi.pin_mut(),
+                vertex.as_ref().expect("Pointer should be valid"),
+            );
         }
 
         let outgoing_edges = outgoing_edges_ffi
@@ -236,12 +256,16 @@ impl PredicateVariable {
 
     /// Creates a new `PredicateVariable` from the given FFI variable pointer.
     pub(crate) fn new(variable: *const predicate_variable) -> Self {
-        PredicateVariable { _variable: variable, used: unsafe { mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_used(
-                variable.as_ref().expect("Pointer should be valid"),
-            )}, 
-            changed: unsafe {mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_changed(
-                variable.as_ref().expect("Pointer should be valid"),
-            )}
+        PredicateVariable {
+            _variable: variable,
+            used: unsafe {
+                mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_used(variable.as_ref().expect("Pointer should be valid"))
+            },
+            changed: unsafe {
+                mcrl2_sys::pbes::ffi::mcrl2_predicate_variable_changed(
+                    variable.as_ref().expect("Pointer should be valid"),
+                )
+            },
         }
     }
 }
@@ -290,7 +314,7 @@ pub struct SrfPbes {
 impl SrfPbes {
     /// Convert a PBES to an SRF PBES.
     pub fn from(pbes: &Pbes) -> Result<Self, MercError> {
-        let srf_pbes = mcrl2_sys::pbes::ffi::mcrl2_to_srf_pbes(&pbes.pbes)?;
+        let srf_pbes = mcrl2_pbes_to_srf_pbes(&pbes.pbes)?;
 
         let mut ffi_equations = CxxVector::new();
         mcrl2_srf_pbes_equations(ffi_equations.pin_mut(), &srf_pbes);
@@ -309,7 +333,7 @@ impl SrfPbes {
 
     /// Unify all parameters of the equations.
     pub fn unify_parameters(&mut self, ignore_ce_equations: bool, reset: bool) -> Result<(), MercError> {
-        mcrl2_unify_parameters(self.srf_pbes.pin_mut(), ignore_ce_equations, reset);
+        mcrl2_srf_pbes_unify_parameters(self.srf_pbes.pin_mut(), ignore_ce_equations, reset);
         Ok(())
     }
 
@@ -322,17 +346,74 @@ impl SrfPbes {
 /// mcrl2::pbes_system::srf_equation
 pub struct SrfEquation {
     equation: *const srf_equation,
+
+    summands: Vec<SrfSummand>,
+    _summands_ffi: UniquePtr<CxxVector<srf_summand>>,
 }
 
 impl SrfEquation {
     /// Returns the parameters of the equation.
     pub fn variable(&self) -> PropositionalVariable {
-        PropositionalVariable::new(Aterm::new(unsafe { mcrl2_srf_pbes_equation_variable(self.equation) }))
+        PropositionalVariable::new(Aterm::new(unsafe {
+            mcrl2_srf_pbes_equation_variable(self.equation.as_ref().expect("Pointer should be valid"))
+        }))
     }
 
-    /// Creates a new `SrfEquation` from the given FFI equation pointer.
+    /// Returns the summands of the equation.
+    pub fn summands(&self) -> &Vec<SrfSummand> {
+        &self.summands
+    }
+
+    /// Creates a new [`SrfEquation`] from the given FFI equation pointer.
     pub(crate) fn new(equation: *const srf_equation) -> Self {
-        SrfEquation { equation }
+        let mut summands_ffi = CxxVector::new();
+        mcrl2_srf_equations_summands(summands_ffi.pin_mut(), unsafe {
+            equation.as_ref().expect("Pointer should be valid")
+        });
+        let summands = summands_ffi.iter().map(|s| SrfSummand::new(s)).collect();
+
+        SrfEquation {
+            equation,
+            _summands_ffi: summands_ffi,
+            summands,
+        }
+    }
+}
+
+/// mcrl2::pbes_system::srf_summand
+pub struct SrfSummand {
+    summand: *const srf_summand,
+}
+
+impl SrfSummand {
+    /// Returns the condition of the summand.
+    pub fn condition(&self) -> PbesExpression {
+        PbesExpression::new(Aterm::new(unsafe {
+            mcrl2_sys::pbes::ffi::mcrl2_srf_summand_condition(self.summand.as_ref().expect("Pointer should be valid"))
+        }))
+    }
+
+    /// Returns the variable of the summand.
+    pub fn variable(&self) -> PbesExpression {
+        PbesExpression::new(Aterm::new(unsafe {
+            mcrl2_sys::pbes::ffi::mcrl2_srf_summand_variable(self.summand.as_ref().expect("Pointer should be valid"))
+        }))
+    }
+
+    /// Creates a new [`SrfSummand`] from the given FFI summand pointer.
+    pub(crate) fn new(summand: *const srf_summand) -> Self {
+        SrfSummand { summand }
+    }
+}
+
+impl fmt::Debug for SrfSummand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Summand(condition: {:?}, variable: {:?})",
+            self.condition(),
+            self.variable()
+        )
     }
 }
 
@@ -363,4 +444,48 @@ impl fmt::Debug for PropositionalVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", mcrl2_propositional_variable_to_string(self.term.get()))
     }
+}
+
+/// mcrl2::pbes_system::pbes_expression
+#[derive(Clone, Eq, PartialEq)]
+pub struct PbesExpression {
+    term: Aterm,
+}
+
+impl PbesExpression {
+    /// Creates a new [PbesExpression] from the given term.
+    pub(crate) fn new(term: Aterm) -> Self {
+        PbesExpression { term }
+    }
+}
+
+impl fmt::Debug for PbesExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", mcrl2_pbes_expression_to_string(&self.term.get()))
+    }
+}
+
+/// Replace variables in the given PBES expression according to the given substitution sigma.
+pub fn replace_variables(expr: &PbesExpression, sigma: Vec<(DataExpression, DataExpression)>) -> PbesExpression {
+    // Do not into_iter here, as we need to keep sigma alive for the call.
+    let sigma: Vec<assignment_pair> = sigma
+        .iter()
+        .map(|(lhs, rhs)| assignment_pair {
+            lhs: lhs.get().get(),
+            rhs: rhs.get().get(),
+        })
+        .collect();
+
+    PbesExpression::new(Aterm::new(mcrl2_pbes_expression_replace_variables(
+        expr.term.get(),
+        &sigma,
+    )))
+}
+
+/// Replaces propositional variables in the given PBES expression according to the given substitution sigma.
+pub fn replace_propositional_variables(expr: &PbesExpression, pi: &Vec<usize>) -> PbesExpression {
+    PbesExpression::new(Aterm::new(mcrl2_pbes_expression_replace_propositional_variables(
+        expr.term.get(),
+        pi,
+    )))
 }

@@ -2,6 +2,7 @@
 /// Authors: Menno Bartels and Maurice Laveaux
 /// To keep consistent with the theory we allow non-snake case names.
 use std::iter;
+use std::cell::Cell;
 
 use itertools::Itertools;
 
@@ -10,18 +11,23 @@ use log::info;
 use mcrl2::AtermString;
 use mcrl2::ControlFlowGraph;
 use mcrl2::ControlFlowGraphVertex;
+use mcrl2::DataExpression;
 use mcrl2::DataVariable;
 use mcrl2::Pbes;
+use mcrl2::PbesExpression;
 use mcrl2::PbesStategraph;
 use mcrl2::SrfPbes;
 use mcrl2::StategraphEquation;
+use mcrl2::replace_propositional_variables;
+use mcrl2::replace_variables;
+use merc_io::TimeProgress;
 use merc_utilities::LargeFormatter;
 use merc_utilities::MercError;
 
 use crate::clone_iterator::CloneIterator;
+use crate::permutation::Permutation;
 use crate::permutation::permutation_group;
 use crate::permutation::permutation_group_size;
-use crate::permutation::Permutation;
 
 /// Implements symmetry detection for PBESs.
 pub struct SymmetryAlgorithm {
@@ -30,29 +36,12 @@ pub struct SymmetryAlgorithm {
     parameters: Vec<DataVariable>, // The parameters of the unified SRF PBES.
 
     all_control_flow_parameters: Vec<usize>, // Keeps track of all parameters identified as control flow parameters.
-}
 
-/// Returns the index of the variable that the control flow graph considers
-fn variable_index(cfg: &ControlFlowGraph) -> usize {
-    // Check that all the vertices have the same variable assigned for consistency
-    cfg.vertices().iter().for_each(|v| {
-        if v.index()
-            != cfg
-                .vertices()
-                .first()
-                .expect("There is at least one vertex in a CFG")
-                .index()
-        {
-            panic!("Inconsistent variable indices in control flow graph.");
-        }
-    });
+    srf: SrfPbes, // The SRF PBES after unifying parameters.
 
-    for v in cfg.vertices() {
-        // Simply return the index of the variable
-        return v.index();
-    }
-
-    panic!("No variable found in control flow graph.");
+    /// Keep track of some progress messages.
+    num_of_checked_candidates: Cell<usize>,
+    progress: TimeProgress<usize>,
 }
 
 impl SymmetryAlgorithm {
@@ -86,15 +75,25 @@ impl SymmetryAlgorithm {
             .map(|cfg| variable_index(cfg))
             .collect::<Vec<_>>();
 
+        let progress = TimeProgress::new(
+            |count: usize| {
+                info!("Checked {count} candidates...");
+            },
+            1,
+        );
+
         Ok(Self {
             state_graph,
             all_control_flow_parameters,
             parameters,
+            srf,
+            progress,
+            num_of_checked_candidates: Cell::new(0),
         })
     }
 
     /// Runs the symmetry detection algorithm.
-    pub fn run(&self) {
+    pub fn find_symmetries(&self, partition_data_sorts: bool) {
         let cliques = self.cliques();
 
         for clique in &cliques {
@@ -111,12 +110,9 @@ impl SymmetryAlgorithm {
             Box::new(iter::empty()) as Box<dyn CloneIterator<Item = (Permutation, Permutation)>>;
         let mut number_of_candidates = 1usize;
 
-        // let mut progress = TimeProgress::new(|index: usize| {
-        //     info!("Checked {index} candidates...");
-        // }, 1);
 
         for clique in &cliques {
-            let (number_of_permutations, candidates) = self.clique_candidates(clique.clone());
+            let (number_of_permutations, candidates) = self.clique_candidates(clique.clone(), partition_data_sorts);
             info!(
                 "Maximum number of permutations for clique {:?}: {}",
                 clique,
@@ -145,7 +141,46 @@ impl SymmetryAlgorithm {
         for (alpha, beta) in combined_candidates {
             let permutation = alpha.concat(&beta);
             info!("Found candidate: {}", permutation);
+
+            if self.check_symmetry(&permutation) {
+                info!("Found symmetry: {}", permutation);
+            }
         }
+    }
+
+    /// Performs the syntactic check defined as symcheck in the paper.
+    pub fn check_symmetry(&self, pi: &Permutation) -> bool {
+        for equation in self.srf.equations() {
+            for summand in equation.summands() {
+                let mut matched = false;
+                for other_equation in self.srf.equations() {
+                    for other_summand in other_equation.summands() {
+                        if equation.variable().name() == other_equation.variable().name()
+                            && apply_permutation(&summand.condition(), &self.parameters, &pi)
+                                == other_summand.condition()
+                            && apply_permutation(&summand.variable(), &self.parameters, &pi) == other_summand.variable()
+                        {
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if matched {
+                        break;
+                    }
+                }
+
+                if !matched {
+                    debug!(
+                        "No matching summand found for {summand:?} in equation {:?}.",
+                        equation.variable().name()
+                    );
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     /// Determine the cliques in the given control flow graphs.
@@ -180,9 +215,10 @@ impl SymmetryAlgorithm {
     fn clique_candidates(
         &self,
         I: Vec<usize>,
+        partition_data_sorts: bool,
     ) -> (usize, Box<dyn CloneIterator<Item = (Permutation, Permutation)> + '_>) {
         // Determine the parameter indices involved in the clique
-        let control_glow_parameter_indices: Vec<usize> = I
+        let control_flow_parameter_indices: Vec<usize> = I
             .iter()
             .map(|&i| {
                 let cfg = &self.state_graph.control_flow_graphs()[i];
@@ -190,72 +226,94 @@ impl SymmetryAlgorithm {
             })
             .collect();
 
-        info!("Parameter indices in clique: {:?}", control_glow_parameter_indices);
+        info!("Parameter indices in clique: {:?}", control_flow_parameter_indices);
 
         // Groups the data parameters by their sort.
-        let same_sort_parameters = {
-            let mut result: Vec<Vec<DataVariable>> = Vec::new();
+        let (mut number_of_permutations, all_data_groups) = if partition_data_sorts {
+            let same_sort_parameters = {
+                let mut result: Vec<Vec<DataVariable>> = Vec::new();
 
-            for (index, param) in self.parameters.iter().enumerate() {
-                if self.all_control_flow_parameters.contains(&index) {
-                    // Skip control flow parameters.
-                    continue;
-                }
-
-                let sort = param.sort();
-                if let Some(group) = result.iter_mut().find(|g: &&mut Vec<_>| {
-                    if let Some(first) = g.first() {
-                        first.sort() == sort
-                    } else {
-                        false
+                for (index, param) in self.parameters.iter().enumerate() {
+                    if self.all_control_flow_parameters.contains(&index) {
+                        // Skip control flow parameters.
+                        continue;
                     }
-                }) {
-                    group.push(param.clone());
-                } else {
-                    result.push(vec![param.clone()]);
-                }
-            }
-            result
-        };
 
-        let mut number_of_permutations = 1usize;
-        let mut all_data_groups: Box<dyn CloneIterator<Item = Permutation>> = Box::new(iter::empty()); // Default value is overwritten in first iteration.
-        for group in same_sort_parameters {
-            // Determine the indices of these parameters.
-            let parameter_indices: Vec<usize> = group
-                .iter()
-                .map(|param| self.parameters.iter().position(|p| p.name() == param.name()).unwrap())
+                    let sort = param.sort();
+                    if let Some(group) = result.iter_mut().find(|g: &&mut Vec<_>| {
+                        if let Some(first) = g.first() {
+                            first.sort() == sort
+                        } else {
+                            false
+                        }
+                    }) {
+                        group.push(param.clone());
+                    } else {
+                        result.push(vec![param.clone()]);
+                    }
+                }
+                result
+            };
+
+            let mut number_of_permutations = 1usize;
+            let mut all_data_groups: Box<dyn CloneIterator<Item = Permutation>> = Box::new(iter::empty()); // Default value is overwritten in first iteration.
+            for group in same_sort_parameters {
+                // Determine the indices of these parameters.
+                let parameter_indices: Vec<usize> = group
+                    .iter()
+                    .map(|param| self.parameters.iter().position(|p| p.name() == param.name()).unwrap())
+                    .collect();
+
+                info!(
+                    "Same sort data parameters: {:?}, indices: {:?}",
+                    group, parameter_indices
+                );
+
+                // Compute the product of the current data group with the already concatenated ones.
+                if number_of_permutations == 1 {
+                    all_data_groups = Box::new(permutation_group(parameter_indices.clone()))
+                        as Box<dyn CloneIterator<Item = Permutation>>;
+                } else {
+                    all_data_groups = Box::new(
+                        all_data_groups
+                            .cartesian_product(permutation_group(parameter_indices.clone()))
+                            .map(|(a, b)| a.concat(&b)),
+                    ) as Box<dyn CloneIterator<Item = Permutation>>;
+                }
+
+                number_of_permutations *= permutation_group_size(parameter_indices.len());
+            }
+
+            (number_of_permutations, all_data_groups)
+        } else {
+            // All data parameters in a single group.
+            let parameter_indices: Vec<usize> = (0..self.parameters.len())
+                .filter(|i| !self.all_control_flow_parameters.contains(i))
                 .collect();
 
-            info!(
-                "Same sort data parameters: {:?}, indices: {:?}",
-                group, parameter_indices
-            );
+            info!("All data parameter indices: {:?}", parameter_indices);
 
-            // Compute the product of the current data group with the already concatenated ones.
-            if number_of_permutations == 1 {
-                all_data_groups = Box::new(permutation_group(parameter_indices.clone()))
-                    as Box<dyn CloneIterator<Item = Permutation>>;
-            } else {
-                all_data_groups = Box::new(
-                    all_data_groups
-                        .cartesian_product(permutation_group(parameter_indices.clone()))
-                        .map(|(a, b)| a.concat(&b)),
-                ) as Box<dyn CloneIterator<Item = Permutation>>;
-            }
+            let number_of_permutations = permutation_group_size(parameter_indices.len());
+            let all_data_groups = Box::new(permutation_group(parameter_indices.clone()))
+                as Box<dyn CloneIterator<Item = Permutation>>;
 
-            number_of_permutations *= permutation_group_size(parameter_indices.len());
-        }
+            (number_of_permutations, all_data_groups)
+        };
 
-        number_of_permutations *= permutation_group_size(control_glow_parameter_indices.len());
+        number_of_permutations *= permutation_group_size(control_flow_parameter_indices.len());
 
         (
             number_of_permutations,
             Box::new(
-                permutation_group(control_glow_parameter_indices)
+                permutation_group(control_flow_parameter_indices)
                     .cartesian_product(all_data_groups)
                     .filter(move |(a, b)| {
                         let pi = a.clone().concat(&b);
+
+                        // Print progress messages.
+                        self.num_of_checked_candidates.set(self.num_of_checked_candidates.get() + 1);
+                        self.progress.print(self.num_of_checked_candidates.get());
+
                         if !self.complies(&pi, &I) {
                             debug!("Non compliant permutation {}.", pi);
                             return false;
@@ -277,7 +335,6 @@ impl SymmetryAlgorithm {
         for s in c.vertices() {
             let mut s_matched = false;
             for s_c_prime in c_prime.vertices() {
-                println!("Checking vertices {:?} and {:?}.", s, s_c_prime);
                 // Check whether there is a matching value in c' for every value in c.
                 if s.value() == s_c_prime.value() && s.name() == s_c_prime.name() {
                     s_matched = true;
@@ -285,10 +342,6 @@ impl SymmetryAlgorithm {
                     // There exist t such that s_c and s'_c' match according to the definitions in the paper.
                     for s_prime in c.vertices() {
                         for s_c_prime_prime in c_prime.vertices() {
-                            println!(
-                                "  Checking outgoing edges to {:?} and {:?}.",
-                                s_prime, s_c_prime_prime
-                            );
                             // Y(v) in c and Y(v) in c_prime.
                             if s_prime.value() == s_c_prime_prime.value() && s_prime.name() == s_c_prime_prime.name() {
                                 let v_c = s.outgoing_edges().iter().find(|(vertex, _)| *vertex == s_prime.get());
@@ -427,7 +480,10 @@ impl SymmetryAlgorithm {
                 let variable_prime = &equation.predicate_variables()[j];
 
                 self.equal_under_permutation(pi, &variable.changed(), &variable_prime.changed())
-                    && self.equal_under_permutation(pi, &variable.used(), &variable_prime.used())
+                    .is_ok()
+                    && self
+                        .equal_under_permutation(pi, &variable.used(), &variable_prime.used())
+                        .is_ok()
             });
 
             if let Some(x) = result {
@@ -446,10 +502,19 @@ impl SymmetryAlgorithm {
     }
 
     /// Checks whether the data parameters of two sets are equal under the given permutation.
-    fn equal_under_permutation(&self, pi: &Permutation, left: &Vec<usize>, right: &Vec<usize>) -> bool {
+    fn equal_under_permutation(
+        &self,
+        pi: &Permutation,
+        left: &Vec<usize>,
+        right: &Vec<usize>,
+    ) -> Result<(), MercError> {
         if left.len() != right.len() {
-            // Sets have different sizes.
-            return false;
+            return Err(format!(
+                "Cannot be equal: left has size {}, right has size {}",
+                left.len(),
+                right.len()
+            )
+            .into());
         }
 
         // Only need to check one way since sizes are equal (and the vectors have no duplicates).
@@ -461,11 +526,15 @@ impl SymmetryAlgorithm {
 
             let l_permuted = pi.value(*l);
             if !right.contains(&l_permuted) {
-                return false;
+                return Err(format!(
+                    "Element {} (permuted to {}) not found in right set.",
+                    l, l_permuted
+                )
+                .into());
             }
         }
 
-        true
+        Ok(())
     }
 
     /// Computes the sizes(c, s, s')
@@ -508,6 +577,51 @@ impl SymmetryAlgorithm {
     }
 }
 
+/// Returns the index of the variable that the control flow graph considers
+fn variable_index(cfg: &ControlFlowGraph) -> usize {
+    // Check that all the vertices have the same variable assigned for consistency
+    cfg.vertices().iter().for_each(|v| {
+        if v.index()
+            != cfg
+                .vertices()
+                .first()
+                .expect("There is at least one vertex in a CFG")
+                .index()
+        {
+            panic!("Inconsistent variable indices in control flow graph.");
+        }
+    });
+
+    for v in cfg.vertices() {
+        // Simply return the index of the variable
+        return v.index();
+    }
+
+    panic!("No variable found in control flow graph.");
+}
+
+/// Applies the given permutation to the given expression.
+/// 
+/// # Details
+/// 
+/// - Replaces data variables according to the permutation.
+/// - Replaces propositional variables according to the permutation.
+fn apply_permutation(expression: &PbesExpression, parameters: &Vec<DataVariable>, pi: &Permutation) -> PbesExpression {
+    let sigma: Vec<(DataExpression, DataExpression)> = (0..parameters.len())
+        .map(|i| {
+            let var = &parameters[i];
+            let permuted_var = &parameters[pi.value(i)];
+
+            (var.clone().into(), permuted_var.clone().into())
+        })
+        .collect();
+
+    let result = replace_variables(expression, sigma);
+
+    let pi = (0..parameters.len()).map(|i| pi.value(i)).collect::<Vec<usize>>();
+    replace_propositional_variables(&result, &pi)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,7 +635,7 @@ mod tests {
         ] {
             let pbes = Pbes::from_text(example).unwrap();
 
-            SymmetryAlgorithm::new(&pbes, false).unwrap().run();
+            SymmetryAlgorithm::new(&pbes, false).unwrap().find_symmetries(true);
         }
     }
 }

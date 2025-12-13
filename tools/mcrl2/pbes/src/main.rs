@@ -15,9 +15,9 @@ use merc_utilities::Timing;
 use crate::permutation::Permutation;
 use crate::symmetry::SymmetryAlgorithm;
 
+mod clone_iterator;
 mod permutation;
 mod symmetry;
-mod clone_iterator;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum PbesFormat {
@@ -57,7 +57,15 @@ struct SymmetryArgs {
     #[arg(long, short('i'), value_enum)]
     format: Option<PbesFormat>,
 
+    /// Pass a single permutation in cycles notation to check for begin a (syntactic) symmetry
     permutation: Option<String>,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Partition data parameters into their sorts before considering their permutation groups"
+    )]
+    partition_data_sorts: bool,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -86,12 +94,17 @@ fn main() -> Result<ExitCode, MercError> {
             PbesFormat::Text => Pbes::from_text_file(&args.filename)?,
         };
 
+        let algorithm = SymmetryAlgorithm::new(&pbes, false)?;
         if let Some(permutation) = &args.permutation {
-            eprintln!("Note: the permutation argument is currently not used.");
-            let _pi = Permutation::from_input(permutation)?;
-        } 
-
-        SymmetryAlgorithm::new(&pbes, false)?.run();
+            let pi = Permutation::from_input(permutation)?;
+            if algorithm.check_symmetry(&pi) {
+                println!("true");
+            } else {
+                println!("false");
+            }
+        } else {
+            algorithm.find_symmetries(args.partition_data_sorts);
+        }
     }
 
     if cli.timings {

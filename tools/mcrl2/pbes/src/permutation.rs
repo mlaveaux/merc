@@ -5,7 +5,7 @@ use std::fmt;
 
 use merc_utilities::MercError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Permutation {
     /// We represent a permutation as an explicit list of (domain -> image) pairs,
     /// sorted by domain.
@@ -13,11 +13,9 @@ pub struct Permutation {
 }
 
 impl Permutation {
-    /// Create a permutation from a given mapping of (domain -> image) pairs.
-    /// The function validates that:
-    /// - domain entries are unique,
-    /// - images are exactly a permutation of the domain entries,
-    /// - internal representation is sorted by domain.
+    /// Create a permutation from a given mapping of (domain -> image) pairs. Internally
+    /// sorts the mapping by domain for a unique representation. The input must be
+    /// a valid permutation (so a bijection).
     pub fn from_mapping(mut mapping: Vec<(usize, usize)>) -> Self {
         // Validate lengths and uniqueness in debug builds.
         if cfg!(debug_assertions) {
@@ -161,6 +159,19 @@ impl fmt::Display for Permutation {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for Permutation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, (d, v)) in self.mapping.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{} -> {}", d, v)?;
+        }
+        write!(f, "]")
     }
 }
 
