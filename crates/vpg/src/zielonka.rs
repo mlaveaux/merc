@@ -115,6 +115,7 @@ impl ZielonkaSolver<'_> {
 
         let (highest_prio, lowest_prio) = self.get_highest_lowest_prio(&V);
         let alpha = Player::from_priority(&highest_prio);
+        let not_alpha = alpha.opponent();
 
         // Collect the set U of vertices with the highest priority in V
         let mut U = bitvec![usize, Lsb0; 0; self.game.num_of_vertices()];
@@ -144,13 +145,13 @@ impl ZielonkaSolver<'_> {
         );
         debug!("end solve_rec(V \\ A)");
 
-        if !W_prime[alpha.opponent().to_index()].any() {
+        if !W_prime[not_alpha.to_index()].any() {
             W_prime[alpha.to_index()] |= A;
             W_prime
         } else {
             // Get ownershop of a single element in the array.
-            let W_prime_opponent = std::mem::take(&mut W_prime[alpha.opponent().to_index()]);
-            let B = self.attractor(alpha.opponent(), &V, W_prime_opponent);
+            let W_prime_opponent = std::mem::take(&mut W_prime[not_alpha.to_index()]);
+            let B = self.attractor(not_alpha, &V, W_prime_opponent);
 
             // Computes V \ B in place
             for (index, value) in V.iter_mut().enumerate() {
@@ -162,38 +163,38 @@ impl ZielonkaSolver<'_> {
             let mut W_double_prime = self.solve_recursive(V); // V has been updated to V \ B
             debug!("end solve_rec(V \\ B)");
 
-            W_double_prime[alpha.to_index()] |= B;
+            W_double_prime[not_alpha.to_index()] |= B;
             W_double_prime
         }
     }
 
-    /// Computes the attractor for `player` to the set `U` within the vertices `V`.
-    fn attractor(&mut self, player: Player, V: &Set, mut A: Set) -> Set {
-        let initial_size = A.count_ones();
-
+    /// Computes the attractor for `alpha` to the set `U` within the vertices `V`.
+    fn attractor(&mut self, alpha: Player, V: &Set, mut A: Set) -> Set {
         // 2. Q = {v \in A}
         self.temp_queue.clear();
         for v in A.iter_ones() {
             self.temp_queue.push(VertexIndex::new(v));
         }
 
+        let initial_size = A.count_ones();
+
         // 4. While Q is not empty do
         // 5. w := Q.pop()
-        while let Some(v) = self.temp_queue.pop() {
+        while let Some(w) = self.temp_queue.pop() {
             // For every v \in Ew do
-            for u in self.predecessors.predecessors(v) {
+            for v in self.predecessors.predecessors(w) {
                 if V[*v] {
-                    let attracted = if self.game.owner(u) == player {
+                    let attracted = if self.game.owner(v) == alpha {
                         // v \in V and v in V_\alpha
                         true
                     } else {
                         // Check if all successors of u are in the attractor
-                        self.game.outgoing_edges(u).all(|to| V[*to] && !A[*to])
+                        self.game.outgoing_edges(v).all(|w_prime| V[*w_prime] && !A[*w_prime])
                     };
 
-                    if attracted && !A[*u] {
-                        A.set(*u, true);
-                        self.temp_queue.push(u);
+                    if attracted && !A[*v] {
+                        A.set(*v, true);
+                        self.temp_queue.push(v);
                     }
                 }
             }
