@@ -133,7 +133,6 @@ impl<'a> Translation<'a> {
     /// This function is recursively called for subformulas.
     pub fn translate_vertex(&mut self, s: StateIndex, formula: &'a StateFrm) -> Result<VertexIndex, MercError> {
         let (index, inserted) = self.vertex_map.insert((s, Formula::StateFrm(formula)));
-        println!("translate_vertex {index}");
         let vertex_index = VertexIndex::new(*index);
 
         if !inserted {
@@ -147,8 +146,6 @@ impl<'a> Translation<'a> {
             self.vertices.len(),
             "Vertex indices should be assigned sequentially"
         );
-
-        trace!("Translating vertex ({}, {})", s, formula);
 
         match formula {
             StateFrm::True => {
@@ -206,8 +203,8 @@ impl<'a> Translation<'a> {
                     .find_equation_by_identifier(identifier)
                     .expect("Variable must correspond to an equation");
 
-                let equation_vertex = self.translate_equation(s, i);
                 self.vertices.push((Player::Odd, Priority::new(0))); // The priority and owner do not matter here
+                let equation_vertex = self.translate_equation(s, i);
                 self.edges
                     .push((vertex_index, self.fts.configuration().clone(), equation_vertex?));
             }
@@ -288,7 +285,6 @@ impl<'a> Translation<'a> {
     /// Applies the translation to the given (s, equation) vertex.
     fn translate_equation(&mut self, s: StateIndex, equation_index: usize) -> Result<VertexIndex, MercError> {
         let (index, inserted) = self.vertex_map.insert((s, Formula::Equation(equation_index)));
-        println!("translate_equation {index}");
         let vertex_index = VertexIndex::new(*index);
 
         if !inserted {
@@ -372,6 +368,7 @@ fn match_action_formula(formula: &ActFrm, action: &MultiAction) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use merc_macros::merc_test;
     use merc_syntax::UntypedStateFrmSpec;
 
     use crate::FeatureDiagram;
@@ -379,7 +376,7 @@ mod tests {
 
     use super::*;
 
-    #[test]
+    #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_running_example() {
         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
