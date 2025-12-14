@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::Aterm;
+use crate::ATerm;
+use crate::ATermRef;
 
 pub struct ATermList<T> {
     term: ATerm,
@@ -25,14 +26,16 @@ impl<T> ATermList<T> {
         self.term.arg(1).into()
     }
 
-    /// Converts the list to a `Vec<T>`.
-    pub fn to_vec(&self) -> Vec<T> {
-        self.iter().collect()
-    }
-
     /// Returns an iterator over all elements in the list.
     pub fn iter(&self) -> ATermListIter<T> {
         ATermListIter { current: self.clone() }
+    }
+}
+
+impl<T: From<ATerm>> ATermList<T> {
+    /// Converts the list to a `Vec<T>`.
+    pub fn to_vec(&self) -> Vec<T> {
+        self.iter().collect()
     }
 }
 
