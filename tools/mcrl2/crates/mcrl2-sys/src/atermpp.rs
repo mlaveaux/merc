@@ -13,9 +13,9 @@ pub mod ffi {
         type _aterm;
         #[namespace = "atermpp::detail"]
         type _function_symbol;
-        
+
         // Functions for managing the aterm pool
-        
+
         /// Enable automated garbage collection.
         ///
         /// # Warning
@@ -23,7 +23,7 @@ pub mod ffi {
         /// interaction with the busy flags. Instead, call collect_garbage
         /// periodically to trigger garbage collection when needed.
         fn mcrl2_aterm_pool_enable_automatic_garbage_collection(enabled: bool);
-        
+
         /// Returns the number of terms in the pool.
         fn mcrl2_aterm_pool_size() -> usize;
 
@@ -47,10 +47,10 @@ pub mod ffi {
 
         /// Unlocks exclusive access to the global aterm pool.
         fn mcrl2_aterm_pool_unlock_exclusive();
-        
+
         /// Register a function to be called during marking of the garbage
         /// collection
-        /// 
+        ///
         /// Note that the resulting pointer can never be destroyed since the
         /// order of destruction for thread-local storage is not guaranteed.
         fn mcrl2_aterm_pool_register_mark_callback(
@@ -78,7 +78,7 @@ pub mod ffi {
         fn mcrl2_aterm_get_address(term: &_aterm) -> *const _aterm;
 
         /// Marks the aterm to prevent garbage collection.
-        fn mcrl2_aterm_mark_address(term: & _aterm, todo: Pin<&mut term_mark_stack>);
+        fn mcrl2_aterm_mark_address(term: &_aterm, todo: Pin<&mut term_mark_stack>);
 
         /// Returns true iff the term is an aterm_list.
         fn mcrl2_aterm_is_list(term: &_aterm) -> bool;
@@ -91,7 +91,7 @@ pub mod ffi {
 
         /// Converts an aterm to a string.
         fn mcrl2_aterm_print(term: &_aterm) -> String;
-        
+
         /// Returns the ith argument of this term.
         fn mcrl2_aterm_get_argument(term: &_aterm, index: usize) -> *const _aterm;
 
@@ -117,7 +117,7 @@ pub mod ffi {
 
         /// Obtain the address of the given function symbol.
         fn mcrl2_function_symbol_get_address(symbol: &function_symbol) -> *const _function_symbol;
-        
+
         // These functions are used to test whether the definitions used in the mCRL2 toolset are the same
         // as our FFI. It is inconvenient to have accessor function for all terms, i.e., head and tail for
         // lists. So instead we simply obtain the arg(0) and arg(1) directly in Rust. However, to ensure that

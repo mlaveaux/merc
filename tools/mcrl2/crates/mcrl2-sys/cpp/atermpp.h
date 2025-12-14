@@ -143,7 +143,8 @@ inline void mcrl2_aterm_pool_print_metrics()
 
 // Aterm related functions
 
-inline const detail::_aterm* mcrl2_aterm_create(const detail::_function_symbol& symbol,
+inline 
+const detail::_aterm* mcrl2_aterm_create(const detail::_function_symbol& symbol,
     rust::Slice<const detail::_aterm *const> arguments)
 {
   // rust::Slice<aterm> aterm_slice(const_cast<aterm&>(mcrl2_aterm_cast(arguments.data())),

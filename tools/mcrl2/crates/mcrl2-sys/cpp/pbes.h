@@ -13,6 +13,7 @@
 #include "mcrl2/pbes/unify_parameters.h"
 
 #include "mcrl2-sys/cpp/assert.h"
+#include "mcrl2-sys/cpp/atermpp.h"
 #include "rust/cxx.h"
 
 #include <cstddef>
@@ -183,12 +184,12 @@ void mcrl2_stategraph_local_algorithm_equations(std::vector<detail::stategraph_e
   }
 }
 
+
 inline
 const atermpp::detail::_aterm* mcrl2_stategraph_equation_variable(const detail::stategraph_equation& equation)
 {
   return atermpp::detail::address(equation.variable());
 }
-
 
 inline
 std::unique_ptr<srf_pbes> mcrl2_pbes_to_srf_pbes(const pbes& p)
@@ -256,9 +257,9 @@ void mcrl2_srf_pbes_equations(std::vector<srf_equation>& result, const srf_pbes&
 }
 
 inline
-std::unique_ptr<atermpp::aterm> mcrl2_srf_pbes_equation_variable(const srf_equation& equation)
+const atermpp::detail::_aterm* mcrl2_srf_pbes_equation_variable(const srf_equation& equation)
 {
-  return std::make_unique<atermpp::aterm>(equation.variable());
+  return atermpp::detail::address(equation.variable());
 }
 
 // mcrl2::pbes_system::propositional_variable

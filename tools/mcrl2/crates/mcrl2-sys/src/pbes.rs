@@ -8,8 +8,8 @@ pub mod ffi {
 
     /// A helper struct for std::pair<pbes_expression, pbes_expression>>
     struct assignment_pair {
-        pub lhs: *const aterm,
-        pub rhs: *const aterm,
+        pub lhs: *const _aterm,
+        pub rhs: *const _aterm,
     }
 
     unsafe extern "C++" {
@@ -139,6 +139,8 @@ pub mod ffi {
         fn mcrl2_srf_summand_condition(summand: &srf_summand) -> *const _aterm;
 
         fn mcrl2_srf_summand_variable(summand: &srf_summand) -> *const _aterm;
+
+        unsafe fn mcrl2_srf_pbes_equation_variable(equation: &srf_equation) -> *const _aterm;
 
         /// Replace data variables in a pbes expression according to the given substitutions.
         fn mcrl2_pbes_expression_replace_variables(
