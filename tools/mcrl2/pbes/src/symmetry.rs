@@ -1,14 +1,14 @@
 #![allow(non_snake_case)]
 /// Authors: Menno Bartels and Maurice Laveaux
 /// To keep consistent with the theory we allow non-snake case names.
-use std::iter;
 use std::cell::Cell;
+use std::iter;
 
 use itertools::Itertools;
 
 use log::debug;
 use log::info;
-use mcrl2::AtermString;
+use mcrl2::ATermString;
 use mcrl2::ControlFlowGraph;
 use mcrl2::ControlFlowGraphVertex;
 use mcrl2::DataExpression;
@@ -109,7 +109,6 @@ impl SymmetryAlgorithm {
         let mut combined_candidates =
             Box::new(iter::empty()) as Box<dyn CloneIterator<Item = (Permutation, Permutation)>>;
         let mut number_of_candidates = 1usize;
-
 
         for clique in &cliques {
             let (number_of_permutations, candidates) = self.clique_candidates(clique.clone(), partition_data_sorts);
@@ -294,8 +293,8 @@ impl SymmetryAlgorithm {
             info!("All data parameter indices: {:?}", parameter_indices);
 
             let number_of_permutations = permutation_group_size(parameter_indices.len());
-            let all_data_groups = Box::new(permutation_group(parameter_indices.clone()))
-                as Box<dyn CloneIterator<Item = Permutation>>;
+            let all_data_groups =
+                Box::new(permutation_group(parameter_indices.clone())) as Box<dyn CloneIterator<Item = Permutation>>;
 
             (number_of_permutations, all_data_groups)
         };
@@ -311,7 +310,8 @@ impl SymmetryAlgorithm {
                         let pi = a.clone().concat(&b);
 
                         // Print progress messages.
-                        self.num_of_checked_candidates.set(self.num_of_checked_candidates.get() + 1);
+                        self.num_of_checked_candidates
+                            .set(self.num_of_checked_candidates.get() + 1);
                         self.progress.print(self.num_of_checked_candidates.get());
 
                         if !self.complies(&pi, &I) {
@@ -526,11 +526,7 @@ impl SymmetryAlgorithm {
 
             let l_permuted = pi.value(*l);
             if !right.contains(&l_permuted) {
-                return Err(format!(
-                    "Element {} (permuted to {}) not found in right set.",
-                    l, l_permuted
-                )
-                .into());
+                return Err(format!("Element {} (permuted to {}) not found in right set.", l, l_permuted).into());
             }
         }
 
@@ -565,7 +561,7 @@ impl SymmetryAlgorithm {
     }
 
     /// Returns the equation with the given name.
-    fn find_equation_by_name(&self, name: &AtermString) -> Option<&StategraphEquation> {
+    fn find_equation_by_name(&self, name: &ATermString) -> Option<&StategraphEquation> {
         // TODO: Fix naive implementation
         for equation in self.state_graph.equations() {
             if equation.variable().name() == *name {
@@ -601,9 +597,9 @@ fn variable_index(cfg: &ControlFlowGraph) -> usize {
 }
 
 /// Applies the given permutation to the given expression.
-/// 
+///
 /// # Details
-/// 
+///
 /// - Replaces data variables according to the permutation.
 /// - Replaces propositional variables according to the permutation.
 fn apply_permutation(expression: &PbesExpression, parameters: &Vec<DataVariable>, pi: &Permutation) -> PbesExpression {
