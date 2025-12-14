@@ -159,7 +159,7 @@ const detail::_aterm* mcrl2_aterm_create(const detail::_function_symbol& symbol,
   return 0;
 }
 
-inline std::unique_ptr<aterm> mcrl2_aterm_from_string(rust::String text)
+inline std::unique_ptr<aterm> mcrl2_aterm_from_string(rust::Str text)
 {
   return std::make_unique<aterm>(read_term_from_string(static_cast<std::string>(text)));
 }

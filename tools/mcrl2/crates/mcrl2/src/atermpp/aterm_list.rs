@@ -18,7 +18,7 @@ impl<T: From<ATerm>> ATermList<T> {
 impl<T> ATermList<T> {
     /// Creates a new ATermList from the given term.
     pub fn new(term: ATerm) -> Self {
-        debug_assert!(term.term.is_list(), "Can only create a ATermList from a aterm_list");
+        debug_assert!(term.term.is_list(), "Term is not a list: {:?}", term);
         ATermList {
             term,
             _marker: PhantomData,
@@ -79,21 +79,13 @@ impl<T: From<ATerm>> Iterator for ATermListIter<T> {
 
 impl<T> From<ATerm> for ATermList<T> {
     fn from(value: ATerm) -> Self {
-        debug_assert!(value.term.is_list(), "Can only convert a aterm_list");
-        ATermList::<T> {
-            term: value,
-            _marker: PhantomData,
-        }
+        Self::new(value)
     }
 }
 
 impl<'a, T> From<ATermRef<'a>> for ATermList<T> {
     fn from(value: ATermRef<'a>) -> Self {
-        debug_assert!(value.is_list(), "Can only convert a aterm_list");
-        ATermList::<T> {
-            term: value.protect(),
-            _marker: PhantomData,
-        }
+        Self::new(value.protect())
     }
 }
 
@@ -117,4 +109,28 @@ impl<T: From<ATerm>> IntoIterator for &ATermList<T> {
 
 pub struct ATermListIter<T> {
     current: ATermList<T>,
+}
+
+#[cfg(test)]
+mod tests {
+    use merc_utilities::test_logger;
+
+    use crate::ATerm;
+    use crate::ATermList;
+
+    #[test]
+    fn test_aterm_list() {
+        let _ = test_logger();
+        let list: ATermList<ATerm> = ATerm::from_string("[f,g,h,i]").unwrap().into();
+
+        assert!(!list.is_empty());
+
+        // Convert into normal vector.
+        let values: Vec<ATerm> = list.iter().collect();
+
+        assert_eq!(values[0], ATerm::from_string("f").unwrap());
+        assert_eq!(values[1], ATerm::from_string("g").unwrap());
+        assert_eq!(values[2], ATerm::from_string("h").unwrap());
+        assert_eq!(values[3], ATerm::from_string("i").unwrap());
+    }
 }

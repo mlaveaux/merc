@@ -72,7 +72,7 @@ pub mod ffi {
         unsafe fn mcrl2_aterm_create(function: &_function_symbol, arguments: &[*const _aterm]) -> *const _aterm;
 
         /// Parses the given string and returns an aterm
-        fn mcrl2_aterm_from_string(text: String) -> Result<UniquePtr<aterm>>;
+        fn mcrl2_aterm_from_string(text: &str) -> Result<UniquePtr<aterm>>;
 
         /// Returns the pointer underlying the given term.
         fn mcrl2_aterm_get_address(term: &aterm) -> *const _aterm;

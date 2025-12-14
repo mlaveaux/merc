@@ -176,15 +176,15 @@ impl ControlFlowGraphVertex {
 
     /// Returns the name of the variable associated with this vertex.
     pub fn name(&self) -> ATermString {
-        ATermString::new(ATerm::from_ptr(
-            mcrl2_local_control_flow_graph_vertex_name(self.as_ref())
-        ))
+        ATermString::new(ATerm::from_ptr(mcrl2_local_control_flow_graph_vertex_name(
+            self.as_ref(),
+        )))
     }
 
     pub fn value(&self) -> DataExpression {
-        DataExpression::new(ATerm::from_ptr(
-            mcrl2_local_control_flow_graph_vertex_value(self.as_ref())
-        ))
+        DataExpression::new(ATerm::from_ptr(mcrl2_local_control_flow_graph_vertex_value(
+            self.as_ref(),
+        )))
     }
 
     /// Returns the index of the variable associated with this vertex.
@@ -228,7 +228,7 @@ impl ControlFlowGraphVertex {
     fn as_ref(&self) -> &local_control_flow_graph_vertex {
         // Safety
         //
-        // Vertex is never modified, and there is a unique owner of the underlying  
+        // Vertex is never modified, and there is a unique owner of the underlying
         // pointer that ensures its validity.
         unsafe { self.vertex.as_ref().expect("Pointer should be valid") }
     }
@@ -290,9 +290,7 @@ impl StategraphEquation {
 
     /// Returns the variable of the equation.
     pub fn variable(&self) -> PropositionalVariable {
-        PropositionalVariable::new(ATerm::from_ptr(
-            mcrl2_stategraph_equation_variable(self.as_ref())
-        ))
+        PropositionalVariable::new(ATerm::from_ptr(mcrl2_stategraph_equation_variable(self.as_ref())))
     }
 
     pub(crate) fn new(equation: *const stategraph_equation) -> Self {
@@ -440,7 +438,11 @@ pub struct PropositionalVariable {
 impl PropositionalVariable {
     /// Creates a new `PbesPropositionalVariable` from the given term.
     pub fn new(term: ATerm) -> Self {
-        debug_assert!(mcrl2_pbes_is_propositional_variable(term.get()));
+        debug_assert!(
+            mcrl2_pbes_is_propositional_variable(term.get()),
+            "Term {:?} is not a propositional variable",
+            term
+        );
         PropositionalVariable { term }
     }
 

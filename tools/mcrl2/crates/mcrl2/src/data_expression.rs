@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::fmt;
 
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_abstraction;

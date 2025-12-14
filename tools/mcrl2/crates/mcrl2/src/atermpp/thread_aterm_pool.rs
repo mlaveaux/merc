@@ -56,6 +56,9 @@ pub struct ThreadTermPool {
     /// lock section. Therefore, we count (arbitrarily) to reduce the amount of this is checked.
     gc_counter: usize,
 
+    /// Temporary storage for arguments when creating terms.
+    arguments: Vec<*const ffi::_aterm>,
+
     _callback: ManuallyDrop<UniquePtr<ffi::tls_callback_container>>,
 }
 
@@ -73,9 +76,9 @@ fn protect_with(
     let root = guard.protect(aterm.clone());
 
     let term = ATermRef::new(term);
-    trace!("Protected term {:?}, index {}, protection set {}", term, root, index,);
+    trace!("Protected term {:?}, index {}, protection set {}", term, root, index);
 
-    let result = ATerm::new(term, root);
+    let result = ATerm::from_ref(term, root);
 
     // Test for garbage collection intermediately.
     *gc_counter = gc_counter.saturating_sub(1);
@@ -99,11 +102,113 @@ impl ThreadTermPool {
             index,
             gc_counter: TEST_GC_INTERVAL,
             data_appl: vec![],
+            arguments: vec![],
             _callback: ManuallyDrop::new(mcrl2_aterm_pool_register_mark_callback(
                 mark_protection_sets,
                 protection_set_size,
             )),
         }
+        }
+    
+
+    /// Trigger a garbage collection explicitly.
+    pub fn collect(&self) {
+        mcrl2_aterm_pool_collect_garbage();
+    }
+
+    /// Creates an ATerm from a string.
+    pub fn from_string(&mut self, text: &str) -> Result<ATerm, Exception> {
+        match mcrl2_aterm_from_string(text) {
+            Ok(term) => Ok(ATerm::from_unique_ptr(term)),
+            Err(exception) => Err(exception),
+        }
+    }
+
+    /// Creates an [ATerm] with the given symbol and arguments.
+    pub fn create<'a, 'b>(
+        &mut self,
+        symbol: &impl Borrow<SymbolRef<'a>>,
+        arguments: &[impl Borrow<ATermRef<'b>>],
+    ) -> ATerm {
+        // Copy the arguments to make a slice.
+        self.arguments.clear();
+        for arg in arguments {
+            self.arguments.push(arg.borrow().get());
+        }
+
+        debug_assert_eq!(
+            symbol.borrow().arity(),
+            self.arguments.len(),
+            "Number of arguments does not match arity"
+        );
+
+        THREAD_TERM_POOL.with_borrow_mut(|tp| {
+            unsafe {
+                // ThreadPool is not Sync, so only one has access.
+                let protection_set = tp.protection_set.write_exclusive();
+                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.borrow().get(), &self.arguments);
+                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
+            }
+        })
+    }
+
+    /// Creates an [ATerm] with the given symbol, head argument and other arguments.
+    pub fn create_data_application<'a, 'b>(
+        &mut self,
+        head: &impl Borrow<ATermRef<'a>>,
+        arguments: &[impl Borrow<ATermRef<'b>>],
+    ) -> ATerm {
+        // Make the temp vector sufficient length.
+        while self.arguments.len() < arguments.len() {
+            self.arguments.push(std::ptr::null());
+        }
+
+        self.arguments.clear();
+        self.arguments.push(head.borrow().get());
+        for arg in arguments {
+            self.arguments.push(arg.borrow().get());
+        }
+
+        THREAD_TERM_POOL.with_borrow_mut(|tp| {
+            while tp.data_appl.len() <= arguments.len() + 1 {
+                let symbol = self.create_symbol("DataAppl", tp.data_appl.len());
+                tp.data_appl.push(symbol);
+            }
+
+            let symbol = &tp.data_appl[arguments.len() + 1];
+
+            debug_assert_eq!(
+                symbol.arity(),
+                self.arguments.len(),
+                "Number of arguments does not match arity"
+            );
+
+            unsafe {
+                // ThreadPool is not Sync, so only one has access.
+                let protection_set = tp.protection_set.write_exclusive();
+                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.get(), &self.arguments);
+                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
+            }
+        })
+    }
+
+    /// Creates a function symbol with the given name and arity.
+    pub fn create_symbol(&self, name: &str, arity: usize) -> Symbol {
+        Symbol::take(mcrl2_function_symbol_create(String::from(name), arity))
+    }
+
+    /// Creates a term with the FFI while taking care of the protection and garbage collection.
+    pub fn create_with<F>(&mut self, create: F) -> ATerm
+    where
+        F: Fn() -> *const ffi::_aterm,
+    {
+        THREAD_TERM_POOL.with_borrow_mut(|tp| {
+            unsafe {
+                // ThreadPool is not Sync, so only one has access.
+                let protection_set = tp.protection_set.write_exclusive();
+                protect_with(protection_set, &mut tp.gc_counter, tp.index, create())
+            }
+        })
     }
 
     /// Protects the given aterm address and returns the term.
@@ -191,128 +296,7 @@ impl Drop for ThreadTermPool {
     }
 }
 
-/// This is the thread local term pool.
-pub struct TermPool {
-    arguments: Vec<*const ffi::_aterm>,
-}
-
-impl TermPool {
-    pub fn new() -> TermPool {
-        TermPool { arguments: vec![] }
-    }
-
-    /// Trigger a garbage collection explicitly.
-    pub fn collect(&mut self) {
-        mcrl2_aterm_pool_collect_garbage();
-    }
-
-    /// Creates an ATerm from a string.
-    pub fn from_string(&mut self, text: &str) -> Result<ATerm, Exception> {
-        match mcrl2_aterm_from_string(String::from(text)) {
-            Ok(term) => Ok(ATerm::from_unique_ptr(term)),
-            Err(exception) => Err(exception),
-        }
-    }
-
-    /// Creates an [ATerm] with the given symbol and arguments.
-    pub fn create<'a, 'b>(
-        &mut self,
-        symbol: &impl Borrow<SymbolRef<'a>>,
-        arguments: &[impl Borrow<ATermRef<'b>>],
-    ) -> ATerm {
-        // Copy the arguments to make a slice.
-        self.arguments.clear();
-        for arg in arguments {
-            self.arguments.push(arg.borrow().get());
-        }
-
-        debug_assert_eq!(
-            symbol.borrow().arity(),
-            self.arguments.len(),
-            "Number of arguments does not match arity"
-        );
-
-        
-
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.borrow().get(), &self.arguments);
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
-            }
-        })
-    }
-
-    /// Creates an [ATerm] with the given symbol, head argument and other arguments.
-    pub fn create_data_application<'a, 'b>(
-        &mut self,
-        head: &impl Borrow<ATermRef<'a>>,
-        arguments: &[impl Borrow<ATermRef<'b>>],
-    ) -> ATerm {
-        // Make the temp vector sufficient length.
-        while self.arguments.len() < arguments.len() {
-            self.arguments.push(std::ptr::null());
-        }
-
-        self.arguments.clear();
-        self.arguments.push(head.borrow().get());
-        for arg in arguments {
-            self.arguments.push(arg.borrow().get());
-        }
-
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            while tp.data_appl.len() <= arguments.len() + 1 {
-                let symbol = self.create_symbol("DataAppl", tp.data_appl.len());
-                tp.data_appl.push(symbol);
-            }
-
-            let symbol = &tp.data_appl[arguments.len() + 1];
-
-            debug_assert_eq!(
-                symbol.arity(),
-                self.arguments.len(),
-                "Number of arguments does not match arity"
-            );
-
-            
-
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.get(), &self.arguments);
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
-            }
-        })
-    }
-
-    /// Creates a function symbol with the given name and arity.
-    pub fn create_symbol(&mut self, name: &str, arity: usize) -> Symbol {
-        Symbol::take(mcrl2_function_symbol_create(String::from(name), arity))
-    }
-
-    /// Creates a term with the FFI while taking care of the protection and garbage collection.
-    pub fn create_with<F>(&mut self, create: F) -> ATerm
-    where
-        F: Fn() -> *const ffi::_aterm,
-    {
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, create())
-            }
-        })
-    }
-}
-
-impl Default for TermPool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Display for TermPool {
+impl fmt::Display for ThreadTermPool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // TODO: This will always print, but only depends on aterm_configuration.h
         mcrl2_aterm_pool_print_metrics();
@@ -352,13 +336,11 @@ mod tests {
         thread::scope(|s| {
             for _ in 0..2 {
                 s.spawn(|| {
-                    let mut tp = TermPool::new();
 
                     let mut rng = StdRng::seed_from_u64(seed);
                     let terms: Vec<ATerm> = (0..100)
                         .map(|_| {
                             random_term(
-                                &mut tp,
                                 &mut rng,
                                 &[("f".to_string(), 2)],
                                 &["a".to_string(), "b".to_string()],
@@ -367,7 +349,10 @@ mod tests {
                         })
                         .collect();
 
-                    tp.collect();
+                    // Force garbage collection.
+                    THREAD_TERM_POOL.with_borrow(|tp|
+                        tp.collect()
+                    );
 
                     for term in &terms {
                         verify_term(term);

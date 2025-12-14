@@ -563,7 +563,11 @@ impl SymmetryAlgorithm {
     /// Returns the equation with the given name.
     fn find_equation_by_name(&self, name: &ATermString) -> Option<&StategraphEquation> {
         // TODO: Fix naive implementation
-        self.state_graph.equations().iter().find(|&equation| equation.variable().name() == *name).map(|v| v as _)
+        self.state_graph
+            .equations()
+            .iter()
+            .find(|&equation| equation.variable().name() == *name)
+            .map(|v| v as _)
     }
 }
 

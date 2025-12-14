@@ -8,8 +8,8 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use mcrl2_sys::atermpp::ffi;
-use mcrl2_sys::atermpp::ffi::aterm;
 use mcrl2_sys::atermpp::ffi::_aterm;
+use mcrl2_sys::atermpp::ffi::aterm;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_address;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_argument;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_function_symbol;
@@ -17,6 +17,7 @@ use mcrl2_sys::atermpp::ffi::mcrl2_aterm_is_empty_list;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_is_int;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_is_list;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_print;
+use mcrl2_sys::cxx::Exception;
 use mcrl2_sys::cxx::UniquePtr;
 use merc_utilities::PhantomUnsend;
 use merc_utilities::ProtectionIndex;
@@ -34,6 +35,12 @@ use crate::atermpp::THREAD_TERM_POOL;
 /// to acquire the 'static lifetime. This occasionally gives rise to issues
 /// where we look at the argument of a term and want to return it's name, but
 /// this is not allowed since the temporary returned by the argument is dropped.
+///
+/// Note that since terms are stored in thread local storage, we can not store
+/// any [ATermRef] or [ATerm] in a thread local storage ourselves, as that would
+/// lead to unsoundness. The destruction order of thread local storage is not
+/// defined, so we might drop a term pool before dropping the terms stored in
+/// it.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ATermRef<'a> {
     term: *const ffi::_aterm,
@@ -211,22 +218,31 @@ pub struct ATerm {
 
 impl ATerm {
 
-    /// Constructs an ATerm from a UniquePtr<aterm>. Note that we still do the 
-    /// protection here, so the term is copied into the thread local term pool.
-    pub(crate) fn from_unique_ptr(term: UniquePtr<aterm>) -> Self {
-        if term.is_null() {
-            ATerm::default()
-        } else {
-            THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(mcrl2_aterm_get_address(term.as_ref().expect("Pointer is valid"))))
-        }
+    /// Creates a new ATerm with the given symbol and arguments.
+    pub fn new<'a, 'b>(symbol: &impl Borrow<SymbolRef<'a>>,
+        arguments: &[impl Borrow<ATermRef<'b>>],) -> ATerm {
+        THREAD_TERM_POOL.with_borrow_mut(|tp| {
+            tp.create(symbol, arguments)
+        })
     }
 
+    /// Constructs an ATerm from a string by parsing it.
+    pub fn from_string(s: &str) -> Result<ATerm, Exception> {
+        THREAD_TERM_POOL.with_borrow_mut(|tp| tp.from_string(s))
+    }
+
+    /// Constructs an ATerm from a UniquePtr<aterm>. Note that we still do the
+    /// protection here, so the term is copied into the thread local term pool.
+    pub(crate) fn from_unique_ptr(term: UniquePtr<aterm>) -> Self {
+        debug_assert!(!term.is_null(), "Cannot create ATerm from null unique ptr");
+        THREAD_TERM_POOL
+            .with_borrow_mut(|tp| tp.protect(mcrl2_aterm_get_address(term.as_ref().expect("Pointer is valid"))))
+    }
+
+    /// Creates an ATerm from a raw pointer. It will be protected on creation.
     pub(crate) fn from_ptr(term: *const ffi::_aterm) -> Self {
-        if term.is_null() {
-            ATerm::default()
-        } else {
-            THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(term))
-        }
+        debug_assert!(!term.is_null(), "Cannot create ATerm from null ptr");
+        THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(term))
     }
 
     /// Obtains the underlying pointer
@@ -236,7 +252,7 @@ impl ATerm {
 
     /// Creates a new term from the given reference and protection set root
     /// entry.
-    pub(crate) fn new(term: ATermRef<'static>, root: ProtectionIndex) -> ATerm {
+    pub(crate) fn from_ref(term: ATermRef<'static>, root: ProtectionIndex) -> ATerm {
         ATerm {
             term,
             root,
@@ -407,47 +423,16 @@ impl<'a> Iterator for TermIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ATermList;
-    use crate::atermpp::TermPool;
-
-    use super::*;
-
-    /// Make sure that the term has the same number of arguments as its arity.
-    fn verify_term(term: &ATermRef<'_>) {
-        for subterm in term.iter() {
-            assert_eq!(
-                subterm.get_head_symbol().arity(),
-                subterm.arguments().len(),
-                "The arity matches the number of arguments."
-            )
-        }
-    }
+    use crate::ATerm;
 
     #[test]
     fn test_term_iterator() {
-        let mut tp = TermPool::new();
-        let t = tp.from_string("f(g(a),b)").unwrap();
+        let t = ATerm::from_string("f(g(a),b)").unwrap();
 
         let mut result = t.iter();
-        assert_eq!(result.next().unwrap(), tp.from_string("f(g(a),b)").unwrap().copy());
-        assert_eq!(result.next().unwrap(), tp.from_string("g(a)").unwrap().copy());
-        assert_eq!(result.next().unwrap(), tp.from_string("a").unwrap().copy());
-        assert_eq!(result.next().unwrap(), tp.from_string("b").unwrap().copy());
-    }
-
-    #[test]
-    fn test_aterm_list() {
-        let mut tp = TermPool::new();
-        let list: ATermList<ATerm> = tp.from_string("[f,g,h,i]").unwrap().into();
-
-        assert!(!list.is_empty());
-
-        // Convert into normal vector.
-        let values: Vec<ATerm> = list.iter().collect();
-
-        assert_eq!(values[0], tp.from_string("f").unwrap());
-        assert_eq!(values[1], tp.from_string("g").unwrap());
-        assert_eq!(values[2], tp.from_string("h").unwrap());
-        assert_eq!(values[3], tp.from_string("i").unwrap());
+        assert_eq!(result.next().unwrap(), ATerm::from_string("f(g(a),b)").unwrap().copy());
+        assert_eq!(result.next().unwrap(), ATerm::from_string("g(a)").unwrap().copy());
+        assert_eq!(result.next().unwrap(), ATerm::from_string("a").unwrap().copy());
+        assert_eq!(result.next().unwrap(), ATerm::from_string("b").unwrap().copy());
     }
 }

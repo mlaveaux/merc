@@ -13,6 +13,8 @@ use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_get_name;
 use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_protect;
 use mcrl2_sys::atermpp::ffi::{self};
 
+use crate::THREAD_TERM_POOL;
+
 /// A Symbol references to an aterm function symbol, which has a name and an arity.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SymbolRef<'a> {
@@ -23,7 +25,7 @@ pub struct SymbolRef<'a> {
 impl<'a> SymbolRef<'a> {
     /// Protects the symbol and returns an owned Symbol
     pub fn protect(&self) -> Symbol {
-        Symbol::new(self.symbol)
+        Symbol::from_ptr(self.symbol)
     }
 
     /// Creates a (cheap) copy of the SymbolRef
@@ -91,6 +93,12 @@ pub struct Symbol {
 }
 
 impl Symbol {
+
+    /// Creates a new Symbol with the given name and arity.
+    pub fn new(name: &str, arity: usize) -> Symbol {
+        THREAD_TERM_POOL.with_borrow(|tp| tp.create_symbol(name, arity))
+    }
+
     /// Takes ownership of the given pointer without changing the reference counter.
     pub(crate) fn take(symbol: *const ffi::_function_symbol) -> Symbol {
         Symbol {
@@ -99,7 +107,7 @@ impl Symbol {
     }
 
     /// Protects the given pointer.
-    pub(crate) fn new(symbol: *const ffi::_function_symbol) -> Symbol {
+    pub(crate) fn from_ptr(symbol: *const ffi::_function_symbol) -> Symbol {
         let result = Symbol {
             symbol: SymbolRef::new(symbol),
         };
