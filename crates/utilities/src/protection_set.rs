@@ -9,7 +9,7 @@ use crate::GenerationalIndex;
 
 /// A type-safe index for the ProtectionSet to prevent accidental use of wrong indices
 #[repr(transparent)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ProtectionIndex(GenerationalIndex<usize>);
 
 impl Deref for ProtectionIndex {
