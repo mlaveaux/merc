@@ -4,31 +4,30 @@ use mcrl2_sys::cxx::UniquePtr;
 use mcrl2_sys::data::ffi::RewriterJitty;
 use mcrl2_sys::data::ffi::data_specification;
 use mcrl2_sys::data::ffi::mcrl2_create_rewriter_jitty;
-use mcrl2_sys::data::ffi::mcrl2_sort_to_string;
 
 #[cfg(feature = "mcrl2_jittyc")]
 use mcrl2_sys::data::ffi::RewriterCompilingJitty;
 #[cfg(feature = "mcrl2_jittyc")]
 use mcrl2_sys::data::ffi::mcrl2_create_rewriter_jittyc;
 
-use crate::Aterm;
+use crate::ATerm;
 
 /// Represents a data::sort from the mCRL2 toolset.
 #[derive(PartialEq, Eq)]
 pub struct DataSort {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataSort {
     /// Creates a new data::sort from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
+    pub(crate) fn new(term: ATerm) -> Self {
         DataSort { term }
     }
 }
 
 impl fmt::Debug for DataSort {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", mcrl2_sort_to_string(self.term.get()))
+        write!(f, "{:?}", self.term)
     }
 }
 
