@@ -164,9 +164,9 @@ inline std::unique_ptr<aterm> mcrl2_aterm_from_string(rust::String text)
   return std::make_unique<aterm>(read_term_from_string(static_cast<std::string>(text)));
 }
 
-inline const detail::_aterm* mcrl2_aterm_get_address(const atermpp::detail::_aterm& term)
+inline const detail::_aterm* mcrl2_aterm_get_address(const atermpp::aterm& term)
 {
-  return detail::address(mcrl2_aterm_cast(term));
+  return detail::address(term);
 }
 
 inline void mcrl2_aterm_mark_address(const detail::_aterm& term, term_mark_stack& todo)

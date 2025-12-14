@@ -8,7 +8,9 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use mcrl2_sys::atermpp::ffi;
+use mcrl2_sys::atermpp::ffi::aterm;
 use mcrl2_sys::atermpp::ffi::_aterm;
+use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_address;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_argument;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_get_function_symbol;
 use mcrl2_sys::atermpp::ffi::mcrl2_aterm_is_empty_list;
@@ -21,7 +23,6 @@ use merc_utilities::ProtectionIndex;
 
 use crate::atermpp::SymbolRef;
 use crate::atermpp::THREAD_TERM_POOL;
-use crate::atermpp::aterm;
 
 /// This represents a lifetime bound reference to an existing ATerm that is
 /// protected somewhere statically.
@@ -209,11 +210,14 @@ pub struct ATerm {
 }
 
 impl ATerm {
+
+    /// Constructs an ATerm from a UniquePtr<aterm>. Note that we still do the 
+    /// protection here, so the term is copied into the thread local term pool.
     pub(crate) fn from_unique_ptr(term: UniquePtr<aterm>) -> Self {
         if term.is_null() {
             ATerm::default()
         } else {
-            THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(term.as_ref().unwrap().get()))
+            THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(mcrl2_aterm_get_address(term.as_ref().expect("Pointer is valid"))))
         }
     }
 

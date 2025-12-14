@@ -75,7 +75,7 @@ pub mod ffi {
         fn mcrl2_aterm_from_string(text: String) -> Result<UniquePtr<aterm>>;
 
         /// Returns the pointer underlying the given term.
-        fn mcrl2_aterm_get_address(term: &_aterm) -> *const _aterm;
+        fn mcrl2_aterm_get_address(term: &aterm) -> *const _aterm;
 
         /// Marks the aterm to prevent garbage collection.
         fn mcrl2_aterm_mark_address(term: &_aterm, todo: Pin<&mut term_mark_stack>);

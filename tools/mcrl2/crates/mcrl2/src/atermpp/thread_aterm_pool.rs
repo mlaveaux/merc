@@ -296,15 +296,13 @@ impl TermPool {
     where
         F: Fn() -> *const ffi::_aterm,
     {
-        let result = THREAD_TERM_POOL.with_borrow_mut(|tp| {
+        THREAD_TERM_POOL.with_borrow_mut(|tp| {
             unsafe {
                 // ThreadPool is not Sync, so only one has access.
                 let protection_set = tp.protection_set.write_exclusive();
                 protect_with(protection_set, &mut tp.gc_counter, tp.index, create())
             }
-        });
-
-        result
+        })
     }
 }
 

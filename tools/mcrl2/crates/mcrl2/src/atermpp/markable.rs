@@ -28,9 +28,7 @@ pub trait Markable {
 impl Markable for ATermRef<'_> {
     fn mark(&self, todo: Todo) {
         if !self.is_default() {
-            unsafe {
-                ffi::mcrl2_aterm_mark_address(self.get(), todo);
-            }
+            ffi::mcrl2_aterm_mark_address(self.get(), todo);
         }
     }
 

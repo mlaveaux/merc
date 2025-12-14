@@ -39,6 +39,7 @@ use mcrl2_sys::pbes::ffi::stategraph_equation;
 use merc_utilities::MercError;
 
 use crate::ATerm;
+use crate::ATermList;
 use crate::ATermString;
 use crate::DataExpression;
 use crate::DataSpecification;
@@ -175,20 +176,20 @@ impl ControlFlowGraphVertex {
 
     /// Returns the name of the variable associated with this vertex.
     pub fn name(&self) -> ATermString {
-        ATermString::new(ATerm::new(unsafe {
-            mcrl2_local_control_flow_graph_vertex_name(self.vertex.as_ref().expect("Pointer should be valid"))
-        }))
+        ATermString::new(ATerm::from_ptr(
+            mcrl2_local_control_flow_graph_vertex_name(self.as_ref())
+        ))
     }
 
     pub fn value(&self) -> DataExpression {
-        DataExpression::new(ATerm::new(unsafe {
-            mcrl2_local_control_flow_graph_vertex_value(self.vertex.as_ref().expect("Pointer should be valid"))
-        }))
+        DataExpression::new(ATerm::from_ptr(
+            mcrl2_local_control_flow_graph_vertex_value(self.as_ref())
+        ))
     }
 
     /// Returns the index of the variable associated with this vertex.
     pub fn index(&self) -> usize {
-        unsafe { mcrl2_local_control_flow_graph_vertex_index(self.vertex.as_ref().expect("Pointer should be valid")) }
+        mcrl2_local_control_flow_graph_vertex_index(self.as_ref())
     }
 
     /// Returns the outgoing edges of the vertex.
@@ -214,7 +215,7 @@ impl ControlFlowGraphVertex {
 
         let outgoing_edges = outgoing_edges_ffi
             .iter()
-            .map(|pair| (pair.vertex, pair.edges.iter().map(|i| *i as usize).collect()))
+            .map(|pair| (pair.vertex, pair.edges.iter().map(|i| *i).collect()))
             .collect();
 
         ControlFlowGraphVertex {
@@ -222,6 +223,14 @@ impl ControlFlowGraphVertex {
             outgoing_edges,
             incoming_edges: vec![],
         }
+    }
+
+    fn as_ref(&self) -> &local_control_flow_graph_vertex {
+        // Safety
+        //
+        // Vertex is never modified, and there is a unique owner of the underlying  
+        // pointer that ensures its validity.
+        unsafe { self.vertex.as_ref().expect("Pointer should be valid") }
     }
 }
 
@@ -281,9 +290,9 @@ impl StategraphEquation {
 
     /// Returns the variable of the equation.
     pub fn variable(&self) -> PropositionalVariable {
-        PropositionalVariable::new(ATerm::new(unsafe {
-            mcrl2_stategraph_equation_variable(self.equation.as_ref().expect("Pointer should be valid"))
-        }))
+        PropositionalVariable::new(ATerm::from_ptr(
+            mcrl2_stategraph_equation_variable(self.as_ref())
+        ))
     }
 
     pub(crate) fn new(equation: *const stategraph_equation) -> Self {
@@ -297,6 +306,11 @@ impl StategraphEquation {
             predicate_variables,
             equation,
         }
+    }
+
+    /// Returns a reference to the underlying FFI equation.
+    fn as_ref(&self) -> &stategraph_equation {
+        unsafe { self.equation.as_ref().expect("Pointer should be valid") }
     }
 }
 
@@ -350,8 +364,8 @@ pub struct SrfEquation {
 impl SrfEquation {
     /// Returns the parameters of the equation.
     pub fn variable(&self) -> PropositionalVariable {
-        PropositionalVariable::new(ATerm::new(unsafe {
-            mcrl2_srf_pbes_equation_variable(self.equation.as_ref().expect("Pointer should be valid"))
+        PropositionalVariable::new(ATerm::from_ptr(unsafe {
+            mcrl2_srf_pbes_equation_variable(self.as_ref())
         }))
     }
 
@@ -373,6 +387,11 @@ impl SrfEquation {
             _summands_ffi: summands_ffi,
             summands,
         }
+    }
+
+    /// Returns a reference to the underlying FFI equation.
+    fn as_ref(&self) -> &srf_equation {
+        unsafe { self.equation.as_ref().expect("Pointer should be valid") }
     }
 }
 
@@ -432,7 +451,7 @@ impl PropositionalVariable {
 
     /// Returns the parameters of the propositional variable.
     pub fn parameters(&self) -> ATermList<DataVariable> {
-        ATermList::new(self.term.arg(1)).into()
+        ATermList::new(self.term.arg(1).protect())
     }
 }
 

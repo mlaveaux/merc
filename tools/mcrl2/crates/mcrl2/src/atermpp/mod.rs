@@ -12,7 +12,6 @@ pub use aterm::*;
 pub use aterm_list::*;
 pub use aterm_string::*;
 pub use busy_forbidden::*;
-pub use global_aterm_pool::*;
 pub use markable::*;
 pub use random_term::*;
 pub use symbol::*;

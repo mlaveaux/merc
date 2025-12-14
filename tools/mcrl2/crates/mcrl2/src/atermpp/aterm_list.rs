@@ -16,6 +16,15 @@ impl<T: From<ATerm>> ATermList<T> {
 }
 
 impl<T> ATermList<T> {
+    /// Creates a new ATermList from the given term.
+    pub fn new(term: ATerm) -> Self {
+        debug_assert!(term.term.is_list(), "Can only create a ATermList from a aterm_list");
+        ATermList {
+            term,
+            _marker: PhantomData,
+        }
+    }
+
     /// Returns true iff the list is empty.
     pub fn is_empty(&self) -> bool {
         self.term.is_empty_list()
