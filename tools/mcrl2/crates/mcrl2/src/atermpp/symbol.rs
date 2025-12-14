@@ -7,45 +7,55 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
 
-use mcrl2_sys::atermpp::ffi::mcrl2_drop_function_symbol;
-use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_arity;
-use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_name;
-use mcrl2_sys::atermpp::ffi::mcrl2_protect_function_symbol;
+use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_drop;
+use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_get_arity;
+use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_get_name;
+use mcrl2_sys::atermpp::ffi::mcrl2_function_symbol_protect;
 use mcrl2_sys::atermpp::ffi::{self};
 
+/// A Symbol references to an aterm function symbol, which has a name and an arity.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SymbolRef<'a> {
     symbol: *const ffi::_function_symbol,
     marker: PhantomData<&'a ()>,
 }
 
-/// A Symbol references to an aterm function symbol, which has a name and an arity.
 impl<'a> SymbolRef<'a> {
-    fn new(symbol: *const ffi::_function_symbol) -> SymbolRef<'a> {
+    /// Protects the symbol and returns an owned Symbol
+    pub fn protect(&self) -> Symbol {
+        Symbol::new(self.symbol)
+    }
+
+    /// Creates a (cheap) copy of the SymbolRef
+    pub fn copy(&self) -> SymbolRef<'_> {
+        SymbolRef::new(self.symbol)
+    }
+
+    /// Creates a new SymbolRef from the given pointer, does not change protection.
+    pub(crate) fn new(symbol: *const ffi::_function_symbol) -> SymbolRef<'a> {
         SymbolRef {
             symbol,
             marker: PhantomData,
         }
     }
 
-    pub fn protect(&self) -> Symbol {
-        Symbol::new(self.symbol)
-    }
-
-    pub fn copy(&self) -> SymbolRef<'_> {
-        SymbolRef::new(self.symbol)
+    /// Obtains the underlying pointer as reference
+    pub(crate) fn get(&self) -> &ffi::_function_symbol {
+        // # Safety
+        // If we have a reference to the SymbolRef, it must also be safe to dereference the pointer.
+        unsafe { self.symbol.as_ref().expect("Pointer should be valid") }
     }
 }
 
 impl SymbolRef<'_> {
     /// Obtain the symbol's name
     pub fn name(&self) -> &str {
-        unsafe { mcrl2_function_symbol_name(self.symbol) }
+        mcrl2_function_symbol_get_name(self.get())
     }
 
     /// Obtain the symbol's arity
     pub fn arity(&self) -> usize {
-        unsafe { mcrl2_function_symbol_arity(self.symbol) }
+        mcrl2_function_symbol_get_arity(self.get())
     }
 
     /// Returns the index of the function symbol
@@ -75,6 +85,7 @@ impl From<*const ffi::_function_symbol> for SymbolRef<'_> {
     }
 }
 
+/// A Symbol owns a function symbol from the aterm pool.
 pub struct Symbol {
     symbol: SymbolRef<'static>,
 }
@@ -89,16 +100,21 @@ impl Symbol {
 
     /// Protects the given pointer.
     pub(crate) fn new(symbol: *const ffi::_function_symbol) -> Symbol {
-        unsafe { mcrl2_protect_function_symbol(symbol) };
-        Symbol {
+        let result = Symbol {
             symbol: SymbolRef::new(symbol),
-        }
+        };
+        mcrl2_function_symbol_protect(result.get());
+        result
+    }
+
+    pub fn get(&self) -> &ffi::_function_symbol {
+        unsafe { self.symbol.address().as_ref().expect("Pointer should be valid") }
     }
 }
 
 impl Drop for Symbol {
     fn drop(&mut self) {
-        unsafe { mcrl2_drop_function_symbol(self.symbol.symbol) };
+        mcrl2_function_symbol_drop(self.get());
     }
 }
 
