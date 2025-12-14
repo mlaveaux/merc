@@ -90,9 +90,9 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         // Store the offset for the vertex
         vertices.push(transitions_to.len());
 
-        while let Some(succesors) = parts.next() {
+        while let Some(successors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
-            for successor in succesors
+            for successor in successors
                 .trim_end_matches(';')
                 .split(',')
                 .filter(|s| !s.trim().is_empty())

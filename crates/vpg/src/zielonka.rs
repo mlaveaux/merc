@@ -179,15 +179,15 @@ impl ZielonkaSolver<'_> {
         // 4. While Q is not empty do
         // 5. w := Q.pop()
         while let Some(w) = self.temp_queue.pop() {
-            // For every v \in Ew do
+            // For every u \in Ew do
             for v in self.predecessors.predecessors(w) {
                 if V[*v] {
                     let attracted = if self.game.owner(v) == alpha {
                         // v \in V and v in V_\alpha
                         true
                     } else {
-                        // Check if all successors of u are in the attractor
-                        self.game.outgoing_edges(v).all(|w_prime| V[*w_prime] && !A[*w_prime])
+                        // Check if all successors of v are in the attractor
+                        self.game.outgoing_edges(v).all(|w_prime| V[*w_prime] && A[*w_prime])
                     };
 
                     if attracted && !A[*v] {
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn test_random_parity_game_solve() {
         random_test(100, |rng| {
-            let pg = random_parity_game(rng, true, 10, 5, 3);
+            let pg = random_parity_game(rng, true, 100, 5, 3);
             println!("{:?}", pg);
 
             solve_zielonka(&pg);

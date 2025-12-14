@@ -201,8 +201,8 @@ fn handle_solve(args: SolveArgs, timing: &mut Timing) -> Result<(), MercError> {
 
                     if configuration.and(&config_function)?.satisfiable() {
                         print!("{}", vertex);
+                        first = false;
                     }
-                    first = false;
 
                     if !args.full_solution {
                         // Only print the solution for the initial vertex

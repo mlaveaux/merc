@@ -29,6 +29,7 @@ use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
+use crate::minus;
 
 /// Reads a variability parity game from the given reader.
 /// Note that the reader is buffered internally using a `BufReader`.
@@ -119,9 +120,9 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
         // Store the offset for the vertex
         vertices.push(edges_configuration.len());
 
-        while let Some(succesors) = parts.next() {
+        while let Some(successors) = parts.next() {
             // Parse successors (remaining parts, removing trailing semicolon)
-            for successor in succesors
+            for successor in successors
                 .trim_end_matches(';')
                 .split(',')
                 .filter(|s| !s.trim().is_empty())
@@ -199,7 +200,7 @@ fn parse_configuration_set(
                 let var = &variables[i];
                 match c {
                     '1' => conjunction = conjunction.and(var)?,
-                    '0' => conjunction = conjunction.and(&var.not()?)?,
+                    '0' => conjunction = minus(&conjunction, var)?,
                     '-' => {} // don't care
                     _ => {
                         return Err(MercError::from(IOError::InvalidHeader(

@@ -15,6 +15,7 @@ use oxidd::BooleanFunction;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
+use oxidd::util::AllocResult;
 
 use crate::PG;
 use crate::Player;
@@ -270,11 +271,11 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         {
             let mut updated = A.clone();
             let indices: Vec<_> = updated.iter().map(|(v, _)| v).collect();
-            for v in indices {
-                let func = updated[v].clone();
-                let adjusted = func.and(&C.not()?)?;
-                updated.set(v, adjusted);
-            }
+                for v in indices {
+                    let func = updated[v].clone();
+                    let adjusted = minus(&func, &C)?;
+                    updated.set(v, adjusted);
+                }
             A = updated;
         }
 
@@ -456,16 +457,13 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
     /// Computes the attractor for `player` to the set `A` within the set of vertices `gamma`.
     fn attractor(&mut self, alpha: Player, gamma: &Submap, mut A: Submap) -> Result<Submap, MercError> {
-        self.temp_queue.clear();
-
-        // 2. Queue Q := {v \in V | U(v) != \emptyset }
+        // 2. Queue Q := {v \in V | A(v) != \emptyset }
         self.temp_vertices.fill(false);
         for v in A.iter_vertices() {
             self.temp_queue.push(v);
             self.temp_vertices.set(*v, true);
         }
 
-        // 3. A := U
         // 4. While Q not empty do
         // 5. w := Q.pop()
         while let Some(w) = self.temp_queue.pop() {
@@ -488,21 +486,16 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                             let tmp = gamma[v].and(edge.configuration())?.and(&gamma[edge.to()])?;
 
                             if tmp.satisfiable() {
-                                // 12. a := a && (C \ (theta(v, w') && \gamma(w'))) \cup A(w')
-                                a = a
-                                    .and(
-                                        &self
-                                            .game
-                                            .configuration()
-                                            .and(&edge.configuration().and(&gamma[edge.to()])?.not()?)?,
-                                    )?
-                                    .or(&A[edge.to()])?;
+                                // 12. a := a && ((C \ (theta(v, w') && \gamma(w'))) \cup A(w'))
+                                let tmp = edge.configuration().and(&gamma[edge.to()])?;
+
+                                a = a.and(&minus(self.game.configuration(), &tmp)?.or(&A[edge.to()])?)?;
                             }
                         }
                     }
 
                     // 15. a \ A(v) != \emptyset
-                    if a.and(&A[v].not()?)?.satisfiable() {
+                    if minus(&a, &A[v])?.satisfiable() {
                         // 16. A(v) := A(v) \cup a
                         A.set(v, A[v].or(&a)?);
 
@@ -515,6 +508,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                 }
             }
         }
+
+        debug_assert!(!self.temp_vertices.any(), "temp_vertices should be empty after attractor computation");
 
         Ok(A)
     }
@@ -561,6 +556,12 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         Ok(())
     }
+}
+
+/// Returns the boolean set difference of two BDD functions: lhs \ rhs.
+/// Implemented as lhs AND (NOT rhs).
+pub fn minus(lhs: &BDDFunction, rhs: &BDDFunction) -> AllocResult<BDDFunction> {
+	lhs.and(&rhs.not()?)
 }
 
 /// A mapping from vertices to configurations.
@@ -641,7 +642,7 @@ impl Submap {
     fn minus(mut self, other: &Submap) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
             let was_satisfiable = func.satisfiable();
-            *func = func.and(&other.mapping[i].not()?)?;
+            *func = crate::minus(func, &other.mapping[i])?;
             let is_satisfiable = func.satisfiable();
 
             if was_satisfiable && !is_satisfiable {
@@ -745,31 +746,31 @@ mod tests {
         assert_eq!(submap.non_empty_count, 1);
     }
 
-    // #[merc_test]
+    #[merc_test]
     // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
-    // fn test_random_variability_parity_game_solve() {
-    //     random_test(100, |rng| {
-    //         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
-    //         let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
-    //         println!("Solving VPG {}", vpg);
+    fn test_random_variability_parity_game_solve() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+            println!("Solving VPG {}", vpg);
 
-    //         crate::write_vpg(&mut std::io::stdout(), &vpg).unwrap();
+            crate::write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
-    //         let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
+            let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Standard, false).unwrap();
 
-    //         for game in project_variability_parity_games_iter(&vpg) {
-    //             let (cube, pg) = game.unwrap();
-    //             let pg_solution = solve_zielonka(&pg);
+            for game in project_variability_parity_games_iter(&vpg) {
+                let (cube, pg) = game.unwrap();
+                let pg_solution = solve_zielonka(&pg);
 
-    //             for v in pg.iter_vertices() {
-    //                 if pg_solution[0].get(*v).is_some() {
-    //                     // Won by Even
-    //                     debug_assert!(solution[0][v].and(&cube).unwrap().satisfiable());
-    //                 }
-    //             }
-    //         }
-    //     })
-    // }
+                for v in pg.iter_vertices() {
+                    if pg_solution[0].get(*v).is_some() {
+                        // Won by Even
+                        debug_assert!(solution[0][v].and(&cube).unwrap().satisfiable());
+                    }
+                }
+            }
+        })
+    }
 
     // #[merc_test]
     // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
