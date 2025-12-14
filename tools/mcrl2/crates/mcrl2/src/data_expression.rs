@@ -4,29 +4,26 @@ use mcrl2_sys::data::ffi::mcrl2_data_expression_is_abstraction;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_application;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_function_symbol;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_variable;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_to_string;
-use mcrl2_sys::data::ffi::mcrl2_variable_name;
-use mcrl2_sys::data::ffi::mcrl2_variable_sort;
 
-use crate::Aterm;
-use crate::AtermString;
+use crate::ATerm;
+use crate::ATermString;
 use crate::DataSort;
 
 /// Represents a data::data_expression from the mCRL2 toolset.
 #[derive(Clone, PartialEq, Eq)]
 pub struct DataExpression {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataExpression {
-    /// Returns a reference to the underlying Aterm.
-    pub fn get(&self) -> &Aterm {
-        &self.term
+    /// Creates a new data::data_expression from the given term.
+    pub fn new(term: ATerm) -> Self {
+        DataExpression { term }
     }
 
-    /// Creates a new data::data_expression from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
-        DataExpression { term }
+    /// Returns a reference to the underlying Aterm.
+    pub fn get(&self) -> &ATerm {
+        &self.term
     }
 }
 
@@ -38,31 +35,31 @@ impl From<DataVariable> for DataExpression {
 
 impl fmt::Debug for DataExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", mcrl2_data_expression_to_string(self.term.get()))
+        write!(f, "{}", self.term)
     }
 }
 
 /// Represents a data::variable from the mCRL2 toolset.
 #[derive(Clone)]
 pub struct DataVariable {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataVariable {
+    /// Creates a new data::variable from the given aterm.
+    pub fn new(term: ATerm) -> Self {
+        debug_assert!(mcrl2_data_expression_is_variable(term.get()));
+        DataVariable { term }
+    }
+
     /// Returns the name of the variable.
-    pub fn name(&self) -> AtermString {
-        AtermString::new(Aterm::new(mcrl2_variable_name(self.term.get())))
+    pub fn name(&self) -> ATermString {
+        ATermString::new(self.term.arg(0).protect())
     }
 
     /// Returns the sort of the variable.
     pub fn sort(&self) -> DataSort {
-        DataSort::new(Aterm::new(mcrl2_variable_sort(self.term.get())))
-    }
-
-    /// Creates a new data::variable from the given aterm.
-    pub(crate) fn new(term: Aterm) -> Self {
-        debug_assert!(mcrl2_data_expression_is_variable(term.get()));
-        DataVariable { term }
+        DataSort::new(self.term.arg(2).protect())
     }
 }
 
@@ -72,20 +69,20 @@ impl fmt::Debug for DataVariable {
     }
 }
 
-impl From<Aterm> for DataVariable {
-    fn from(term: Aterm) -> Self {
+impl From<ATerm> for DataVariable {
+    fn from(term: ATerm) -> Self {
         DataVariable::new(term)
     }
 }
 
 /// Represents a data::application from the mCRL2 toolset.
 pub struct DataApplication {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataApplication {
     /// Creates a new data::application from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
+    pub(crate) fn new(term: ATerm) -> Self {
         debug_assert!(!mcrl2_data_expression_is_application(term.get()));
         DataApplication { term }
     }
@@ -93,12 +90,12 @@ impl DataApplication {
 
 /// Represents a data::abstraction from the mCRL2 toolset.
 pub struct DataAbstraction {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataAbstraction {
     /// Creates a new data::abstraction from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
+    pub(crate) fn new(term: ATerm) -> Self {
         debug_assert!(!mcrl2_data_expression_is_abstraction(term.get()));
         DataAbstraction { term }
     }
@@ -106,12 +103,12 @@ impl DataAbstraction {
 
 /// Represents a data::function_symbol from the mCRL2 toolset.
 pub struct DataFunctionSymbol {
-    term: Aterm,
+    term: ATerm,
 }
 
 impl DataFunctionSymbol {
     /// Creates a new data::function_symbol from the given term.
-    pub(crate) fn new(term: Aterm) -> Self {
+    pub(crate) fn new(term: ATerm) -> Self {
         debug_assert!(!mcrl2_data_expression_is_function_symbol(term.get()));
         DataFunctionSymbol { term }
     }
