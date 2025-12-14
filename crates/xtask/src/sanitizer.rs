@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::path::Path;
 
 pub use duct::cmd;
 
@@ -48,7 +49,11 @@ pub fn thread_sanitizer(mut arguments: Vec<String>) -> Result<(), Box<dyn Error>
 
     add_target_flag(&mut arguments);
 
+    let thread_sanitizer_suppress = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("data/thread_sanitizer.suppress");
+
     cmd("cargo", arguments)
+        .env("TSAN_OPTIONS", format!("suppressions={}", thread_sanitizer_suppress.to_string_lossy()))
         .env("RUSTFLAGS", "-Zsanitizer=thread")
         .env("RUSTDOCFLAGS", "-Zsanitizer=thread")
         .env("CFLAGS", "-fsanitize=thread")
