@@ -1,16 +1,16 @@
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_abstraction;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_application;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_function_symbol;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_machine_number;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_untyped_identifier;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_variable;
-use mcrl2_sys::data::ffi::mcrl2_data_expression_is_where_clause;
 
 use crate::DataAbstraction;
 use crate::DataApplication;
 use crate::DataExpression;
 use crate::DataFunctionSymbol;
 use crate::DataVariable;
+use crate::is_abstraction;
+use crate::is_application;
+use crate::is_function_symbol;
+use crate::is_machine_number;
+use crate::is_untyped_identifier;
+use crate::is_variable;
+use crate::is_where_clause;
 
 pub trait DataExpressionVisitor {
     fn visit_variable(&mut self, var: &DataVariable) -> DataExpression {
@@ -30,19 +30,19 @@ pub trait DataExpressionVisitor {
     }
 
     fn visit(&mut self, expr: &DataExpression) -> DataExpression {
-        if mcrl2_data_expression_is_variable(expr.get().get()) {
+        if is_variable(expr.get()) {
             self.visit_variable(&DataVariable::new(expr.get().clone()))
-        } else if mcrl2_data_expression_is_application(expr.get().get()) {
+        } else if is_application(expr.get()) {
             self.visit_application(&DataApplication::new(expr.get().clone()))
-        } else if mcrl2_data_expression_is_abstraction(expr.get().get()) {
+        } else if is_abstraction(expr.get()) {
             self.visit_abstraction(&DataAbstraction::new(expr.get().clone()))
-        } else if mcrl2_data_expression_is_function_symbol(expr.get().get()) {
+        } else if is_function_symbol(expr.get()) {
             self.visit_function_symbol(&DataFunctionSymbol::new(expr.get().clone()))
-        } else if mcrl2_data_expression_is_where_clause(expr.get().get()) {
+        } else if is_where_clause(expr.get()) {
             unimplemented!();
-        } else if mcrl2_data_expression_is_machine_number(expr.get().get()) {
+        } else if is_machine_number(expr.get()) {
             unimplemented!();
-        } else if mcrl2_data_expression_is_untyped_identifier(expr.get().get()) {
+        } else if is_untyped_identifier(expr.get()) {
             unimplemented!();
         } else {
             unimplemented!();

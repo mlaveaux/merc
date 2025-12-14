@@ -1,4 +1,5 @@
 #include "mcrl2-sys/cpp/pbes.h"
+#include "atermpp.h"
 #include "mcrl2-sys/src/pbes.rs.h"
 #include <cstddef>
 #include <optional>
@@ -41,29 +42,32 @@ void mcrl2_local_control_flow_graph_vertex_incoming_edges(std::vector<vertex_out
 std::unique_ptr<atermpp::aterm> mcrl2_pbes_expression_replace_variables(const atermpp::detail::_aterm& term,
     const rust::Vec<assignment_pair>& sigma)
 {
-  const atermpp::aterm& expr = atermpp::mcrl2_aterm_cast(term);
-  MCRL2_ASSERT(is_pbes_expression(expr));
+  atermpp::unprotected_aterm_core tmp_expr(&term);
+  MCRL2_ASSERT(is_pbes_expression(atermpp::down_cast<atermpp::aterm>(tmp_expr)));
 
   data::mutable_map_substitution<> tmp;
   for (const auto& assign : sigma)
   {
-    tmp[atermpp::down_cast<data::variable>(atermpp::mcrl2_aterm_cast(*assign.lhs))]
-        = atermpp::down_cast<data::data_expression>(atermpp::mcrl2_aterm_cast(*assign.rhs));
+    atermpp::unprotected_aterm_core tmp_lhs(assign.lhs);
+    atermpp::unprotected_aterm_core tmp_rhs(assign.rhs);
+
+    tmp[atermpp::down_cast<data::variable>(tmp_lhs)]
+        = atermpp::down_cast<data::data_expression>(tmp_rhs);
   }
 
   return std::make_unique<atermpp::aterm>(
-      pbes_system::replace_variables(atermpp::down_cast<pbes_expression>(expr), tmp));
+      pbes_system::replace_variables(atermpp::down_cast<pbes_expression>(tmp_expr), tmp));
 }
 
 std::unique_ptr<atermpp::aterm> mcrl2_pbes_expression_replace_propositional_variables(const atermpp::detail::_aterm& term,
     const rust::Vec<std::size_t>& pi)
 {
-  const atermpp::aterm& expr = atermpp::mcrl2_aterm_cast(term);
-  MCRL2_ASSERT(is_pbes_expression(expr));
+  atermpp::unprotected_aterm_core tmp_expr(&term);
+  MCRL2_ASSERT(is_pbes_expression(atermpp::down_cast<atermpp::aterm>(tmp_expr)));
 
   pbes_expression result;
   pbes_system::replace_propositional_variables(result,
-      atermpp::down_cast<pbes_expression>(expr),
+      atermpp::down_cast<pbes_expression>(tmp_expr),
       [pi](const propositional_variable_instantiation& v) -> pbes_expression
       {
         std::vector<data::data_expression> new_parameters(v.parameters().size());

@@ -267,7 +267,8 @@ const atermpp::detail::_aterm* mcrl2_srf_pbes_equation_variable(const srf_equati
 inline
 bool mcrl2_pbes_is_propositional_variable(const atermpp::detail::_aterm& variable)
 {
-  return pbes_system::is_propositional_variable(atermpp::mcrl2_aterm_cast(variable));
+  atermpp::unprotected_aterm_core tmp(&variable);
+  return pbes_system::is_propositional_variable(atermpp::down_cast<atermpp::aterm>(tmp));
 }
 
 inline

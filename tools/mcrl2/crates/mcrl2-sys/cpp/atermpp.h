@@ -38,17 +38,6 @@ inline const detail::_function_symbol* mcrl2_function_symbol_address(const funct
   return reinterpret_cast<const unprotected_function_symbol&>(symbol).m_symbol.get();
 }
 
-/// Casts an atermpp::_aterm to an atermpp::aterm.
-inline const aterm& mcrl2_aterm_cast(const detail::_aterm& term)
-{
-  return reinterpret_cast<const aterm&>(term);
-}
-
-inline const function_symbol& mcrl2_function_symbol_cast(const detail::_function_symbol& symbol)
-{
-  return reinterpret_cast<const function_symbol&>(symbol);
-}
-
 // What the fuck is this. Leaks the inner type because unions are not destructed automatically.
 template <typename T>
 class Leaker
@@ -143,19 +132,19 @@ inline void mcrl2_aterm_pool_print_metrics()
 
 // Aterm related functions
 
-inline 
-const detail::_aterm* mcrl2_aterm_create(const detail::_function_symbol& symbol,
-    rust::Slice<const detail::_aterm *const> arguments)
+inline const detail::_aterm* mcrl2_aterm_create(const detail::_function_symbol& symbol,
+    rust::Slice<const detail::_aterm* const> arguments)
 {
-  // rust::Slice<aterm> aterm_slice(const_cast<aterm&>(mcrl2_aterm_cast(arguments.data())),
-  //     arguments.length());
+  rust::Slice<aterm> aterm_slice(const_cast<aterm*>(reinterpret_cast<const aterm*>(arguments.data())),
+      arguments.length());
 
-  // unprotected_aterm_core result(nullptr);
-  // make_term_appl(reinterpret_cast<aterm&>(result),
-  //     mcrl2_function_symbol_cast(symbol),
-  //     aterm_slice.begin(),
-  //     aterm_slice.end());
-  // return detail::address(result);
+  unprotected_aterm_core result(nullptr);
+  atermpp::unprotected_function_symbol tmp_symbol(symbol);
+  make_term_appl(reinterpret_cast<aterm&>(result),
+      reinterpret_cast<const function_symbol&>(tmp_symbol),
+      aterm_slice.begin(),
+      aterm_slice.end());
+  return detail::address(result);
   return 0;
 }
 
@@ -171,39 +160,46 @@ inline const detail::_aterm* mcrl2_aterm_get_address(const atermpp::aterm& term)
 
 inline void mcrl2_aterm_mark_address(const detail::_aterm& term, term_mark_stack& todo)
 {
-  mark_term(mcrl2_aterm_cast(term), todo);
+  atermpp::unprotected_aterm_core tmp(&term);
+  mark_term(atermpp::down_cast<aterm>(tmp), todo);
 }
 
 inline bool mcrl2_aterm_is_list(const detail::_aterm& term)
 {
-  return mcrl2_aterm_cast(term).type_is_list();
+  unprotected_aterm_core tmp(&term);
+  return atermpp::down_cast<aterm>(tmp).type_is_list();
 }
 
 inline bool mcrl2_aterm_is_empty_list(const detail::_aterm& term)
 {
-  return mcrl2_aterm_cast(term).function() == detail::g_as_empty_list;
+  atermpp::unprotected_aterm_core tmp(&term);
+  return atermpp::down_cast<aterm>(tmp).function() == detail::g_as_empty_list;
 }
 
 inline bool mcrl2_aterm_is_int(const detail::_aterm& term)
 {
-  return mcrl2_aterm_cast(term).type_is_int();
+  atermpp::unprotected_aterm_core tmp(&term);
+  return atermpp::down_cast<aterm>(tmp).type_is_int();
 }
 
 inline rust::String mcrl2_aterm_print(const detail::_aterm& term)
 {
   std::stringstream str;
-  str << mcrl2_aterm_cast(term);
+  atermpp::unprotected_aterm_core tmp(&term);
+  str << atermpp::down_cast<aterm>(tmp);
   return str.str();
 }
 
 inline const detail::_function_symbol* mcrl2_aterm_get_function_symbol(const detail::_aterm& term)
 {
-  return mcrl2_function_symbol_address(mcrl2_aterm_cast(term).function());
+  atermpp::unprotected_aterm_core tmp(&term);
+  return mcrl2_function_symbol_address(atermpp::down_cast<aterm>(tmp).function());
 }
 
 inline const detail::_aterm* mcrl2_aterm_get_argument(const detail::_aterm& term, std::size_t index)
 {
-  return detail::address(mcrl2_aterm_cast(term)[index]);
+  atermpp::unprotected_aterm_core tmp(&term);
+  return detail::address(atermpp::down_cast<aterm>(tmp)[index]);
 }
 
 // Function symbol related functions

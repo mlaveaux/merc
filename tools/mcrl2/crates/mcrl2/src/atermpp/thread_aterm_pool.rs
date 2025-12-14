@@ -1,5 +1,6 @@
 use core::fmt;
 use std::borrow::Borrow;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
@@ -49,46 +50,17 @@ pub struct ThreadTermPool {
     index: usize,
 
     /// Function symbols to represent 'DataAppl' with any number of arguments.
-    data_appl: Vec<Symbol>,
+    data_appl: RefCell<Vec<Symbol>>,
 
     /// A counter used to periodically trigger a garbage collection test.
     /// This is a stupid hack, but we need to periodically test for garbage collection and this is only allowed outside of a shared
     /// lock section. Therefore, we count (arbitrarily) to reduce the amount of this is checked.
-    gc_counter: usize,
+    gc_counter: Cell<usize>,
 
     /// Temporary storage for arguments when creating terms.
-    arguments: Vec<*const ffi::_aterm>,
+    arguments: RefCell<Vec<*const ffi::_aterm>>,
 
     _callback: ManuallyDrop<UniquePtr<ffi::tls_callback_container>>,
-}
-
-/// Protects the given aterm address and returns the term.
-///     - guard: An existing guard to the ThreadTermPool.protection_set.
-///     - index: The index of the ThreadTermPool
-fn protect_with(
-    mut guard: BfTermPoolThreadWrite<'_, ProtectionSet<ATermPtr>>,
-    gc_counter: &mut usize,
-    index: usize,
-    term: *const ffi::_aterm,
-) -> ATerm {
-    debug_assert!(!term.is_null(), "Can only protect valid terms");
-    let aterm = ATermPtr::new(term);
-    let root = guard.protect(aterm.clone());
-
-    let term = ATermRef::new(term);
-    trace!("Protected term {:?}, index {}, protection set {}", term, root, index);
-
-    let result = ATerm::from_ref(term, root);
-
-    // Test for garbage collection intermediately.
-    *gc_counter = gc_counter.saturating_sub(1);
-
-    if guard.unlock() && *gc_counter == 0 {
-        mcrl2_aterm_pool_test_garbage_collection();
-        *gc_counter = TEST_GC_INTERVAL;
-    }
-
-    result
 }
 
 impl ThreadTermPool {
@@ -100,9 +72,9 @@ impl ThreadTermPool {
             protection_set,
             container_protection_set,
             index,
-            gc_counter: TEST_GC_INTERVAL,
-            data_appl: vec![],
-            arguments: vec![],
+            gc_counter: Cell::new(TEST_GC_INTERVAL),
+            data_appl: RefCell::new(vec![]),
+            arguments: RefCell::new(vec![]),
             _callback: ManuallyDrop::new(mcrl2_aterm_pool_register_mark_callback(
                 mark_protection_sets,
                 protection_set_size,
@@ -117,7 +89,7 @@ impl ThreadTermPool {
     }
 
     /// Creates an ATerm from a string.
-    pub fn from_string(&mut self, text: &str) -> Result<ATerm, Exception> {
+    pub fn from_string(&self, text: &str) -> Result<ATerm, Exception> {
         match mcrl2_aterm_from_string(text) {
             Ok(term) => Ok(ATerm::from_unique_ptr(term)),
             Err(exception) => Err(exception),
@@ -126,70 +98,69 @@ impl ThreadTermPool {
 
     /// Creates an [ATerm] with the given symbol and arguments.
     pub fn create<'a, 'b>(
-        &mut self,
+        &self,
         symbol: &impl Borrow<SymbolRef<'a>>,
         arguments: &[impl Borrow<ATermRef<'b>>],
     ) -> ATerm {
         // Copy the arguments to make a slice.
-        self.arguments.clear();
+        let mut tmp_args = self.arguments.borrow_mut();
+        tmp_args.clear();
         for arg in arguments {
-            self.arguments.push(arg.borrow().get());
+            tmp_args.push(arg.borrow().get());
         }
 
         debug_assert_eq!(
             symbol.borrow().arity(),
-            self.arguments.len(),
+            tmp_args.len(),
             "Number of arguments does not match arity"
         );
 
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.borrow().get(), &self.arguments);
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
-            }
-        })
+        unsafe {
+            // ThreadPool is not Sync, so only one has access.
+            let protection_set = self.protection_set.write_exclusive();
+            let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.borrow().get(), &tmp_args);
+            self.protect_with(protection_set, term)
+        }
     }
 
     /// Creates an [ATerm] with the given symbol, head argument and other arguments.
     pub fn create_data_application<'a, 'b>(
-        &mut self,
+        &self,
         head: &impl Borrow<ATermRef<'a>>,
         arguments: &[impl Borrow<ATermRef<'b>>],
     ) -> ATerm {
         // Make the temp vector sufficient length.
-        while self.arguments.len() < arguments.len() {
-            self.arguments.push(std::ptr::null());
+        let mut tmp_args = self.arguments.borrow_mut();
+        while tmp_args.len() < arguments.len() {
+            tmp_args.push(std::ptr::null());
         }
 
-        self.arguments.clear();
-        self.arguments.push(head.borrow().get());
+        tmp_args.clear();
+        tmp_args.push(head.borrow().get());
         for arg in arguments {
-            self.arguments.push(arg.borrow().get());
+            tmp_args.push(arg.borrow().get());
         }
 
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            while tp.data_appl.len() <= arguments.len() + 1 {
-                let symbol = self.create_symbol("DataAppl", tp.data_appl.len());
-                tp.data_appl.push(symbol);
-            }
+        let mut tmp_data_appl = self.data_appl.borrow_mut();
+        while tmp_data_appl.len() <= arguments.len() + 1 {
+            let symbol = self.create_symbol("DataAppl", tmp_data_appl.len());
+            tmp_data_appl.push(symbol);
+        }
 
-            let symbol = &tp.data_appl[arguments.len() + 1];
+        let symbol = &tmp_data_appl[arguments.len() + 1];
 
-            debug_assert_eq!(
-                symbol.arity(),
-                self.arguments.len(),
-                "Number of arguments does not match arity"
-            );
+        debug_assert_eq!(
+            symbol.arity(),
+            tmp_args.len(),
+            "Number of arguments does not match arity"
+        );
 
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.get(), &self.arguments);
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, term)
-            }
-        })
+        unsafe {
+            // ThreadPool is not Sync, so only one has access.
+            let protection_set = self.protection_set.write_exclusive();
+            let term: *const ffi::_aterm = mcrl2_aterm_create(symbol.get(), &tmp_args);
+            self.protect_with(protection_set, term)
+        }
     }
 
     /// Creates a function symbol with the given name and arity.
@@ -198,33 +169,29 @@ impl ThreadTermPool {
     }
 
     /// Creates a term with the FFI while taking care of the protection and garbage collection.
-    pub fn create_with<F>(&mut self, create: F) -> ATerm
+    pub fn create_with<F>(&self, create: F) -> ATerm
     where
         F: Fn() -> *const ffi::_aterm,
     {
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
-            unsafe {
-                // ThreadPool is not Sync, so only one has access.
-                let protection_set = tp.protection_set.write_exclusive();
-                protect_with(protection_set, &mut tp.gc_counter, tp.index, create())
-            }
-        })
+        unsafe {
+            // ThreadPool is not Sync, so only one has access.
+            let protection_set = self.protection_set.write_exclusive();
+            self.protect_with(protection_set, create())
+        }
     }
 
     /// Protects the given aterm address and returns the term.
-    pub fn protect(&mut self, term: *const ffi::_aterm) -> ATerm {
+    pub fn protect(&self, term: *const ffi::_aterm) -> ATerm {
         unsafe {
-            protect_with(
+            self.protect_with(
                 self.protection_set.write_exclusive(),
-                &mut self.gc_counter,
-                self.index,
                 term,
             )
         }
     }
 
     /// Protects the given aterm address and returns the term.
-    pub fn protect_container(&mut self, container: Arc<dyn Markable + Send + Sync>) -> ProtectionIndex {
+    pub fn protect_container(&self, container: Arc<dyn Markable + Send + Sync>) -> ProtectionIndex {
         let root = unsafe { self.container_protection_set.write_exclusive().protect(container) };
 
         trace!("Protected container index {}, protection set {}", root, self.index,);
@@ -233,7 +200,7 @@ impl ThreadTermPool {
     }
 
     /// Removes the [ATerm] from the protection set.
-    pub fn drop(&mut self, term: &ATerm) {
+    pub fn drop_term(&self, term: &ATerm) {
         term.require_valid();
 
         unsafe {
@@ -247,7 +214,7 @@ impl ThreadTermPool {
     }
 
     /// Removes the container from the protection set.
-    pub fn drop_container(&mut self, container_root: ProtectionIndex) {
+    pub fn drop_container(&self, container_root: ProtectionIndex) {
         unsafe {
             let mut container_protection_set = self.container_protection_set.write_exclusive();
             trace!(
@@ -259,18 +226,47 @@ impl ThreadTermPool {
     }
 
     /// Returns true iff the given term is a data application.
-    pub fn is_data_application(&mut self, term: &ATermRef<'_>) -> bool {
+    pub fn is_data_application(&self, term: &ATermRef<'_>) -> bool {
         let symbol = term.get_head_symbol();
         // It can be that data_applications are created without create_data_application in the mcrl2 ffi.
-        while self.data_appl.len() <= symbol.arity() {
+        let mut data_appl = self.data_appl.borrow_mut();
+        while data_appl.len() <= symbol.arity() {
             let symbol = Symbol::take(mcrl2_function_symbol_create(
                 String::from("DataAppl"),
-                self.data_appl.len(),
+                data_appl.len(),
             ));
-            self.data_appl.push(symbol);
+            data_appl.push(symbol);
         }
 
-        symbol == self.data_appl[symbol.arity()].copy()
+        symbol == data_appl[symbol.arity()].copy()
+    }
+    
+    /// Protects the given aterm address and returns the term.
+    ///     - guard: An existing guard to the ThreadTermPool.protection_set.
+    fn protect_with(
+        &self,
+        mut guard: BfTermPoolThreadWrite<'_, ProtectionSet<ATermPtr>>,
+        term: *const ffi::_aterm,
+    ) -> ATerm {
+        debug_assert!(!term.is_null(), "Can only protect valid terms");
+        let aterm = ATermPtr::new(term);
+        let root = guard.protect(aterm.clone());
+
+        let term = ATermRef::new(term);
+        trace!("Protected term {:?}, index {}, protection set {}", term, root, self.index);
+
+        let result = ATerm::from_ref(term, root);
+
+        // Test for garbage collection intermediately.
+        let counter = self.gc_counter.get().saturating_sub(1);
+        self.gc_counter.set(counter);
+
+        if guard.unlock() && counter == 0 {
+            mcrl2_aterm_pool_test_garbage_collection();
+            self.gc_counter.set(TEST_GC_INTERVAL);
+        }
+
+        result
     }
 }
 

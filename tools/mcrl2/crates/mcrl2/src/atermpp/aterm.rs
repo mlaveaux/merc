@@ -68,7 +68,7 @@ impl<'a> ATermRef<'a> {
         if self.is_default() {
             ATerm::default()
         } else {
-            THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(self.term))
+            THREAD_TERM_POOL.with_borrow(|tp| tp.protect(self.term))
         }
     }
 
@@ -221,14 +221,14 @@ impl ATerm {
     /// Creates a new ATerm with the given symbol and arguments.
     pub fn new<'a, 'b>(symbol: &impl Borrow<SymbolRef<'a>>,
         arguments: &[impl Borrow<ATermRef<'b>>],) -> ATerm {
-        THREAD_TERM_POOL.with_borrow_mut(|tp| {
+        THREAD_TERM_POOL.with_borrow(|tp| {
             tp.create(symbol, arguments)
         })
     }
 
     /// Constructs an ATerm from a string by parsing it.
     pub fn from_string(s: &str) -> Result<ATerm, Exception> {
-        THREAD_TERM_POOL.with_borrow_mut(|tp| tp.from_string(s))
+        THREAD_TERM_POOL.with_borrow(|tp| tp.from_string(s))
     }
 
     /// Constructs an ATerm from a UniquePtr<aterm>. Note that we still do the
@@ -236,13 +236,13 @@ impl ATerm {
     pub(crate) fn from_unique_ptr(term: UniquePtr<aterm>) -> Self {
         debug_assert!(!term.is_null(), "Cannot create ATerm from null unique ptr");
         THREAD_TERM_POOL
-            .with_borrow_mut(|tp| tp.protect(mcrl2_aterm_get_address(term.as_ref().expect("Pointer is valid"))))
+            .with_borrow(|tp| tp.protect(mcrl2_aterm_get_address(term.as_ref().expect("Pointer is valid"))))
     }
 
     /// Creates an ATerm from a raw pointer. It will be protected on creation.
     pub(crate) fn from_ptr(term: *const ffi::_aterm) -> Self {
         debug_assert!(!term.is_null(), "Cannot create ATerm from null ptr");
-        THREAD_TERM_POOL.with_borrow_mut(|tp| tp.protect(term))
+        THREAD_TERM_POOL.with_borrow(|tp| tp.protect(term))
     }
 
     /// Obtains the underlying pointer
@@ -269,8 +269,8 @@ impl ATerm {
 impl Drop for ATerm {
     fn drop(&mut self) {
         if !self.is_default() {
-            THREAD_TERM_POOL.with_borrow_mut(|tp| {
-                tp.drop(self);
+            THREAD_TERM_POOL.with_borrow(|tp| {
+                tp.drop_term(self);
             })
         }
     }

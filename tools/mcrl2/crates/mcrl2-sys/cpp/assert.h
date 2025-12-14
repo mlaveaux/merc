@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 #ifdef MCRL2_ENABLE_CPPTRACE
   #include <cpptrace/basic.hpp>
 #endif // MCRL2_ENABLE_CPPTRACE
