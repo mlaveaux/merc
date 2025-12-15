@@ -101,16 +101,11 @@ impl ModalEquationSystem {
     ///
     /// The alternation depth of mu X . psi is defined as the maximum chain X <= X_1 <= ... <= X_n,
     /// where X <= Y iff X appears freely in the corresponding equation sigma Y . phi. And furthermore,
-    /// X_0, X_2, ... are bound by mu and X_1, X_3, ... are bound by nu. Similarly, for nu X . psi.
+    /// X_0, X_2, ... are bound by mu and X_1, X_3, ... are bound by nu. Similarly, for nu X . psi. Note
+    /// that the alternation depth of a formula with a rhs is always 1, since the chain cannot be extended.
     pub fn alternation_depth(&self, i: usize) -> usize {
         let equation = &self.equations[i];
-        let result =
-            self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier);
-        if result == 1 {
-            0 // A formula contained X, but no alternations occured (X <= Y but Y has same operator as X)
-        } else {
-            result
-        }
+        self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier)
     }
 
     /// Finds an equation by its variable identifier.
@@ -178,69 +173,13 @@ fn apply_e(equations: &mut Vec<Equation>, formula: &StateFrm, generator: &mut Fr
             variable,
             body,
         } => {
-            visit_statefrm(body, |subformula| {
-                match subformula {
-                    StateFrm::FixedPoint {
-                        variable: inner_variable,
-                        ..
-                    } => {
-                        if variable.identifier == inner_variable.identifier {
-                            // Do not substitute inside nested fixpoint definitions.
-                            Err(format!("Found nested fixpoint definition {} in {body}", variable.identifier).into())
-                        } else {
-                            Ok(())
-                        }
-                    }
-                    _ => Ok(()),
-                }
-            })?;
-
-            if equations
-                .iter()
-                .any(|eq: &Equation| eq.variable.identifier == variable.identifier)
-            {
-                // Rename the variable to the next fresh name.
-                let renamed_var = generator.generate_fresh_name(&variable.identifier);
-
-                // Rename only occurrences of the variable being defined.
-                println!(
-                    "Renaming variable {} to {} in {}",
-                    variable.identifier, renamed_var, body
-                );
-                let substituted_formula = apply_statefrm(*body.clone(), |subformula| match subformula {
-                    StateFrm::Id(inner_variable, args) => {
-                        if *inner_variable == variable.identifier {
-                            Ok(Some(StateFrm::Id(renamed_var.clone(), args.clone())))
-                        } else {
-                            Ok(None)
-                        }
-                    }
-                    _ => Ok(None),
-                })?;
-
-                debug!("Renamed variable {} to {}", variable.identifier, renamed_var);
-                debug!("formula: {}", body);
-                debug!("    -> : {}", substituted_formula);
-
-                // Add the equation with the renamed variable (the span is the same as the original variable).
-                equations.push(Equation {
-                    operator: operator.clone(),
-                    variable: StateVarDecl {
-                        identifier: renamed_var,
-                        arguments: variable.arguments.clone(),
-                        span: variable.span.clone(),
-                    },
-                    rhs: rhs(&substituted_formula),
-                });
-            } else {
-                debug!("Adding equation for variable {}", variable.identifier);
-                // Add the equation with the renamed variable (the span is the same as the original variable).
-                equations.push(Equation {
-                    operator: operator.clone(),
-                    variable: variable.clone(),
-                    rhs: rhs(body),
-                });
-            };
+            debug!("Adding equation for variable {}", variable.identifier);
+            // Add the equation with the renamed variable (the span is the same as the original variable).
+            equations.push(Equation {
+                operator: operator.clone(),
+                variable: variable.clone(),
+                rhs: rhs(body),
+            });
 
             Ok(())
         }
