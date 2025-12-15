@@ -1,6 +1,5 @@
-use log::info;
+use log::debug;
 use log::trace;
-
 use oxidd::BooleanFunction;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
@@ -45,12 +44,8 @@ pub fn translate(
         .map(|ma| strip_feature_configuration_from_multi_action(ma))
         .collect();
 
-    for label in &simplified_labels {
-        info!("label: {}", label);
-    }
-
     let equation_system = ModalEquationSystem::new(formula);
-    info!("{}", equation_system);
+    debug!("{}", equation_system);
     let mut algorithm = Translation::new(
         fts,
         &simplified_labels,
