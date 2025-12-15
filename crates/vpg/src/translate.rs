@@ -1,14 +1,16 @@
 use log::info;
 use log::trace;
-use merc_syntax::ActFrm;
-use merc_syntax::ActFrmBinaryOp;
-use merc_syntax::Action;
+
 use oxidd::BooleanFunction;
+use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
 use merc_lts::LTS;
 use merc_lts::StateIndex;
+use merc_syntax::ActFrm;
+use merc_syntax::ActFrmBinaryOp;
+use merc_syntax::Action;
 use merc_syntax::FixedPointOperator;
 use merc_syntax::ModalityOperator;
 use merc_syntax::MultiAction;
@@ -30,6 +32,7 @@ use crate::compute_reachable;
 pub fn translate(
     manager_ref: &BDDManagerRef,
     fts: &FeatureTransitionSystem,
+    configuration: BDDFunction,
     formula: &StateFrm,
 ) -> Result<VariabilityParityGame, MercError> {
     // Parses all labels into MultiAction once
@@ -48,27 +51,31 @@ pub fn translate(
 
     let equation_system = ModalEquationSystem::new(formula);
     info!("{}", equation_system);
-    let mut algorithm = Translation::new(fts, &simplified_labels, &equation_system, true);
+    let mut algorithm = Translation::new(
+        fts,
+        &simplified_labels,
+        &equation_system,
+        manager_ref.with_manager_shared(|manager| BDDFunction::t(manager)),
+        true,
+    );
 
     algorithm.translate_equation(fts.initial_state_index(), 0)?;
 
     // Convert the feature diagram (with names) to a VPG
-    let variables: Vec<BDDFunction> = fts.variables().iter().map(|(_, var)| var.clone()).collect();
+    let variables: Vec<BDDFunction> = fts.features().iter().map(|(_, var)| var.clone()).collect();
 
     let result = VariabilityParityGame::from_edges(
         manager_ref,
         VertexIndex::new(0),
         algorithm.vertices.iter().map(|(p, _)| p).cloned().collect(),
         algorithm.vertices.into_iter().map(|(_, pr)| pr).collect(),
-        fts.configuration().clone(),
+        configuration,
         variables,
         || algorithm.edges.iter().cloned(),
     );
 
     // Check that the result is a total VPG.
-    debug_assert!(result.is_total(),
-        "Resulting VPG is not total after translation",
-    );
+    debug_assert!(result.is_total(), "Resulting VPG is not total after translation",);
     // Check that all vertices are reachable from the initial vertex.
     if cfg!(debug_assertions) {
         let (_, reachable_vertices) = compute_reachable(&result);
@@ -105,6 +112,9 @@ struct Translation<'a> {
 
     /// A reference to the modal equation system being translated.
     equation_system: &'a ModalEquationSystem,
+
+    /// The BDD representing the "true" feature configuration.
+    true_bdd: BDDFunction,
 }
 
 impl<'a> Translation<'a> {
@@ -112,6 +122,7 @@ impl<'a> Translation<'a> {
         fts: &'a FeatureTransitionSystem,
         parsed_labels: &'a Vec<MultiAction>,
         equation_system: &'a ModalEquationSystem,
+        true_bdd: BDDFunction,
         make_total: bool,
     ) -> Self {
         Self {
@@ -122,6 +133,7 @@ impl<'a> Translation<'a> {
             parsed_labels,
             equation_system,
             make_total,
+            true_bdd,
         }
     }
 
@@ -156,8 +168,7 @@ impl<'a> Translation<'a> {
 
                 if self.make_total {
                     // Self-loop
-                    self.edges
-                        .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                    self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                 }
             }
             StateFrm::False => {
@@ -166,8 +177,7 @@ impl<'a> Translation<'a> {
 
                 if self.make_total {
                     // Self-loop
-                    self.edges
-                        .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                    self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                 }
             }
             StateFrm::Binary { op, lhs, rhs } => {
@@ -178,10 +188,8 @@ impl<'a> Translation<'a> {
                         let s_psi_1 = self.translate_vertex(s, lhs)?;
                         let s_psi_2 = self.translate_vertex(s, rhs)?;
 
-                        self.edges
-                            .push((vertex_index, self.fts.configuration().clone(), s_psi_1));
-                        self.edges
-                            .push((vertex_index, self.fts.configuration().clone(), s_psi_2));
+                        self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_1));
+                        self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_2));
                     }
                     StateFrmOp::Disjunction => {
                         // (s, Ψ_1 ∨ Ψ_2) →_P even, (s, Ψ_1) and (s, Ψ_2), 0
@@ -189,10 +197,8 @@ impl<'a> Translation<'a> {
                         let s_psi_1 = self.translate_vertex(s, lhs)?;
                         let s_psi_2 = self.translate_vertex(s, rhs)?;
 
-                        self.edges
-                            .push((vertex_index, self.fts.configuration().clone(), s_psi_1));
-                        self.edges
-                            .push((vertex_index, self.fts.configuration().clone(), s_psi_2));
+                        self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_1));
+                        self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_2));
                     }
                     _ => {
                         unimplemented!("Cannot translate binary operator in {}", formula);
@@ -207,8 +213,7 @@ impl<'a> Translation<'a> {
 
                 self.vertices.push((Player::Odd, Priority::new(0))); // The priority and owner do not matter here
                 let equation_vertex = self.translate_equation(s, i);
-                self.edges
-                    .push((vertex_index, self.fts.configuration().clone(), equation_vertex?));
+                self.edges.push((vertex_index, self.true_bdd.clone(), equation_vertex?));
             }
             StateFrm::Modality {
                 operator,
@@ -232,7 +237,7 @@ impl<'a> Translation<'a> {
 
                                 self.edges.push((
                                     vertex_index,
-                                    self.fts.configuration().and(self.fts.feature_label(transition.label))?,
+                                    self.fts.feature_label(transition.label).clone(),
                                     s_prime_psi,
                                 ));
                             }
@@ -240,8 +245,7 @@ impl<'a> Translation<'a> {
 
                         if !matched && self.make_total {
                             // No matching transitions, add a self-loop to ensure totality
-                            self.edges
-                                .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                            self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                         }
                     }
                     ModalityOperator::Diamond => {
@@ -258,7 +262,7 @@ impl<'a> Translation<'a> {
 
                                 self.edges.push((
                                     vertex_index,
-                                    self.fts.configuration().and(self.fts.feature_label(transition.label))?,
+                                    self.fts.feature_label(transition.label).clone(),
                                     s_prime_psi,
                                 ));
                             }
@@ -266,8 +270,7 @@ impl<'a> Translation<'a> {
 
                         if !matched && self.make_total {
                             // No matching transitions, add a self-loop to ensure totality
-                            self.edges
-                                .push((vertex_index, self.fts.configuration().clone(), vertex_index));
+                            self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                         }
                     }
                 }
@@ -303,7 +306,7 @@ impl<'a> Translation<'a> {
                     Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2) + 1),
                 ));
                 let s_psi = self.translate_vertex(s, equation.body())?;
-                self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+                self.edges.push((vertex_index, self.true_bdd.clone(), s_psi));
             }
             FixedPointOperator::Greatest => {
                 // (s, ν X. Ψ) →_P even, (s, Ψ[x := ν X. Ψ]), 2 * (AD(Ψ)/2). In Rust division is already floor.
@@ -312,7 +315,7 @@ impl<'a> Translation<'a> {
                     Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2)),
                 ));
                 let s_psi = self.translate_vertex(s, equation.body())?;
-                self.edges.push((vertex_index, self.fts.configuration().clone(), s_psi));
+                self.edges.push((vertex_index, self.true_bdd.clone(), s_psi));
             }
         }
 
@@ -391,12 +394,12 @@ mod tests {
         let fts = read_fts(
             &manager_ref,
             include_bytes!("../../../examples/vpg/running_example_fts.aut") as &[u8],
-            fd,
+            fd.features().clone(),
         )
         .unwrap();
 
         let formula = UntypedStateFrmSpec::parse(include_str!("../../../examples/vpg/running_example.mcf")).unwrap();
 
-        let _vpg = translate(&manager_ref, &fts, &formula.formula).unwrap();
+        let _vpg = translate(&manager_ref, &fts, fd.configuration().clone(), &formula.formula).unwrap();
     }
 }
