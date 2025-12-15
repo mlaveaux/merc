@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
+use log::debug;
+
 use merc_syntax::FixedPointOperator;
 use merc_syntax::StateFrm;
 use merc_syntax::StateVarDecl;
@@ -55,36 +57,30 @@ impl ModalEquationSystem {
     pub fn new(formula: &StateFrm) -> Self {
         let mut equations = Vec::new();
 
+        // Find all the fixpoint variable names that are used in the formula
+        let mut names = Vec::new();
         visit_statefrm(formula, |formula| match formula {
-            // E(nu X. f) = (nu X = RHS(f)) + E(f)
-            // E(mu X. f) = (mu X = RHS(f)) + E(f)
-            // E(g) = epsilon, if g is not a fixpoint formula
-            StateFrm::FixedPoint {
-                operator,
-                variable,
-                body,
-            } => {
-                equations.push(Equation {
-                    operator: operator.clone(),
-                    variable: variable.clone(),
-                    rhs: rhs(body),
-                });
-
+            StateFrm::FixedPoint { variable, .. } => {
+                names.push(variable.identifier.clone());
                 Ok(())
             }
             _ => Ok(()),
         })
-        .expect("No error expected during fixpoint equation system construction");
+        .expect("Finding variables should not fail.");
+
+        debug!("Found fixpoint variables: {:?}", names);
+        let mut generator = FreshNameGenerator::new(names);
+
+        // Apply E to extract all equations from the formula
+        apply_e(&mut equations, formula, &mut generator);
 
         // Check that there are no duplicate variable names
-        if cfg!(debug_assertions) {
-            let identifiers: HashSet<&String> = HashSet::from_iter(equations.iter().map(|eq| &eq.variable.identifier));
-            debug_assert_eq!(
-                identifiers.len(),
-                equations.len(),
-                "Duplicate variable names found in fixpoint equation system"
-            );
-        }
+        let identifiers: HashSet<&String> = HashSet::from_iter(equations.iter().map(|eq| &eq.variable.identifier));
+        assert_eq!(
+            identifiers.len(),
+            equations.len(),
+            "Duplicate variable names found in fixpoint equation system"
+        );
 
         debug_assert!(
             equations.len() > 0,
@@ -108,7 +104,8 @@ impl ModalEquationSystem {
     /// X_0, X_2, ... are bound by mu and X_1, X_3, ... are bound by nu. Similarly, for nu X . psi.
     pub fn alternation_depth(&self, i: usize) -> usize {
         let equation = &self.equations[i];
-        let result = self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier);
+        let result =
+            self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier);
         if result == 1 {
             0 // A formula contained X, but no alternations occured (X <= Y but Y has same operator as X)
         } else {
@@ -169,6 +166,89 @@ impl ModalEquationSystem {
     }
 }
 
+// E(nu X. f) = (nu X = RHS(f)) + E(f)
+// E(mu X. f) = (mu X = RHS(f)) + E(f)
+// E(g) = ... (traverse all the subformulas of g and apply E to them)
+fn apply_e(equations: &mut Vec<Equation>, formula: &StateFrm, generator: &mut FreshNameGenerator) {
+    debug!("Applying E to formula: {}", formula);
+
+    visit_statefrm(formula, |formula| match formula {
+        StateFrm::FixedPoint {
+            operator,
+            variable,
+            body,
+        } => {
+            visit_statefrm(body, |subformula| {
+                match subformula {
+                    StateFrm::FixedPoint {
+                        variable: inner_variable,
+                        ..
+                    } => {
+                        if variable.identifier == inner_variable.identifier {
+                            // Do not substitute inside nested fixpoint definitions.
+                            Err(format!("Found nested fixpoint definition {} in {body}", variable.identifier).into())
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    _ => Ok(()),
+                }
+            })?;
+
+            if equations
+                .iter()
+                .any(|eq: &Equation| eq.variable.identifier == variable.identifier)
+            {
+                // Rename the variable to the next fresh name.
+                let renamed_var = generator.generate_fresh_name(&variable.identifier);
+
+                // Rename only occurrences of the variable being defined.
+                println!(
+                    "Renaming variable {} to {} in {}",
+                    variable.identifier, renamed_var, body
+                );
+                let substituted_formula = apply_statefrm(*body.clone(), |subformula| match subformula {
+                    StateFrm::Id(inner_variable, args) => {
+                        if *inner_variable == variable.identifier {
+                            Ok(Some(StateFrm::Id(renamed_var.clone(), args.clone())))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    _ => Ok(None),
+                })?;
+
+                debug!("Renamed variable {} to {}", variable.identifier, renamed_var);
+                debug!("formula: {}", body);
+                debug!("    -> : {}", substituted_formula);
+
+                // Add the equation with the renamed variable (the span is the same as the original variable).
+                equations.push(Equation {
+                    operator: operator.clone(),
+                    variable: StateVarDecl {
+                        identifier: renamed_var,
+                        arguments: variable.arguments.clone(),
+                        span: variable.span.clone(),
+                    },
+                    rhs: rhs(&substituted_formula),
+                });
+            } else {
+                debug!("Adding equation for variable {}", variable.identifier);
+                // Add the equation with the renamed variable (the span is the same as the original variable).
+                equations.push(Equation {
+                    operator: operator.clone(),
+                    variable: variable.clone(),
+                    rhs: rhs(body),
+                });
+            };
+
+            Ok(())
+        }
+        _ => Ok(()),
+    })
+    .expect("No error expected during fixpoint equation system construction");
+}
+
 /// Applies `RHS` to the given formula.
 ///
 /// RHS(true) = true
@@ -201,13 +281,41 @@ impl fmt::Display for ModalEquationSystem {
     }
 }
 
+/// A helper struct that can be used to generate fresh (variable) names.
+struct FreshNameGenerator {
+    /// The set of already occupied names.
+    occupied_names: Vec<String>,
+}
+
+impl FreshNameGenerator {
+    /// Creates a new fresh name generator.
+    pub fn new(occupied_names: Vec<String>) -> Self {
+        FreshNameGenerator { occupied_names }
+    }
+
+    /// Generates a fresh name based on the given base name.
+    pub fn generate_fresh_name(&mut self, base_name: &str) -> String {
+        let mut index = 0;
+        let mut fresh_name = base_name.to_string();
+
+        while self.occupied_names.contains(&fresh_name) {
+            index += 1;
+            fresh_name = format!("{}_{}", base_name, index);
+        }
+
+        self.occupied_names.push(fresh_name.clone());
+        fresh_name
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use merc_macros::merc_test;
     use merc_syntax::UntypedStateFrmSpec;
 
     use super::*;
 
-    #[test]
+    #[merc_test]
     fn test_fixpoint_equation_system_construction() {
         let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true")
             .unwrap()
@@ -221,7 +329,7 @@ mod tests {
         assert_eq!(fes.alternation_depth(1), 0);
     }
 
-    #[test]
+    #[merc_test]
     fn test_fixpoint_equation_system_example() {
         let formula = UntypedStateFrmSpec::parse(include_str!("../../../examples/vpg/running_example.mcf"))
             .unwrap()
@@ -235,15 +343,15 @@ mod tests {
         assert_eq!(fes.alternation_depth(1), 0);
     }
 
-    // #[test]
-    // fn test_fixpoint_equation_system_duplicates() {
-    //     let formula = UntypedStateFrmSpec::parse("mu X. [a]X && nu Y. <b>true && nu Y . <c>X")
-    //         .unwrap()
-    //         .formula;
-    //     let fes = ModalEquationSystem::new(&formula);
+    #[merc_test]
+    fn test_fixpoint_equation_system_duplicates() {
+        let formula = UntypedStateFrmSpec::parse("mu X. [a]X && (nu Y. <b>true) && (nu Y . <c>X)")
+            .unwrap()
+            .formula;
+        let fes = ModalEquationSystem::new(&formula);
 
-    //     println!("{}", fes);
+        println!("{}", fes);
 
-    //     assert_eq!(fes.equations.len(), 2);
-    // }
+        assert_eq!(fes.equations.len(), 3);
+    }
 }
