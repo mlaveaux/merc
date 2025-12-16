@@ -57,22 +57,8 @@ impl ModalEquationSystem {
     pub fn new(formula: &StateFrm) -> Self {
         let mut equations = Vec::new();
 
-        // Find all the fixpoint variable names that are used in the formula
-        let mut names = Vec::new();
-        visit_statefrm(formula, |formula| match formula {
-            StateFrm::FixedPoint { variable, .. } => {
-                names.push(variable.identifier.clone());
-                Ok(())
-            }
-            _ => Ok(()),
-        })
-        .expect("Finding variables should not fail.");
-
-        debug!("Found fixpoint variables: {:?}", names);
-        let mut generator = FreshNameGenerator::new(names);
-
         // Apply E to extract all equations from the formula
-        apply_e(&mut equations, formula, &mut generator);
+        apply_e(&mut equations, formula);
 
         // Check that there are no duplicate variable names
         let identifiers: HashSet<&String> = HashSet::from_iter(equations.iter().map(|eq| &eq.variable.identifier));
@@ -164,7 +150,7 @@ impl ModalEquationSystem {
 // E(nu X. f) = (nu X = RHS(f)) + E(f)
 // E(mu X. f) = (mu X = RHS(f)) + E(f)
 // E(g) = ... (traverse all the subformulas of g and apply E to them)
-fn apply_e(equations: &mut Vec<Equation>, formula: &StateFrm, generator: &mut FreshNameGenerator) {
+fn apply_e(equations: &mut Vec<Equation>, formula: &StateFrm) {
     debug!("Applying E to formula: {}", formula);
 
     visit_statefrm(formula, |formula| match formula {
@@ -217,33 +203,6 @@ impl fmt::Display for ModalEquationSystem {
             writeln!(f, "{i}: {} {} = {}", equation.operator, equation.variable, equation.rhs)?;
         }
         Ok(())
-    }
-}
-
-/// A helper struct that can be used to generate fresh (variable) names.
-struct FreshNameGenerator {
-    /// The set of already occupied names.
-    occupied_names: Vec<String>,
-}
-
-impl FreshNameGenerator {
-    /// Creates a new fresh name generator.
-    pub fn new(occupied_names: Vec<String>) -> Self {
-        FreshNameGenerator { occupied_names }
-    }
-
-    /// Generates a fresh name based on the given base name.
-    pub fn generate_fresh_name(&mut self, base_name: &str) -> String {
-        let mut index = 0;
-        let mut fresh_name = base_name.to_string();
-
-        while self.occupied_names.contains(&fresh_name) {
-            index += 1;
-            fresh_name = format!("{}_{}", base_name, index);
-        }
-
-        self.occupied_names.push(fresh_name.clone());
-        fresh_name
     }
 }
 
