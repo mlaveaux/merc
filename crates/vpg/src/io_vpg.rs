@@ -8,12 +8,12 @@ use std::io::Write;
 use itertools::Itertools;
 use log::info;
 use log::trace;
-use oxidd::BooleanFunction;
-use oxidd::Manager;
-use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::util::OptBool;
+use oxidd::BooleanFunction;
+use oxidd::Manager;
+use oxidd::ManagerRef;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 
@@ -21,15 +21,15 @@ use merc_io::LineIterator;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
+use crate::minus;
 use crate::CubeIter;
 use crate::IOError;
-use crate::PG;
 use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
-use crate::minus;
+use crate::PG;
 
 /// Reads a variability parity game from the given reader.
 /// Note that the reader is buffered internally using a `BufReader`.
@@ -220,11 +220,16 @@ fn parse_configuration_set(
 /// Writes the given parity game to the given writer in .vpg format.
 /// Note that the writer is buffered internally using a `BufWriter`.
 pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Result<(), MercError> {
+    info!("Writing variability parity game to .vpg format...");
     let mut writer = BufWriter::new(writer);
 
     writeln!(writer, "confs {};", FormatConfigSet(game.configuration()))?;
     writeln!(writer, "parity {};", game.num_of_vertices())?;
 
+    let mut progress = TimeProgress::new(
+        |(index, total): (usize, usize)| info!("Wrote vertices {} ({}%)...", index, index * 100 / total),
+        1,
+    );
     for v in game.iter_vertices() {
         let prio = game.priority(v);
         let owner = game.owner(v).to_index();
@@ -239,6 +244,7 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
         )?;
 
         writeln!(writer, ";")?;
+        progress.print((v.value(), game.num_of_vertices()));
     }
 
     Ok(())
@@ -279,7 +285,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_read_vpg() {
         let manager = oxidd::bdd::new_manager(2048, 1024, 8);
 
