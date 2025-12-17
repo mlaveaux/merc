@@ -237,6 +237,71 @@ pub fn branching_bisim_signature_inductive(
     builder.dedup();
 }
 
+
+/// Computes the weak bisimulation presignature.
+///
+/// The input lts must contain no tau-cycles.
+pub fn weak_bisim_presignature_sorted(
+    state_index: StateIndex,
+    lts: &impl LTS,
+    partition: &impl Partition,
+    state_to_key: &[Option<usize>],
+    builder: &mut SignatureBuilder,
+) {
+    builder.clear();
+    builder.push((LabelIndex::new(0), partition.block_number(state_index))); // Add the inert tau transition to itself.
+    for transition in lts.outgoing_transitions(state_index) {
+        let to_block = partition.block_number(transition.to);
+
+        if lts.is_hidden_label(transition.label) {
+            // Inert tau transition, take signature from the outgoing tau-transition.
+            builder.push((tau_hat(lts), BlockIndex::new(state_to_key[transition.to].unwrap())));
+        } else {
+            builder.push((transition.label, to_block));
+        }
+    }
+
+    // Compute the flat signature, which has Hash and is more compact.
+    builder.sort_unstable();
+    builder.dedup();
+}
+
+/// Computes the weak bisimulation signature.
+///
+/// The input lts must contain no tau-cycles.
+pub fn weak_bisim_signature_sorted_full(
+    state_index: StateIndex,
+    lts: &impl LTS,
+    partition: &impl Partition,
+    state_to_taus: &[Signature],
+    state_to_signature: &[Option<usize>],
+    key_to_signature: &[Signature],
+    builder: &mut SignatureBuilder,
+) {
+    builder.clear();
+    builder.push((LabelIndex::new(0), partition.block_number(state_index))); // Add the inert tau transition to itself.
+    for transition in lts.outgoing_transitions(state_index) {
+        let to_block = partition.block_number(transition.to);
+
+        if lts.is_hidden_label(transition.label) {
+            // Inert tau transition, take signature from the outgoing tau-transition.
+            builder.extend(key_to_signature[state_to_signature[transition.to].unwrap()].as_slice());
+        } else {
+            builder.push((transition.label, to_block));
+            for (label_after, color) in state_to_taus[transition.to].as_slice() {
+                if lts.is_hidden_label(*label_after) {
+                    builder.push((transition.label, *color));
+                }
+            }
+        }
+    }
+
+    // Compute the flat signature, which has Hash and is more compact.
+    builder.sort_unstable();
+    builder.dedup();
+}
+
+
 /// Computes the weak bisimulation signature.
 ///
 /// The input lts must contain no tau-cycles.
