@@ -54,7 +54,7 @@ pub fn translate(
         true,
     );
 
-    algorithm.translate_equation(fts.initial_state_index(), 0)?;
+    algorithm.translate(fts.initial_state_index(), 0)?;
 
     // Convert the feature diagram (with names) to a VPG
     let variables: Vec<BDDFunction> = fts.features().iter().map(|(_, var)| var.clone()).collect();
@@ -90,11 +90,22 @@ enum Formula<'a> {
     Equation(usize),
 }
 
-// Local struct to keep track of the translation state
+/// Local struct to keep track of the translation state
+///
+/// Implements the translation from (s, Ψ) pairs to VPG vertices and edges.
+/// However, to avoid the complication of merging sub-results we immediately
+/// store the vertices and edges into mutable vectors. Furthermore, to avoid
+/// stack overflows we use a breadth-first search approach with a queue. This
+/// means that during queuing we immediately assign a fresh index to each (s, Ψ)
+/// pair (if it does not yet exist) and then queue it to assign its actual
+/// values later on.
 struct Translation<'a> {
     vertex_map: IndexedSet<(StateIndex, Formula<'a>)>,
     vertices: Vec<(Player, Priority)>,
     edges: Vec<(VertexIndex, BDDFunction, VertexIndex)>,
+
+    // Used for the breadth first search.
+    queue: Vec<(StateIndex, Formula<'a>, VertexIndex)>,
 
     /// Set to true to ensure that the resulting VPG edge relation is total
     make_total: bool,
@@ -113,6 +124,7 @@ struct Translation<'a> {
 }
 
 impl<'a> Translation<'a> {
+    /// Creates a new translation instance.
     fn new(
         fts: &'a FeatureTransitionSystem,
         parsed_labels: &'a Vec<MultiAction>,
@@ -124,12 +136,39 @@ impl<'a> Translation<'a> {
             vertex_map: IndexedSet::new(),
             vertices: Vec::new(),
             edges: Vec::new(),
+            queue: Vec::new(),
             fts,
             parsed_labels,
             equation_system,
             make_total,
             true_bdd,
         }
+    }
+    
+    /// Perform the actual translation.
+    fn translate(
+        &mut self,
+        initial_state: StateIndex,
+        initial_equation_index: usize,
+    ) -> Result<(), MercError> {
+
+        // We store (state, formula, N) into the queue, where N is the vertex number assigned to this pair. This means
+        // that during the traversal we can assume this N to exist.
+        self.queue = vec![(initial_state, Formula::Equation(initial_equation_index), VertexIndex::new(0))];
+        self.vertices.push((Player::Odd, Priority::new(0))); // Placeholder for the initial vertex
+
+        while let Some((s, formula, vertex_index)) = self.queue.pop() {
+            match formula {
+                Formula::StateFrm(f) => {
+                    self.translate_vertex(s, f, vertex_index);
+                }
+                Formula::Equation(i) => {
+                    self.translate_equation(s, i, vertex_index);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Translate a single vertex (s, Ψ) into the variability parity game vertex and its outgoing edges.
@@ -140,26 +179,11 @@ impl<'a> Translation<'a> {
     /// The `vertex_map` is used to keep track of already translated vertices.
     ///
     /// This function is recursively called for subformulas.
-    pub fn translate_vertex(&mut self, s: StateIndex, formula: &'a StateFrm) -> Result<VertexIndex, MercError> {
-        let (index, inserted) = self.vertex_map.insert((s, Formula::StateFrm(formula)));
-        let vertex_index = VertexIndex::new(*index);
-
-        if !inserted {
-            // Returns the existing vertex.
-            return Ok(vertex_index);
-        }
-
-        // New vertex should be created, and this mapping is dense
-        debug_assert_eq!(
-            vertex_index,
-            self.vertices.len(),
-            "Vertex indices should be assigned sequentially"
-        );
-
+    pub fn translate_vertex(&mut self, s: StateIndex, formula: &'a StateFrm, vertex_index: VertexIndex) {
         match formula {
             StateFrm::True => {
                 // (s, true) → odd, 0
-                self.vertices.push((Player::Odd, Priority::new(0)));
+                self.vertices[vertex_index] = (Player::Odd, Priority::new(0));
 
                 if self.make_total {
                     // Self-loop
@@ -168,7 +192,7 @@ impl<'a> Translation<'a> {
             }
             StateFrm::False => {
                 // (s, false) → even, 0
-                self.vertices.push((Player::Even, Priority::new(0)));
+                self.vertices[vertex_index] = (Player::Even, Priority::new(0));
 
                 if self.make_total {
                     // Self-loop
@@ -179,18 +203,18 @@ impl<'a> Translation<'a> {
                 match op {
                     StateFrmOp::Conjunction => {
                         // (s, Ψ_1 ∧ Ψ_2) →_P odd, (s, Ψ_1) and (s, Ψ_2), 0
-                        self.vertices.push((Player::Odd, Priority::new(0)));
-                        let s_psi_1 = self.translate_vertex(s, lhs)?;
-                        let s_psi_2 = self.translate_vertex(s, rhs)?;
+                        self.vertices[vertex_index] = (Player::Odd, Priority::new(0));
+                        let s_psi_1 = self.queue_vertex(s, Formula::StateFrm(lhs));
+                        let s_psi_2 = self.queue_vertex(s, Formula::StateFrm(rhs));
 
                         self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_1));
                         self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_2));
                     }
                     StateFrmOp::Disjunction => {
                         // (s, Ψ_1 ∨ Ψ_2) →_P even, (s, Ψ_1) and (s, Ψ_2), 0
-                        self.vertices.push((Player::Even, Priority::new(0)));
-                        let s_psi_1 = self.translate_vertex(s, lhs)?;
-                        let s_psi_2 = self.translate_vertex(s, rhs)?;
+                        self.vertices[vertex_index] = (Player::Even, Priority::new(0));
+                        let s_psi_1 = self.queue_vertex(s, Formula::StateFrm(lhs));
+                        let s_psi_2 = self.queue_vertex(s, Formula::StateFrm(rhs));
 
                         self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_1));
                         self.edges.push((vertex_index, self.true_bdd.clone(), s_psi_2));
@@ -206,9 +230,9 @@ impl<'a> Translation<'a> {
                     .find_equation_by_identifier(identifier)
                     .expect("Variable must correspond to an equation");
 
-                self.vertices.push((Player::Odd, Priority::new(0))); // The priority and owner do not matter here
-                let equation_vertex = self.translate_equation(s, i);
-                self.edges.push((vertex_index, self.true_bdd.clone(), equation_vertex?));
+                self.vertices[vertex_index] = (Player::Odd, Priority::new(0)); // The priority and owner do not matter here
+                let equation_vertex = self.queue_vertex(s, Formula::Equation(i));
+                self.edges.push((vertex_index, self.true_bdd.clone(), equation_vertex));
             }
             StateFrm::Modality {
                 operator,
@@ -218,7 +242,7 @@ impl<'a> Translation<'a> {
                 match operator {
                     ModalityOperator::Box => {
                         // (s, [a] Ψ) → odd, (s', Ψ) for all s' with s -a-> s', 0
-                        self.vertices.push((Player::Odd, Priority::new(0)));
+                        self.vertices[vertex_index] = (Player::Odd, Priority::new(0));
 
                         let mut matched = false;
                         for transition in self.fts.outgoing_transitions(s) {
@@ -228,7 +252,7 @@ impl<'a> Translation<'a> {
 
                             if match_regular_formula(formula, &action) {
                                 matched = true;
-                                let s_prime_psi = self.translate_vertex(transition.to, expr)?;
+                                let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((
                                     vertex_index,
@@ -245,7 +269,7 @@ impl<'a> Translation<'a> {
                     }
                     ModalityOperator::Diamond => {
                         // (s, <a> Ψ) → even, (s', Ψ) for all s' with s -a-> s', 0
-                        self.vertices.push((Player::Even, Priority::new(0)));
+                        self.vertices[vertex_index] = (Player::Even, Priority::new(0));
 
                         let mut matched = false;
                         for transition in self.fts.outgoing_transitions(s) {
@@ -253,7 +277,7 @@ impl<'a> Translation<'a> {
 
                             if match_regular_formula(formula, &action) {
                                 matched = true;
-                                let s_prime_psi = self.translate_vertex(transition.to, expr)?;
+                                let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((
                                     vertex_index,
@@ -274,51 +298,45 @@ impl<'a> Translation<'a> {
                 unimplemented!("Cannot translate formula {}", formula);
             }
         }
-
-        debug_assert!(
-            vertex_index <= self.vertices.len() - 1,
-            "New vertex must have been added for {formula}"
-        );
-        Ok(vertex_index)
     }
 
     /// Applies the translation to the given (s, equation) vertex.
-    fn translate_equation(&mut self, s: StateIndex, equation_index: usize) -> Result<VertexIndex, MercError> {
-        let (index, inserted) = self.vertex_map.insert((s, Formula::Equation(equation_index)));
-        let vertex_index = VertexIndex::new(*index);
-
-        if !inserted {
-            // Returns the existing vertex.
-            return Ok(vertex_index);
-        }
-
+    fn translate_equation(&mut self, s: StateIndex, equation_index: usize, vertex_index: VertexIndex) {
         let equation = self.equation_system.equation(equation_index);
         match equation.operator() {
             FixedPointOperator::Least => {
                 // (s, μ X. Ψ) →_P odd, (s, Ψ[x := μ X. Ψ]), 2 * floor(AD(Ψ)/2) + 1. In Rust division is already floor.
-                self.vertices.push((
+                self.vertices[vertex_index] = (
                     Player::Odd,
                     Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2) + 1),
-                ));
-                let s_psi = self.translate_vertex(s, equation.body())?;
+                );
+                let s_psi = self.queue_vertex(s, Formula::StateFrm(equation.body()));
                 self.edges.push((vertex_index, self.true_bdd.clone(), s_psi));
             }
             FixedPointOperator::Greatest => {
                 // (s, ν X. Ψ) →_P even, (s, Ψ[x := ν X. Ψ]), 2 * (AD(Ψ)/2). In Rust division is already floor.
-                self.vertices.push((
+                self.vertices[vertex_index] = (
                     Player::Even,
                     Priority::new(2 * (self.equation_system.alternation_depth(equation_index) / 2)),
-                ));
-                let s_psi = self.translate_vertex(s, equation.body())?;
+                );
+                let s_psi = self.queue_vertex(s, Formula::StateFrm(equation.body()));
                 self.edges.push((vertex_index, self.true_bdd.clone(), s_psi));
             }
         }
+    }
 
-        debug_assert!(
-            vertex_index <= self.vertices.len() - 1,
-            "New vertex must have been added for equation {equation_index}"
-        );
-        Ok(vertex_index)
+    /// Queues a new pair to be translated, returning its vertex index.
+    fn queue_vertex(&mut self, s: StateIndex, formula: Formula<'a>) -> VertexIndex {
+        let (index, inserted) = self.vertex_map.insert((s, formula.clone()));
+        let vertex_index = VertexIndex::new(*index);
+
+        if inserted {
+            // New vertex, assign placeholder values
+            self.vertices.resize(*vertex_index + 1, (Player::Odd, Priority::new(0)));
+            self.queue.push((s, formula, vertex_index));
+        }
+
+        vertex_index
     }
 }
 
