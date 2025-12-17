@@ -350,6 +350,8 @@ fn signature_refinement_weak<L: LTS>(lts: &L) -> IndexedPartition
 where {
     // Avoids reallocations when computing the signature.
     let mut arena = Bump::new();
+    let mut arena2 = Bump::new();
+
     let mut builder = SignatureBuilder::default();
 
     // Put all the states in the initial partition { S }.
@@ -360,9 +362,10 @@ where {
     let mut next_partition = IndexedPartition::new(lts.num_of_states());
     let mut state_to_signature: Vec<Option<usize>> = Vec::new();
     let mut key_to_signature: Vec<Signature> = Vec::new();
-    let mut state_to_taus: Vec<Signature> = Vec::new();
+    let mut key_to_taus: Vec<Signature> = Vec::new();
     state_to_signature.resize_with(lts.num_of_states(), || None);
-    state_to_taus.resize_with(lts.num_of_states(), Signature::default);
+    let dummy_signature = [(LabelIndex::new(0), BlockIndex::new(0))];
+    key_to_taus.push(Signature::new(&dummy_signature)); // Dummy tau signature
     // Refine partitions until stable.
     let mut old_count = 1;
     let mut iteration = 0;
@@ -387,32 +390,15 @@ where {
 
         state_to_signature.clear();
         key_to_signature.clear();
-        state_to_taus.clear();
 
         state_to_signature.resize_with(lts.num_of_states(), || None);
-        state_to_taus.resize_with(lts.num_of_states(), Signature::default);
         // Safety: The current signatures have been removed, so it safe to reuse the memory.
         let state_to_signature: &'_ mut Vec<Option<usize>> = unsafe { std::mem::transmute(&mut state_to_signature) };
         let id: &'_ mut FxHashMap<Signature<'_>, BlockIndex> = unsafe { std::mem::transmute(&mut id) };
         let key_to_signature: &'_ mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut key_to_signature) };
-        let state_to_taus: &'_ mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut state_to_taus) };
+        // let state_to_taus: &'_ mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut state_to_taus) };
         // Remove the current signatures.
         arena.reset();
-
-        // First compute all tau-sigs
-        for state_index in lts.iter_states() {
-            weak_bisim_signature_sorted_taus(state_index, lts, &partition, &state_to_taus, &mut builder);
-
-            trace!("State {state_index} tau-signature {:?}", builder);
-
-            // Keep track of the index for every state, either use the arena to allocate space or simply borrow the value.
-            let slice = if builder.is_empty() {
-                empty_slice
-            } else {
-                arena.alloc_slice_copy(&builder)
-            };
-            state_to_taus[state_index] = Signature::new(slice);
-        }
 
         for state_index in lts.iter_states() {
             // Compute the Presignature of a single state
@@ -440,7 +426,7 @@ where {
                 next_partition.set_block(state_index, BlockIndex::new(inductive_key));
             } else {
                 // If not: expand the signature completely. 
-                weak_bisim_signature_sorted_full(state_index, lts, &partition, &state_to_taus, &state_to_signature, &key_to_signature, &mut builder);
+                weak_bisim_signature_sorted_full(state_index, lts, &partition, &key_to_taus, &state_to_signature, &key_to_signature, &mut builder);
                 trace!("State {state_index} final signature {:?}", builder.as_slice());
 
                 // Keep track of the index for every state
@@ -468,6 +454,28 @@ where {
         }
 
         iteration += 1;
+
+        key_to_taus.clear();
+        let key_to_taus: &'_ mut Vec<Signature<'_>> = unsafe { std::mem::transmute(&mut key_to_taus) };
+        arena2.reset();
+
+        key_to_taus.resize_with(next_partition.num_of_blocks(), || Signature::default());
+        // Set the new Taus
+        for key in 0..key_to_signature.len() {
+            let filtered: Vec<_> = key_to_signature[key]
+                .as_slice()
+                .iter()
+                .filter(|&&(label, _state)| label == LabelIndex::new(0))
+                .copied()
+                .collect();
+            
+            let slice = if filtered.is_empty() {
+                empty_slice
+            } else {
+                arena2.alloc_slice_copy(&filtered)
+            };
+            key_to_taus[key] = Signature::new(slice);
+        }
 
         debug_assert!(
             iteration <= lts.num_of_states().max(2),
