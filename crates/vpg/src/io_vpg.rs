@@ -282,8 +282,6 @@ impl fmt::Display for FormatConfig<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::create_variables;
-
     use super::*;
 
     #[test]
