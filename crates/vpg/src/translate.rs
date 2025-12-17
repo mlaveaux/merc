@@ -168,6 +168,7 @@ impl<'a> Translation<'a> {
         self.vertices.push((Player::Odd, Priority::new(0))); // Placeholder for the initial vertex
 
         while let Some((s, formula, vertex_index)) = self.queue.pop() {
+            debug!("Translating vertex {}: (s={}, formula={:?})", vertex_index, s, formula);
             self.progress.print(self.vertices.len());
             match formula {
                 Formula::StateFrm(f) => {

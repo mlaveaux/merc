@@ -73,9 +73,11 @@ struct SolveArgs {
     filename: String,
 
     /// The parity game file format
+    #[arg(long)]
     format: Option<ParityGameFormat>,
 
     /// For variability parity games there are several ways for solving.
+    #[arg(long)]
     solve_variant: Option<ZielonkaVariant>,
 
     /// Whether to output the solution for every single vertex, not just in the initial vertex.
@@ -207,7 +209,14 @@ fn handle_solve(args: SolveArgs, timing: &mut Timing) -> Result<(), MercError> {
                 println!("W{index}: ");
 
                 for (cube, vertices) in w {
-                    print!("For product {} the following vertices are in: {}", FormatConfig(&cube), vertices.iter_ones().format(", "));
+                    println!(
+                        "For product {} the following vertices are in: {}",
+                        FormatConfig(&cube),
+                        vertices
+                            .iter_ones()
+                            .take(if args.full_solution { usize::MAX } else { 1 }) // Take only first if we don't want full solution
+                            .format(", ")
+                    );
                 }
             }
         } else {

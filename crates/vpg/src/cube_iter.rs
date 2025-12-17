@@ -109,19 +109,19 @@ impl Iterator for CubeIter<'_> {
 /// one cube with all don't cares, while this iterator yields all possible cubes.
 pub struct CubeIterAll<'a> {
     bdd: &'a BDDFunction,
-
-    cube: Vec<OptBool>,
-
-    stop: bool,
-
+    // The variables used in the BDD.
     variables: &'a Vec<BDDFunction>,
+    // The last cube generated.
+    cube: Vec<OptBool>,
+    // Whether to stop the iteration.
+    done: bool,
 }
 
 impl<'a> CubeIterAll<'a> {
     /// Creates a new cube iterator that iterates over the single cube
     pub fn new(variables: &'a Vec<BDDFunction>, bdd: &'a BDDFunction) -> CubeIterAll<'a> {
         let cube = Vec::from_iter((0..variables.len()).map(|_| OptBool::False));
-        Self { bdd, cube, variables, stop: false }
+        Self { bdd, cube, variables, done: false }
     }
 }
 
@@ -129,7 +129,7 @@ impl Iterator for CubeIterAll<'_> {
     type Item = Result<(Vec<OptBool>, BDDFunction), MercError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.stop {
+        if self.done {
             return None;
         }
 
@@ -164,7 +164,7 @@ impl Iterator for CubeIterAll<'_> {
             if tmp.satisfiable() {
                 let result = self.cube.clone();
                 // The next iteration overflows, we are done
-                self.stop = !increment(&mut self.cube);
+                self.done = !increment(&mut self.cube);
                 return Some(Ok((result, tmp)));
             }
         }
@@ -189,6 +189,8 @@ fn increment(cube: &mut Vec<OptBool>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use itertools::Itertools;
 
     use merc_utilities::MercError;
@@ -196,6 +198,7 @@ mod tests {
     use oxidd::bdd::BDDFunction;
     use oxidd::util::OptBool;
 
+    use crate::CubeIter;
     use crate::CubeIterAll;
     use crate::FormatConfig;
     use crate::create_variables;
@@ -204,7 +207,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
-    fn test_random_cube_iter() {
+    fn test_random_cube_iter_all() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
             let set = random_bitvectors(rng, 5, 20);
@@ -217,13 +220,33 @@ mod tests {
             // Check that the cube iterator yields all the expected cubes
             let result: Result<Vec<(Vec<OptBool>, BDDFunction)>, MercError> = CubeIterAll::new(&variables, &bdd).collect();
             let cubes: Vec<(Vec<OptBool>, BDDFunction)> = result.unwrap();
-            for (bits, _) in &cubes{
+            for (bits, _) in &cubes {
                 assert!(set.contains(&bits), "Cube {} not in expected set", FormatConfig(&bits));
             }
 
             for cube in &set {
                 let found = cubes.iter().find(|(bits, _)| bits == cube);
                 assert!(found.is_some(), "Expected cube {} not found", FormatConfig(cube));
+            }
+        })
+    }
+
+    #[test]
+    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_cube_iter() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let set = random_bitvectors(rng, 5, 20);
+            println!("Set: {:?}", set.iter().format_with(", ", |v, f| f(&FormatConfig(v))));
+
+            let variables = create_variables(&manager_ref, 5).unwrap();
+
+            let bdd = from_iter(&manager_ref, &variables, set.iter()).unwrap();
+
+            // Check that it does not yield duplicates.
+            let mut seen = HashSet::new();
+            for cube in CubeIter::new(&bdd) {
+                assert!(seen.insert(cube.clone()), "Duplicate cube found: {}", FormatConfig(&cube));
             }
         })
     }

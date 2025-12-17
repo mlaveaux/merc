@@ -15,7 +15,6 @@ use oxidd::Manager;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
-use oxidd::util::OutOfMemory;
 
 use merc_lts::LTS;
 use merc_lts::LabelledTransitionSystem;
@@ -72,7 +71,7 @@ fn data_expr_to_bdd(
     manager_ref: &BDDManagerRef,
     variables: &HashMap<String, BDDFunction>,
     expr: &DataExpr,
-) -> Result<BDDFunction, OutOfMemory> {
+) -> Result<BDDFunction, MercError> {
     match expr {
         DataExpr::Application { function, arguments } => {
             match function.as_ref() {
@@ -82,10 +81,9 @@ fn data_expr_to_bdd(
                         let variable = format!("{}", arguments[0]);
                         let then_branch = data_expr_to_bdd(manager_ref, variables, &arguments[1])?;
                         let else_branch = data_expr_to_bdd(manager_ref, variables, &arguments[2])?;
-                        variables
-                            .get(&variable)
-                            .unwrap_or_else(|| panic!("Variable {variable} not found"))
-                            .ite(&then_branch, &else_branch)
+                        Ok(variables
+                            .get(&variable).ok_or(format!("Variable \"{}\" not found in feature diagram", variable))?
+                            .ite(&then_branch, &else_branch)?)
                     } else {
                         unimplemented!("Conversion of data expression to BDD not implemented for this function");
                     }

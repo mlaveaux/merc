@@ -282,10 +282,12 @@ impl fmt::Display for FormatConfig<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::create_variables;
+
     use super::*;
 
     #[test]
-    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_read_vpg() {
         let manager = oxidd::bdd::new_manager(2048, 1024, 8);
 
