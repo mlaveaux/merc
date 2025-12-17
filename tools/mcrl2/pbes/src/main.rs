@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use clap::Subcommand;
+use log::info;
 
 use mcrl2::Pbes;
 use mcrl2::set_reporting_level;
@@ -103,7 +104,13 @@ fn main() -> Result<ExitCode, MercError> {
                 println!("false");
             }
         } else {
-            algorithm.find_symmetries(args.partition_data_sorts);
+            for permutation in algorithm.find_symmetries(args.partition_data_sorts) { 
+                info!("Found candidate: {}", permutation);
+
+                if algorithm.check_symmetry(&permutation) {
+                    info!("Found symmetry: {}", permutation);
+                }
+            }
         }
     }
 

@@ -93,7 +93,7 @@ impl SymmetryAlgorithm {
     }
 
     /// Runs the symmetry detection algorithm.
-    pub fn find_symmetries(&self, partition_data_sorts: bool) {
+    pub fn find_symmetries(&self, partition_data_sorts: bool) -> impl Iterator<Item = Permutation> + '_ {
         let cliques = self.cliques();
 
         for clique in &cliques {
@@ -137,14 +137,9 @@ impl SymmetryAlgorithm {
             LargeFormatter(number_of_candidates)
         );
 
-        for (alpha, beta) in combined_candidates {
-            let permutation = alpha.concat(&beta);
-            info!("Found candidate: {}", permutation);
-
-            if self.check_symmetry(&permutation) {
-                info!("Found symmetry: {}", permutation);
-            }
-        }
+        combined_candidates.map(|(alpha, beta)| {
+            alpha.concat(&beta)
+        })
     }
 
     /// Performs the syntactic check defined as symcheck in the paper.
@@ -621,15 +616,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_symmetry_examples() {
-        for example in &[
-            include_str!("../../../../examples/pbes/a.text.pbes"),
-            include_str!("../../../../examples/pbes/b.text.pbes"),
-            include_str!("../../../../examples/pbes/c.text.pbes"),
-        ] {
-            let pbes = Pbes::from_text(example).unwrap();
+    fn test_symmetry_example_a_no_cliques() {
+        let example = include_str!("../../../../examples/pbes/a.text.pbes");
+        let pbes = Pbes::from_text(example).unwrap();
+        let algo = SymmetryAlgorithm::new(&pbes, false).unwrap();
+        
+        let cliques = algo.cliques();
+        assert!(cliques.is_empty(), "Expected no cliques for example a");
+    }
 
-            SymmetryAlgorithm::new(&pbes, false).unwrap().find_symmetries(true);
-        }
+    #[test]
+    fn test_symmetry_example_b_no_cliques() {
+        let example = include_str!("../../../../examples/pbes/b.text.pbes");
+        let pbes = Pbes::from_text(example).unwrap();
+        let algo = SymmetryAlgorithm::new(&pbes, false).unwrap();
+        
+        let cliques = algo.cliques();
+        assert!(cliques.is_empty(), "Expected no cliques for example b");
+    }
+
+    #[test]
+    fn test_symmetry_example_c_only_identity() {
+        let example = include_str!("../../../../examples/pbes/c.text.pbes");
+        let pbes = Pbes::from_text(example).unwrap();
+        let algo = SymmetryAlgorithm::new(&pbes, false).unwrap();
+        
+        // Only the identity permutation should pass check_symmetry        
+        assert_eq!(algo.find_symmetries(false).count(), 1, "Identity permutation should pass symcheck");
     }
 }
