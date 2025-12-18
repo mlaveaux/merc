@@ -31,6 +31,8 @@ impl Permutation {
 
         // Sort by domain for deterministic representation.
         mapping.sort_unstable_by_key(|(d, _)| *d);
+        // debug_assert!(mapping.iter().all(|(from, to)| from != to), "Mapping should not contain identity mappings.");
+        debug_assert!(mapping.iter().duplicates().count() == 0, "Mapping should not contain duplicate domain entries.");
 
         Permutation { mapping }
     }
@@ -105,6 +107,11 @@ impl Permutation {
         }
 
         key // It is the identity on unspecified elements.
+    }
+
+    /// Check whether this permutation is the identity permutation.
+    pub fn is_identity(&self) -> bool {
+        self.mapping.iter().all(|(d, v)| d == v)
     }
 }
 
