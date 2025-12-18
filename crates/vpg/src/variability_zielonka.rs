@@ -100,6 +100,9 @@ struct VariabilityZielonkaSolver<'a> {
     /// Temporary storage for vertices per priority.
     priority_vertices: Vec<Vec<VertexIndex>>,
 
+    /// The BDD function representing the empty configuration.
+    false_bdd: BDDFunction,
+
     /// Keeps track of the total number of recursive calls.
     recursive_calls: usize,
 }
@@ -120,6 +123,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             priority_vertices[prio].push(v);
         }
 
+        let false_bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
+
         Self {
             game,
             manager_ref,
@@ -129,17 +134,18 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             priority_vertices,
             recursive_calls: 0,
             alternative_solving,
+            false_bdd,
         }
     }
 
     /// Solves the variability parity game for the given set of vertices V.
-    fn solve_recursive(&mut self, gamma: Submap) -> Result<[Submap; 2], MercError> {
+    fn solve_recursive(&mut self, gamma: Submap) -> Result<(Submap, Submap), MercError> {
         self.recursive_calls += 1;
 
         // 1. if \gamma == \epsilon then
         if gamma.is_empty() {
             trace!("Empty subgame");
-            return Ok([gamma.clone(), gamma]);
+            return Ok((gamma.clone(), gamma));
         }
 
         // 5. m := max { p(v) | v in V && \gamma(v) \neq \emptyset }
@@ -152,6 +158,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // 7. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
         let mut mu = Submap::new(
             self.manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)),
+            self.false_bdd.clone(),
             self.game.num_of_vertices(),
         );
 
@@ -172,41 +179,45 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 9. (omega'_0, omega'_1) := solve(\gamma \ \alpha)
         debug!("begin solve_rec(gamma \\ alpha)");
-        let mut omega_prime = self.solve_recursive(gamma.clone().minus(&alpha)?)?;
+        let (mut omega1_0, mut omega1_1) = self.solve_recursive(gamma.clone().minus(&alpha)?)?;
         debug!("end solve_rec(gamma \\ alpha)");
         debug!(
             "|omega'_0| = {}, |omega'_1| = {}",
-            omega_prime[0].number_of_non_empty(),
-            omega_prime[1].number_of_non_empty(),
+            omega1_0.number_of_non_empty(),
+            omega1_1.number_of_non_empty(),
         );
 
-        if omega_prime[not_x.to_index()].is_empty() {
+        if index(&mut omega1_0, &mut omega1_1, not_x).is_empty() {
             // 11. omega_x := omega'_x \cup alpha
-            omega_prime[x.to_index()] = gamma;
-            omega_prime[not_x.to_index()].clear()?;
+            *index(&mut omega1_0, &mut omega1_1, x) = gamma;
+            index(&mut omega1_0, &mut omega1_1, not_x).clear()?;
             // 20. return (omega_0, omega_1)
             debug!("return (omega'_0, omega'_1)");
-            self.check_partition(&omega_prime)?;
-            return Ok(omega_prime);
+            return Ok((omega1_0, omega1_1));
         }
 
-        // 14. \beta := attr_notalpha(\omega'_notalpha)
-        let mut omega_prime_opponent = std::mem::take(&mut omega_prime[not_x.to_index()]);
+        // 14. \beta := attr_notalpha(\omega'_notx)
+        let omega_prime_opponent = match not_x {
+            Player::Even => omega1_0,
+            Player::Odd => omega1_1,
+        };
+
         let beta = self.attractor(not_x, &gamma, omega_prime_opponent)?;
 
         // 15. (omega''_0, omega''_1) := solve(gamma \ beta)
         debug!("begin solve_rec(gamma \\ beta)");
-        let mut omega_double_prime = self.solve_recursive(gamma.minus(&beta)?)?;
+        let (mut omega2_0, mut omega2_1) = self.solve_recursive(gamma.minus(&beta)?)?;
         debug!("end solve_rec(gamma \\ beta)");
 
-        // 17. omega_notx := omega'_notx \cup \beta
-        let mut omega_double_prime_opponent = std::mem::take(&mut omega_double_prime[not_x.to_index()]);
-        omega_double_prime[not_x.to_index()] = omega_double_prime_opponent.or(&beta)?;
+        // 17. omega''_notx := omega''_notx \cup \beta
+        let omega2_opponent = index(&mut omega2_0, &mut omega2_1, not_x);
+
+        // Not completely optimal.
+        *omega2_opponent = omega2_opponent.clone().or(&beta)?;
 
         // 20. return (omega_0, omega_1)
         debug!("return (omega''_0, omega''_1)");
-        self.check_partition(&omega_double_prime)?;
-        Ok(omega_double_prime)
+        Ok((omega2_0, omega2_1))
     }
 
     /// Left-optimised Zielonka solver that has improved theoretical complexity, but might be slower in practice.
@@ -483,13 +494,17 @@ pub struct Submap {
 
     /// Invariant: counts the number of non-empty positions in the mapping.
     non_empty_count: usize,
+
+    /// The BDD function representing the empty configuration.
+    false_bdd: BDDFunction,
 }
 
 impl Submap {
     /// Creates a new empty Submap for the given number of vertices.
-    fn new(initial: BDDFunction, num_of_vertices: usize) -> Self {
+    fn new(initial: BDDFunction, false_bdd: BDDFunction, num_of_vertices: usize) -> Self {
         Self {
             mapping: vec![initial.clone(); num_of_vertices],
+            false_bdd,
             non_empty_count: if initial.satisfiable() {
                 num_of_vertices // If the initial function is satisfiable, all entries are non-empty.
             } else {
@@ -542,7 +557,7 @@ impl Submap {
     /// Clears the submap, setting all entries to the empty function.
     fn clear(&mut self) -> Result<(), MercError> {
         for func in self.mapping.iter_mut() {
-            *func = func.nor(&func)?;
+            *func = self.false_bdd.clone();
         }
         self.non_empty_count = 0;
 
@@ -553,7 +568,7 @@ impl Submap {
     fn minus(mut self, other: &Submap) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
             let was_satisfiable = func.satisfiable();
-            *func = crate::minus(func, &other.mapping[i])?;
+            *func = minus(func, &other.mapping[i])?;
             let is_satisfiable = func.satisfiable();
 
             if was_satisfiable && !is_satisfiable {
@@ -593,6 +608,22 @@ impl Submap {
 
         Ok(())
     }
+
+    /// Computes the difference between this submap and another function.
+    fn minus_function(&mut self, configuration: &BDDFunction) -> Result<(), MercError> {
+        for (i, func) in self.mapping.iter_mut().enumerate() {
+            let was_satisfiable = func.satisfiable();
+            *func = minus(func, &configuration)?;
+            let is_satisfiable = func.satisfiable();
+
+            if was_satisfiable && !is_satisfiable {
+                self.non_empty_count -= 1;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Returns an iterator over all entries.
     pub fn iter(&self) -> impl Iterator<Item = (VertexIndex, &BDDFunction)> {
         self.mapping
@@ -622,21 +653,23 @@ impl fmt::Debug for Submap {
 #[cfg(test)]
 mod tests {
     use merc_macros::merc_test;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::util::AllocResult;
     use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
-    use oxidd::bdd::BDDFunction;
-    use oxidd::util::AllocResult;
 
     use merc_utilities::random_test;
 
-    use crate::PG;
-    use crate::VertexIndex;
-    use crate::ZielonkaVariant;
+    use crate::FormatConfig;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
+    use crate::solve_variability_product_zielonka;
     use crate::solve_variability_zielonka;
     use crate::solve_zielonka;
+    use crate::VertexIndex;
+    use crate::ZielonkaVariant;
+    use crate::PG;
 
     #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
@@ -648,7 +681,8 @@ mod tests {
             })
             .expect("Could not create variables");
 
-        let mut submap = super::Submap::new(manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)), 3);
+        let false_bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
+        let mut submap = super::Submap::new(false_bdd.clone(), false_bdd, 3);
 
         assert_eq!(submap.len(), 3);
         assert_eq!(submap.non_empty_count, 0);
