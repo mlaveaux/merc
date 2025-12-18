@@ -36,7 +36,7 @@ pub fn weak_bisimulation(lts: impl LTS, timing: &mut Timing) -> (LabelledTransit
 
     let incoming = IncomingTransitions::new(&tau_loop_free_lts);
 
-    let mut progress = TimeProgress::new(
+    let progress = TimeProgress::new(
         |num_of_blocks: usize| {
             info!("Found {} blocks...", num_of_blocks);
         },

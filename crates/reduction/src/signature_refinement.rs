@@ -226,7 +226,7 @@ where
     // Used to keep track of dirty blocks.
     let mut worklist = vec![BlockIndex::new(0)];
 
-    let mut progress = TimeProgress::new(
+    let progress = TimeProgress::new(
         |(iteration, blocks)| {
             info!("Iteration {iteration}, found {blocks} blocks...");
         },
@@ -365,7 +365,7 @@ where
     let mut old_count = 1;
     let mut iteration = 0;
 
-    let mut progress = TimeProgress::new(
+    let progress = TimeProgress::new(
         |(iteration, blocks)| {
             debug!("Iteration {iteration}, found {blocks} blocks...",);
         },

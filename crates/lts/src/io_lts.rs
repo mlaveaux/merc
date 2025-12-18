@@ -54,7 +54,7 @@ pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     let mut initial_state: Option<StateIndex> = None;
     let mut builder = LtsBuilder::new(Vec::new(), hidden_labels);
 
-    let mut progress = TimeProgress::new(
+    let progress = TimeProgress::new(
         |num_of_transitions| {
             info!("Read {num_of_transitions} transitions...");
         },
