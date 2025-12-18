@@ -47,6 +47,7 @@ use crate::ATermString;
 use crate::DataExpression;
 use crate::DataSpecification;
 use crate::DataVariable;
+use crate::lock_global;
 
 /// mcrl2::pbes_system::pbes
 pub struct Pbes {
@@ -56,6 +57,7 @@ pub struct Pbes {
 impl Pbes {
     /// Load a PBES from a file.
     pub fn from_file(filename: &str) -> Result<Self, MercError> {
+        let _guard = lock_global();
         Ok(Pbes {
             pbes: mcrl2_load_pbes_from_pbes_file(filename)?,
         })
@@ -63,6 +65,7 @@ impl Pbes {
 
     /// Load a PBES from a textual pbes file.
     pub fn from_text_file(filename: &str) -> Result<Self, MercError> {
+        let _guard = lock_global();
         Ok(Pbes {
             pbes: mcrl2_load_pbes_from_text_file(filename)?,
         })
@@ -70,6 +73,7 @@ impl Pbes {
 
     /// Load a PBES from text.
     pub fn from_text(input: &str) -> Result<Self, MercError> {
+        let _guard = lock_global();
         Ok(Pbes {
             pbes: mcrl2_load_pbes_from_text(input)?,
         })
