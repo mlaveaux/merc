@@ -4,7 +4,7 @@ This repository contains implementations of various model checking related algor
 
 ## Contributing
 
-The toolset is still in quite early stages, but contributions and ideas are more than welcome. Compilation requires at least rustc version 1.85.0 and we use 2024 edition rust. Then the toolset can be build using `cargo build`, by default this will build in `dev` or debug mode, and a release build can be obtained by passing `--release`. Several tools will be build that can be found in the `target/{debug, release}` directory. Some tools are implemented in different workspaces since their dependencies do not match the general tool set. See `CONTRIBUTING.md` for more information on the source code. Report bugs in the [issue tracker](https://github.com/mlaveaux/merc/issues).
+The toolset is still in quite early stages, but contributions and ideas are more than welcome. Compilation requires at least rustc version 1.85.0 and we use 2024 edition rust. Then the toolset can be build using `cargo build`, by default this will build in `dev` or debug mode, and a release build can be obtained by passing `--release`. Several tools will be build that can be found in the `target/{debug, release}` directory. Some tools are implemented in different workspaces since their dependencies do not match the general tool set. See `CONTRIBUTING.md` for more information on the source code. Report bugs in the [issue tracker](https://github.com/MERCorg/merc/issues).
 
 ## Tools
 
