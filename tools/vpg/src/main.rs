@@ -57,7 +57,7 @@ struct Cli {
     #[arg(long, global = true, default_value_t = 1)]
     oxidd_workers: u32,
 
-    #[arg(long, global = true, default_value_t = 1)]
+    #[arg(long, global = true, default_value_t = 2024)]
     oxidd_node_capacity: usize,
 
     #[arg(long, global = true)]

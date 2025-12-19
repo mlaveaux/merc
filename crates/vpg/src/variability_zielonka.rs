@@ -357,6 +357,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         self.temp_vertices.fill(false);
         for v in A.iter_vertices() {
             self.temp_queue.push(v);
+
+            // temp_vertices keeps track of which vertices are in the queue.
             self.temp_vertices.set(*v, true);
         }
 
@@ -649,6 +651,7 @@ mod tests {
     use merc_utilities::random_test;
 
     use crate::FormatConfig;
+    use crate::Submap;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
     use crate::solve_variability_product_zielonka;
@@ -670,7 +673,7 @@ mod tests {
             .expect("Could not create variables");
 
         let false_bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
-        let mut submap = super::Submap::new(false_bdd.clone(), false_bdd, 3);
+        let mut submap = Submap::new(false_bdd.clone(), false_bdd, 3);
 
         assert_eq!(submap.len(), 3);
         assert_eq!(submap.non_empty_count, 0);
