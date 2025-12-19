@@ -141,7 +141,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
             }
         }
 
-        progress.print(vertex_count / num_of_vertices);
+        progress.print(vertex_count * 100 / num_of_vertices);
         vertex_count += 1;
     }
 
