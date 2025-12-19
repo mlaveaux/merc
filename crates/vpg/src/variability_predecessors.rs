@@ -46,7 +46,7 @@ impl VariabilityPredecessors {
             for edge in game.outgoing_conf_edges(state_index) {
                 state2incoming.update(*edge.to(), |start| {
                     edges_from.set(*start, state_index);
-                    edges_configuration.push(edge.configuration().clone());
+                    edges_configuration[*start] = edge.configuration().clone();
                     *start += 1;
                 });
             }
