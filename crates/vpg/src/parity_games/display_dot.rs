@@ -6,7 +6,7 @@ use oxidd::util::OptBool;
 use crate::CubeIter;
 use crate::Player;
 use crate::VariabilityParityGame;
-use crate::parity_game::PG;
+use crate::PG;
 
 /// Helper to render a parity game in Graphviz DOT format.
 pub struct PgDot<'a, G: PG> {
