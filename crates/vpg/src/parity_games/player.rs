@@ -11,7 +11,8 @@ pub enum Player {
 }
 
 impl Player {
-    /// Constructs a player from its index.
+    /// Constructs a player from its index. This can be used in algorithms where
+    /// we have a 2-array, and 0 is Even and 1 is Odd.
     pub fn from_index(index: u8) -> Self {
         match index {
             0 => Player::Even,
@@ -29,7 +30,7 @@ impl Player {
         }
     }
 
-    /// Returns the index of the player.
+    /// Returns the index of the player, the inverse of [`from_index`].
     pub fn to_index(&self) -> usize {
         match self {
             Player::Even => 0,

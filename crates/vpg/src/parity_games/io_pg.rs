@@ -35,8 +35,8 @@ pub enum IOError {
 ///
 /// The format starts with a header, followed by the vertices
 ///
-/// parity <num_of_vertices>;
-/// <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
+/// `parity <num_of_vertices>;`
+/// `<index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;`
 pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
     let mut lines = LineIterator::new(reader);
     lines.advance();

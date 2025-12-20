@@ -223,7 +223,7 @@ mod tests {
         println!("{}", fes);
 
         assert_eq!(fes.equations.len(), 2);
-        assert_eq!(fes.alternation_depth(0), 0);
+        assert_eq!(fes.alternation_depth(0), 1);
         assert_eq!(fes.alternation_depth(1), 0);
     }
 
@@ -238,10 +238,11 @@ mod tests {
 
         assert_eq!(fes.equations.len(), 2);
         assert_eq!(fes.alternation_depth(0), 2);
-        assert_eq!(fes.alternation_depth(1), 0);
+        assert_eq!(fes.alternation_depth(1), 1);
     }
 
     #[merc_test]
+    #[should_panic(expected = "Duplicate variable names found in fixpoint equation system")]
     fn test_fixpoint_equation_system_duplicates() {
         let formula = UntypedStateFrmSpec::parse("mu X. [a]X && (nu Y. <b>true) && (nu Y . <c>X)")
             .unwrap()

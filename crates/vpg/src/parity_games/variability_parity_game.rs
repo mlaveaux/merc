@@ -17,9 +17,14 @@ use crate::VertexIndex;
 
 /// A variability parity game is an extension of a parity game where each edge is
 /// associated with a BDD function representing the configurations in which the
-/// edge is enabled. This is also a max-priority parity game.
+/// edge is enabled. 
+/// 
+/// # Details
+/// 
+/// This is also a max-priority parity game. There is also a configuration set associated
+/// with the variability parity game, representing the overall configurations.
 pub struct VariabilityParityGame {
-    /// This is a normal parity game.
+    /// The underlying normal parity game.
     game: ParityGame,
 
     /// The overall configurations for the variability parity game.
@@ -28,7 +33,7 @@ pub struct VariabilityParityGame {
     /// The variables used in the configuration BDD.
     variables: Vec<BDDFunction>,
 
-    /// However, every edge has an associated BDD function representing the configurations
+    /// Every edge has an associated BDD function representing the configurations
     /// in which the edge is enabled.
     edges_configuration: Vec<BDDFunction>,
 }
@@ -52,7 +57,7 @@ impl<'a> Edge<'a> {
 }
 
 impl VariabilityParityGame {
-    /// Construct a new variability parity game from an iterator over transitions.
+    /// Construct a new variability parity game from an iterator over edges.
     pub fn new(
         parity_game: ParityGame,
         configuration: BDDFunction,
@@ -63,7 +68,7 @@ impl VariabilityParityGame {
         debug_assert_eq!(
             edges_configuration.len(),
             parity_game.num_of_edges(),
-            "There should be a configuration BDD for every transition"
+            "There should be a configuration BDD for every edge"
         );
 
         Self {

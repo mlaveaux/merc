@@ -7,10 +7,10 @@ use merc_utilities::TagIndex;
 
 use crate::Player;
 
-/// A unique type for the vertices.
+/// A strong type for the vertices.
 pub struct VertexTag;
 
-/// A unique type for the priorities.
+/// A strong type for the priorities.
 pub struct PriorityTag;
 
 /// The index for a vertex.
@@ -267,7 +267,7 @@ impl fmt::Debug for ParityGame {
     }
 }
 
-/// A trait for types that can be interpreted as parity games.
+/// A trait for parity games.
 pub trait PG {
     /// Returns the initial vertex of the parity game.
     fn initial_vertex(&self) -> VertexIndex;

@@ -58,7 +58,7 @@ impl Predecessors {
         }
     }
 
-    /// Returns an iterator over the incoming transitions for the given state.
+    /// Returns an iterator over the predecessors the given vertex.
     pub fn predecessors(&self, state_index: VertexIndex) -> impl Iterator<Item = VertexIndex> + '_ {
         let start = self.vertex_to_predecessors.index(state_index.value());
         let end = self.vertex_to_predecessors.index(state_index.value() + 1);

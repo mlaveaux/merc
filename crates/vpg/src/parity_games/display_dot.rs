@@ -8,7 +8,7 @@ use crate::Player;
 use crate::VariabilityParityGame;
 use crate::PG;
 
-/// Helper to render a parity game in Graphviz DOT format.
+/// Display implementation output a parity game in Graphviz DOT format.
 pub struct PgDot<'a, G: PG> {
     pub game: &'a G,
 }
@@ -42,7 +42,7 @@ impl<'a, G: PG> fmt::Display for PgDot<'a, G> {
     }
 }
 
-/// Helper to render a parity game in Graphviz DOT format.
+/// Display implementation output a variability parity game in Graphviz DOT format.
 pub struct VpgDot<'a> {
     pub game: &'a VariabilityParityGame,
 }

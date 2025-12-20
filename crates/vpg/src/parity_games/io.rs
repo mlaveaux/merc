@@ -3,7 +3,7 @@ use std::path::Path;
 
 use clap::ValueEnum;
 
-/// Explicitly specify the parity game file format.
+/// Specify the parity game file format.
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
 pub enum ParityGameFormat {
     PG,
