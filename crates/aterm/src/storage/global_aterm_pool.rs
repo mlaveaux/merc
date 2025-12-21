@@ -9,24 +9,24 @@ use std::time::Instant;
 use log::debug;
 
 use merc_collections::ProtectionSet;
+use merc_io::LargeFormatter;
 use merc_sharedmutex::GlobalBfSharedMutex;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
-use merc_utilities::LargeFormatter;
 use merc_utilities::debug_trace;
 
 use crate::ATermIndex;
 use crate::ATermRef;
-use crate::ATermStorage;
 use crate::Markable;
-use crate::SharedTerm;
-use crate::SharedTermLookup;
 use crate::Symb;
 use crate::Symbol;
 use crate::SymbolIndex;
-use crate::SymbolPool;
 use crate::SymbolRef;
 use crate::Term;
+use crate::storage::ATermStorage;
+use crate::storage::SharedTerm;
+use crate::storage::SharedTermLookup;
+use crate::storage::SymbolPool;
 
 /// This is the global set of protection sets that are managed by the ThreadTermPool
 pub static GLOBAL_TERM_POOL: LazyLock<GlobalBfSharedMutex<GlobalTermPool>> =

@@ -14,9 +14,9 @@ use crate::ATermArgs;
 use crate::ATermIndex;
 use crate::ATermRef;
 use crate::SymbolRef;
-use crate::THREAD_TERM_POOL;
 use crate::Term;
 use crate::TermIterator;
+use crate::storage::THREAD_TERM_POOL;
 
 /// Returns true iff the term is a list term.
 pub fn is_list_term<'a, 'b>(t: &'b impl Term<'a, 'b>) -> bool {

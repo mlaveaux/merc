@@ -18,14 +18,14 @@ use crate::ATermRef;
 use crate::ATermStreamable;
 use crate::ATermWrite;
 use crate::Markable;
-use crate::Marker;
 use crate::Symb;
 use crate::Symbol;
 use crate::SymbolRef;
-use crate::THREAD_TERM_POOL;
 use crate::Term;
 use crate::TermIterator;
 use crate::Transmutable;
+use crate::storage::Marker;
+use crate::storage::THREAD_TERM_POOL;
 
 /// Returns true if the term is a string term
 fn is_string_term<'a, 'b>(t: &'b impl Term<'a, 'b>) -> bool {

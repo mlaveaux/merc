@@ -230,7 +230,7 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use crate::Symbol;
-    use crate::THREAD_TERM_POOL;
+    use crate::storage::THREAD_TERM_POOL;
 
     #[test]
     fn test_symbol_sharing() {

@@ -8,7 +8,7 @@ use merc_utilities::debug_trace;
 use crate::ATerm;
 use crate::Symbol;
 use crate::Term;
-use crate::ThreadTermPool;
+use crate::storage::ThreadTermPool;
 
 /// This can be used to construct an [ATerm] from a given input of (inductive) type I
 /// without using recursion, as such avoiding system stack overflows. See [TermBuilder::evaluate]

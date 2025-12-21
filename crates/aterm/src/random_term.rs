@@ -5,8 +5,8 @@ use rustc_hash::FxHashSet;
 
 use crate::ATerm;
 use crate::Symbol;
-use crate::THREAD_TERM_POOL;
 use crate::Term;
+use crate::storage::THREAD_TERM_POOL;
 
 /// Create a random term consisting of the given symbol and constants. Performs
 /// iterations number of constructions, and uses chance_duplicates to choose the

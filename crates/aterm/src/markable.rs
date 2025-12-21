@@ -4,10 +4,10 @@ use std::collections::VecDeque;
 
 use merc_collections::IndexedSet;
 
-use crate::Marker;
 use crate::SymbolRef;
 use crate::aterm::ATermRef;
-use crate::gc_mutex::GcMutex;
+use crate::storage::GcMutex;
+use crate::storage::Marker;
 
 /// This trait should be used on all objects and containers related to storing unprotected terms, or unprotected symmbols.
 ///

@@ -9,8 +9,8 @@ use merc_unsafety::StablePointerSet;
 use rustc_hash::FxBuildHasher;
 
 use crate::ATermIndex;
-use crate::SharedTerm;
 use crate::SymbolRef;
+use crate::storage::SharedTerm;
 
 /// Storage for ATerms with a fixed number of arguments.
 ///

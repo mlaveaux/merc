@@ -19,17 +19,17 @@ use merc_utilities::PhantomUnsend;
 
 use crate::ATermIntRef;
 use crate::ATermList;
-use crate::GlobalTermPool;
 use crate::Markable;
-use crate::Marker;
-use crate::SharedTerm;
-use crate::SharedTermProtection;
 use crate::Symb;
 use crate::SymbolRef;
-use crate::THREAD_TERM_POOL;
 use crate::is_empty_list_term;
 use crate::is_int_term;
 use crate::is_list_term;
+use crate::storage::GlobalTermPool;
+use crate::storage::Marker;
+use crate::storage::SharedTerm;
+use crate::storage::SharedTermProtection;
+use crate::storage::THREAD_TERM_POOL;
 
 /// The ATerm trait represents a first-order term in the ATerm library.
 /// It provides methods to manipulate and access the term's properties.

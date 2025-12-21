@@ -1,8 +1,9 @@
-use crate::GlobalTermPoolGuard;
-use crate::THREAD_TERM_POOL;
 use std::cell::UnsafeCell;
 use std::ops::Deref;
 use std::ops::DerefMut;
+
+use crate::storage::GlobalTermPoolGuard;
+use crate::storage::THREAD_TERM_POOL;
 
 /// Global mutex that prevents garbage collection.
 pub struct GcMutex<T> {

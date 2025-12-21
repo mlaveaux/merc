@@ -12,13 +12,13 @@ use crate::ATermArgs;
 use crate::ATermIndex;
 use crate::ATermRef;
 use crate::Markable;
-use crate::Marker;
 use crate::Symb;
 use crate::SymbolRef;
-use crate::THREAD_TERM_POOL;
 use crate::Term;
 use crate::TermIterator;
 use crate::Transmutable;
+use crate::storage::Marker;
+use crate::storage::THREAD_TERM_POOL;
 
 /// Returns true if the term is an [ATermInt] term.
 pub fn is_int_term<'a, 'b>(t: &'b impl Term<'a, 'b>) -> bool {
