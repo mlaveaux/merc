@@ -8,6 +8,7 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+merc_collections.workspace = true
 merc_io.workspace = true
 merc_lts.workspace = true
 merc_macros.workspace = true
