@@ -2,10 +2,10 @@ use std::fmt;
 
 use log::debug;
 use log::trace;
+use merc_io::LargeFormatter;
 use merc_lts::LTS;
 use merc_lts::LabelIndex;
 use merc_lts::StateIndex;
-use merc_utilities::LargeFormatter;
 
 use crate::BlockIndex;
 use crate::IndexedPartition;

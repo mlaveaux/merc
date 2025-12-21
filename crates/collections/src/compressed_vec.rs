@@ -6,7 +6,7 @@ use bitvec::order::Lsb0;
 use delegate::delegate;
 use log::trace;
 
-use merc_utilities::BytesFormatter;
+use merc_io::BytesFormatter;
 use merc_utilities::TagIndex;
 use merc_utilities::debug_trace;
 use merc_utilities::is_valid_permutation;

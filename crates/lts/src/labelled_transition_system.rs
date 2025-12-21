@@ -5,7 +5,7 @@ use merc_collections::ByteCompressedVec;
 use merc_collections::CompressedEntry;
 use merc_collections::CompressedVecMetrics;
 use merc_collections::bytevec;
-use merc_utilities::LargeFormatter;
+use merc_io::LargeFormatter;
 use merc_utilities::TagIndex;
 
 use crate::LTS;
