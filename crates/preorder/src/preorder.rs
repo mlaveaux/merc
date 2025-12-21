@@ -3,7 +3,6 @@ use merc_lts::LTS;
 use merc_utilities::Timing;
 
 use crate::ExplorationStrategy;
-use crate::failures_refinement;
 use crate::is_failures_refinement;
 
 #[derive(Clone, Debug, ValueEnum)]

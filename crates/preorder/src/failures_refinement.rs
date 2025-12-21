@@ -33,8 +33,8 @@ pub enum ExplorationStrategy {
 pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
     impl_lts: L,
     spec_lts: L,
-    refinement: RefinementType,
-    strategy: ExplorationStrategy,
+    _refinement: RefinementType,
+    _strategy: ExplorationStrategy,
     preprocess: bool,
     timing: &mut Timing,
 ) -> bool {
@@ -89,9 +89,6 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
 
     true
 }
-
-/// Stores cached information about the LTSs to speed up refinement checks.
-struct LtsCache {}
 
 #[cfg(test)]
 mod tests {
