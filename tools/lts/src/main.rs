@@ -116,93 +116,16 @@ fn main() -> Result<ExitCode, MercError> {
 
     let mut timing = Timing::new();
 
-    if let Some(command) = cli.commands {
+    if let Some(command) = &cli.commands {
         match command {
             Commands::Info(args) => {
-                let path = Path::new(&args.filename);
-
-                let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
-                if format != LtsFormat::Sym {
-                    let lts = read_explicit_lts(path, format, Vec::new(), &mut timing)?;
-                    println!(
-                        "LTS has {} states and {} transitions.",
-                        LargeFormatter(lts.num_of_states()),
-                        LargeFormatter(lts.num_of_transitions())
-                    );
-
-                    println!("Labels:");
-                    for label in lts.labels() {
-                        println!("\t {}", label);
-                    }
-                } else {
-                    return Err("Unsupported file format for info.".into());
-                }
+                handle_info(&args, &mut timing)?;
             }
             Commands::Reduce(args) => {
-                let path = Path::new(&args.filename);
-                let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
-
-                if format != LtsFormat::Sym {
-                    let lts = read_explicit_lts(path, format, args.tau.unwrap_or_default(), &mut timing)?;
-                    info!(
-                        "LTS has {} states and {} transitions.",
-                        LargeFormatter(lts.num_of_states()),
-                        LargeFormatter(lts.num_of_transitions())
-                    );
-
-                    print_allocator_metrics();
-
-                    let reduced_lts = reduce_lts(lts, args.equivalence, &mut timing);
-                    info!(
-                        "Reduced LTS has {} states and {} transitions.",
-                        LargeFormatter(reduced_lts.num_of_states()),
-                        LargeFormatter(reduced_lts.num_of_transitions())
-                    );
-
-                    if let Some(file) = args.output {
-                        let mut writer = File::create(file)?;
-                        write_aut(&mut writer, &reduced_lts)?;
-                    } else {
-                        write_aut(&mut stdout(), &reduced_lts)?;
-                    }
-                } else {
-                    return Err("Unsupported file format for reduction.".into());
-                }
+                handle_reduce(args, &mut timing)?;
             }
             Commands::Compare(args) => {
-                let left_path = Path::new(&args.left_filename);
-                let right_path = Path::new(&args.right_filename);
-                let format = guess_format_from_extension(left_path, args.filetype).ok_or("Unknown LTS file format.")?;
-
-                info!("Assuming format {:?} for both LTSs.", format);
-
-                if format != LtsFormat::Sym {
-                    let left_lts =
-                        read_explicit_lts(left_path, format, args.tau.clone().unwrap_or_default(), &mut timing)?;
-                    let right_lts = read_explicit_lts(right_path, format, args.tau.unwrap_or_default(), &mut timing)?;
-
-                    info!(
-                        "Left LTS has {} states and {} transitions.",
-                        LargeFormatter(left_lts.num_of_states()),
-                        LargeFormatter(left_lts.num_of_transitions())
-                    );
-                    info!(
-                        "Right LTS has {} states and {} transitions.",
-                        LargeFormatter(right_lts.num_of_states()),
-                        LargeFormatter(right_lts.num_of_transitions())
-                    );
-
-                    print_allocator_metrics();
-
-                    let equivalent = merc_reduction::compare_lts(args.equivalence, left_lts, right_lts, &mut timing);
-                    if equivalent {
-                        println!("true");
-                    } else {
-                        println!("false");
-                    }
-                } else {
-                    return Err("Unsupported file format for comparison.".into());
-                }
+                handle_compare(args, &mut timing)?;
             }
         }
     }
@@ -213,4 +136,101 @@ fn main() -> Result<ExitCode, MercError> {
 
     print_allocator_metrics();
     Ok(ExitCode::SUCCESS)
+}
+
+/// Display information about the given LTS.
+fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
+    let path = Path::new(&args.filename);
+
+    let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
+    if format != LtsFormat::Sym {
+        let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
+        println!(
+            "LTS has {} states and {} transitions.",
+            LargeFormatter(lts.num_of_states()),
+            LargeFormatter(lts.num_of_transitions())
+        );
+        
+        println!("Labels:");
+        for label in lts.labels() {
+            println!("\t {}", label);
+        }
+    } else {
+        return Err("Unsupported file format for info.".into());
+    }
+
+    Ok(())
+}
+
+/// Reduce the given LTS into another LTS modulo any of the supported equivalences.
+fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError> {    
+    let path = Path::new(&args.filename);
+    let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
+
+    if format != LtsFormat::Sym {
+        let lts = read_explicit_lts(path, format, args.tau.clone().unwrap_or_default(), timing)?;
+        info!(
+            "LTS has {} states and {} transitions.",
+            LargeFormatter(lts.num_of_states()),
+            LargeFormatter(lts.num_of_transitions())
+        );
+
+        print_allocator_metrics();
+
+        let reduced_lts = reduce_lts(lts, args.equivalence, timing);
+        info!(
+            "Reduced LTS has {} states and {} transitions.",
+            LargeFormatter(reduced_lts.num_of_states()),
+            LargeFormatter(reduced_lts.num_of_transitions())
+        );
+
+        if let Some(file) = &args.output {
+            let mut writer = File::create(file)?;
+            write_aut(&mut writer, &reduced_lts)?;
+        } else {
+            write_aut(&mut stdout(), &reduced_lts)?;
+        }
+    } else {
+        return Err("Unsupported file format for reduction.".into());
+    }
+
+    Ok(())
+}
+
+fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercError> {
+    let left_path = Path::new(&args.left_filename);
+    let right_path = Path::new(&args.right_filename);
+    let format = guess_format_from_extension(left_path, args.filetype).ok_or("Unknown LTS file format.")?;
+
+    info!("Assuming format {:?} for both LTSs.", format);
+
+    if format != LtsFormat::Sym {
+        let left_lts =
+            read_explicit_lts(left_path, format, args.tau.clone().unwrap_or_default(), timing)?;
+        let right_lts = read_explicit_lts(right_path, format, args.tau.clone().unwrap_or_default(), timing)?;
+
+        info!(
+            "Left LTS has {} states and {} transitions.",
+            LargeFormatter(left_lts.num_of_states()),
+            LargeFormatter(left_lts.num_of_transitions())
+        );
+        info!(
+            "Right LTS has {} states and {} transitions.",
+            LargeFormatter(right_lts.num_of_states()),
+            LargeFormatter(right_lts.num_of_transitions())
+        );
+
+        print_allocator_metrics();
+
+        let equivalent = merc_reduction::compare_lts(args.equivalence, left_lts, right_lts, timing);
+        if equivalent {
+            println!("true");
+        } else {
+            println!("false");
+        }
+    } else {
+        return Err("Unsupported file format for comparison.".into());
+    }
+
+    Ok(())
 }
