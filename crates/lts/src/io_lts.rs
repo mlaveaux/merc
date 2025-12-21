@@ -23,7 +23,6 @@ use merc_aterm::BinaryATermReader;
 use merc_aterm::BinaryATermWriter;
 use merc_aterm::Symbol;
 use merc_aterm::is_list_term;
-use merc_collections::IndexedSet;
 use merc_data::DataSpecification;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;

@@ -21,7 +21,13 @@ impl<K: Eq + Hash, V: Ord> Antichain<K, V> {
     /// Inserts the given (s, T) pair into the antichain and returns true iff it was
     /// not already present.
     pub fn insert(&mut self, key: K, value: VecSet<V>) -> bool {
-        self.storage.entry(key).or_insert(VecSet::singleton(value));
+        self.storage.entry(key).or_insert_with(|| {
+            self.antichain_misses += 1; // Was not present
+            VecSet::singleton(value)
+        });
+
+        self.antichain_inserts += 1;
+        self.max_antichain = self.max_antichain.max(self.storage.len());
 
         true
     }

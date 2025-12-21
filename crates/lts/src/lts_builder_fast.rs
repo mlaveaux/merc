@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 
-use rand::seq::index;
-
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;

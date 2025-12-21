@@ -7,8 +7,11 @@ use clap::Parser;
 use clap::Subcommand;
 use log::info;
 
+use merc_io::LargeFormatter;
 use merc_lts::LTS;
 use merc_lts::LtsFormat;
+use merc_lts::apply_lts;
+use merc_lts::apply_lts_pair;
 use merc_lts::guess_format_from_extension;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
@@ -18,7 +21,6 @@ use merc_tools::Version;
 use merc_tools::VersionFlag;
 use merc_tools::verbosity::VerbosityFlag;
 use merc_unsafety::print_allocator_metrics;
-use merc_utilities::LargeFormatter;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
@@ -147,8 +149,8 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
         let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
         println!(
             "LTS has {} states and {} transitions.",
-            LargeFormatter(lts.apply(|lts| lts.num_of_states())),
-            LargeFormatter(lts.apply(|lts| lts.num_of_transitions()))
+            LargeFormatter(lts.num_of_states()),
+            LargeFormatter(lts.num_of_transitions())
         );
         
         println!("Labels:");
@@ -177,19 +179,24 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
 
         print_allocator_metrics();
 
-        let reduced_lts = reduce_lts(lts, args.equivalence, timing);
-        info!(
-            "Reduced LTS has {} states and {} transitions.",
-            LargeFormatter(reduced_lts.num_of_states()),
-            LargeFormatter(reduced_lts.num_of_transitions())
-        );
+        apply_lts!(lts, timing, |lts, timing| -> Result<(), MercError>{
+            let reduced_lts = reduce_lts(lts, args.equivalence, timing);
+            
+            info!(
+                "Reduced LTS has {} states and {} transitions.",
+                LargeFormatter(reduced_lts.num_of_states()),
+                LargeFormatter(reduced_lts.num_of_transitions())
+            );
 
-        if let Some(file) = &args.output {
-            let mut writer = File::create(file)?;
-            write_aut(&mut writer, &reduced_lts)?;
-        } else {
-            write_aut(&mut stdout(), &reduced_lts)?;
-        }
+            if let Some(file) = &args.output {
+                let mut writer = File::create(file)?;
+                write_aut(&mut writer, &reduced_lts)?;
+            } else {
+                write_aut(&mut stdout(), &reduced_lts)?;
+            }
+
+            Ok(())
+        })?;
     } else {
         return Err("Unsupported file format for reduction.".into());
     }
@@ -221,7 +228,10 @@ fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercErr
 
         print_allocator_metrics();
 
-        let equivalent = merc_reduction::compare_lts(args.equivalence, left_lts, right_lts, timing);
+        let equivalent = apply_lts_pair!(left_lts, right_lts, timing, |left, right, timing| {
+            merc_reduction::compare_lts(args.equivalence, left, right, timing)
+        });
+
         if equivalent {
             println!("true");
         } else {
