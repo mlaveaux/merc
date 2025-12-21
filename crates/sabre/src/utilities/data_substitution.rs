@@ -2,7 +2,7 @@
 
 use merc_aterm::Protected;
 use merc_aterm::Term;
-use merc_aterm::ThreadTermPool;
+use merc_aterm::storage::ThreadTermPool;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
 use merc_data::is_data_application;
@@ -83,7 +83,7 @@ fn substitute_rec(
 mod tests {
     use super::*;
 
-    use merc_aterm::THREAD_TERM_POOL;
+    use merc_aterm::storage::THREAD_TERM_POOL;
 
     use crate::utilities::DataPosition;
     use crate::utilities::DataPositionIndexed;

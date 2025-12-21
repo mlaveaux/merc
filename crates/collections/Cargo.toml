@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+merc_io.workspace = true
 merc_utilities.workspace = true
 
 bitvec.workspace = true

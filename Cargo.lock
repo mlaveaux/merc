@@ -916,6 +916,7 @@ dependencies = [
  "hashbrown 0.16.1",
  "itertools 0.14.0",
  "log",
+ "merc_io",
  "merc_utilities",
  "rand",
  "rustc-hash 2.1.1",

@@ -4,7 +4,7 @@ use merc_aterm::ATerm;
 use merc_aterm::ATermRef;
 use merc_aterm::Protected;
 use merc_aterm::Term;
-use merc_aterm::ThreadTermPool;
+use merc_aterm::storage::ThreadTermPool;
 
 pub type SubstitutionBuilder = Protected<Vec<ATermRef<'static>>>;
 
@@ -81,7 +81,7 @@ fn substitute_rec<'a, 'b>(
 mod tests {
     use super::*;
 
-    use merc_aterm::THREAD_TERM_POOL;
+    use merc_aterm::storage::THREAD_TERM_POOL;
 
     use crate::utilities::ExplicitPosition;
     use crate::utilities::PositionIndexed;

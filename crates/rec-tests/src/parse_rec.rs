@@ -6,7 +6,7 @@ use pest::Parser;
 use pest_derive::Parser;
 
 use merc_aterm::ATerm;
-use merc_aterm::THREAD_TERM_POOL;
+use merc_aterm::storage::THREAD_TERM_POOL;
 use merc_pest_consume::Error;
 use merc_pest_consume::match_nodes;
 use merc_pest_consume::Node;

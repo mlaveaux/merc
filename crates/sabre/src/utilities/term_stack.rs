@@ -4,7 +4,7 @@ use ahash::HashMap;
 use ahash::HashMapExt;
 use merc_aterm::ATermRef;
 use merc_aterm::Markable;
-use merc_aterm::Marker;
+use merc_aterm::storage::Marker;
 use merc_aterm::Protected;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;

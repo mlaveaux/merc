@@ -16,7 +16,7 @@ use merc_aterm::ATermRef;
 use merc_aterm::ATermSend;
 use merc_aterm::Symb;
 use merc_aterm::Symbol;
-use merc_aterm::THREAD_TERM_POOL;
+use merc_aterm::storage::THREAD_TERM_POOL;
 use merc_aterm::Term;
 
 /// Sets the number of threads for all the benchmarks.
