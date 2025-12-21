@@ -6,7 +6,6 @@ mod cast_macro;
 
 mod debug_trace;
 mod error;
-mod format;
 mod generational_index;
 mod helper;
 mod no_hasher;
@@ -18,7 +17,6 @@ mod test_logger;
 mod timing;
 
 pub use error::*;
-pub use format::*;
 pub use generational_index::*;
 pub use helper::*;
 pub use no_hasher::*;

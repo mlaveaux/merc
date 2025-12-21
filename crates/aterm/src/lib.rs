@@ -13,7 +13,7 @@ mod random_term;
 mod symbol;
 mod transmutable;
 
-pub(crate) mod storage;
+pub mod storage;
 
 pub use aterm::*;
 pub use aterm_binary_stream::*;

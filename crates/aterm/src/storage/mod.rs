@@ -23,7 +23,7 @@ mod shared_term;
 mod symbol_pool;
 mod thread_aterm_pool;
 
-pub use aterm_storage::*;
+pub(crate) use aterm_storage::*;
 pub use gc_mutex::*;
 pub use global_aterm_pool::*;
 pub use shared_term::*;

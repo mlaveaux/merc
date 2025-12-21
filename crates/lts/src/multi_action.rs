@@ -1,8 +1,9 @@
 use std::fmt;
 use std::hash::Hash;
+use std::mem::ManuallyDrop;
 
 use itertools::Itertools;
-use merc_aterm::ATerm;
+use merc_aterm::{ATerm, Symbol};
 use merc_collections::VecSet;
 use merc_utilities::MercError;
 
@@ -53,6 +54,10 @@ impl MultiAction {
     pub fn from_mcrl2_aterm(_term: ATerm) -> Self {
         unimplemented!("Cannot yet translate the mCRL2 terms");
     }
+}
+
+thread_local! {
+    pub static TIMED_MULTI_ACTION: ManuallyDrop<Symbol> = ManuallyDrop::new(Symbol::new("TimedMultiAction", 2));
 }
 
 /// Represents a single action label, with its (data) arguments

@@ -2,8 +2,8 @@
 
 use log::info;
 
-use merc_aterm::THREAD_TERM_POOL;
-use merc_aterm::ThreadTermPool;
+use merc_aterm::storage::THREAD_TERM_POOL;
+use merc_aterm::storage::ThreadTermPool;
 use merc_data::DataApplication;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;

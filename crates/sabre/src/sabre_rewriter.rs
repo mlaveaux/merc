@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
 use log::info;
-use merc_aterm::THREAD_TERM_POOL;
-use merc_aterm::ThreadTermPool;
+
+use merc_aterm::storage::THREAD_TERM_POOL;
+use merc_aterm::storage::ThreadTermPool;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
+use merc_utilities::debug_trace;
 
 use crate::RewriteSpecification;
 use crate::matching::nonlinear::check_equivalence_classes;
@@ -15,7 +17,6 @@ use crate::utilities::ConfigurationStack;
 use crate::utilities::DataPositionIndexed;
 use crate::utilities::SideInfo;
 use crate::utilities::SideInfoType;
-use merc_utilities::debug_trace;
 
 /// A shared trait for all the rewriters
 pub trait RewriteEngine {

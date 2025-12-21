@@ -8,7 +8,7 @@ use merc_aterm::ATermArgs;
 use merc_aterm::ATermIndex;
 use merc_aterm::ATermRef;
 use merc_aterm::Markable;
-use merc_aterm::Marker;
+use merc_aterm::storage::Marker;
 use merc_aterm::Symb;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;

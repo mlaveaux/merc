@@ -4,7 +4,7 @@ use std::fmt;
 
 use merc_aterm::Protected;
 use merc_aterm::Term;
-use merc_aterm::ThreadTermPool;
+use merc_aterm::storage::ThreadTermPool;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
 
