@@ -32,12 +32,107 @@ pub fn guess_lts_format_from_extension(path: &Path, format: Option<LtsFormat>) -
     }
 }
 
-/// A helper struct to deal with the polymorphic LTS types.
+/// A general struct to deal with the polymorphic LTS types. The `apply_lts`
+/// macro can be then used to conveniently apply functions which are generic on
+/// the LTS trait to all variants.
 pub enum GenericLts {
     /// The LTS in the Aldebaran format.
     Aut(LabelledTransitionSystem<String>),
     /// The LTS in the mCRL2 .lts format.
     Lts(LabelledTransitionSystem<MultiAction>),
+}
+
+/// Convenience macro to call `GenericLts::apply` with the same function for both variants.
+/// Useful with generic functions that can be monomorphized for both label types.
+///
+/// Examples:
+/// - apply_lts!(lts, my_fn)
+/// - apply_lts!(lts, |lts| do_something(lts))
+#[macro_export]
+macro_rules! apply_lts {
+    ($lts:expr, $arguments:expr, $f:path) => {
+        $lts.apply($arguments, $f, $f)
+    };
+    ($lts:expr, $arguments:expr, $f:expr) => {
+        $lts.apply($arguments, $f, $f)
+    };
+}
+
+/// Convenience macro to apply a function to a pair of `GenericLts` only when both
+/// are the same variant; returns an error otherwise.
+///
+/// Examples:
+/// - apply_lts_pair!(lhs, rhs, args, my_fn)
+/// - apply_lts_pair!(lhs, rhs, args, |a, b, args| do_something(a, b, args))
+#[macro_export]
+macro_rules! apply_lts_pair {
+    ($lhs:expr, $rhs:expr, $arguments:expr, $f:path) => {
+        $lhs.apply_pair($rhs, $arguments, $f, $f)
+    };
+    ($lhs:expr, $rhs:expr, $arguments:expr, $f:expr) => {
+        $lhs.apply_pair($rhs, $arguments, $f, $f)
+    };
+}
+
+impl GenericLts {
+    /// Applies the given function to both LTSs when they are the same variant.
+    /// Returns an error if the variants do not match.
+    pub fn apply_pair<T, FAut, FLts, R>(
+        self,
+        other: GenericLts,
+        arguments: T,
+        apply_aut: FAut,
+        apply_lts: FLts,
+    ) -> R
+    where
+        FAut: FnOnce(
+            LabelledTransitionSystem<String>,
+            LabelledTransitionSystem<String>,
+            T,
+        ) -> R,
+        FLts: FnOnce(
+            LabelledTransitionSystem<MultiAction>,
+            LabelledTransitionSystem<MultiAction>,
+            T,
+        ) -> R,
+    {
+        match (self, other) {
+            (GenericLts::Aut(a), GenericLts::Aut(b)) => apply_aut(a, b, arguments),
+            (GenericLts::Lts(a), GenericLts::Lts(b)) => apply_lts(a, b, arguments),
+            _ => unreachable!("Mismatched LTS variants"),
+        }
+    }
+}
+
+impl GenericLts {
+    pub fn apply<T, F, G, R>(self, arguments: T, apply_aut: F, apply_lts: G) -> R
+    where
+        F: FnOnce(LabelledTransitionSystem<String>, T) -> R,
+        G: FnOnce(LabelledTransitionSystem<MultiAction>, T) -> R,
+    {
+        match self {
+            GenericLts::Aut(lts) => apply_aut(lts, arguments),
+            GenericLts::Lts(lts) => apply_lts(lts, arguments),
+        }
+    }
+
+    // These are convenience functions to get LTS metrics.
+
+    /// Returns the number of states in the LTS.
+    pub fn num_of_states(&self) -> usize {
+        match self {
+            GenericLts::Aut(lts) => lts.num_of_states(),
+            GenericLts::Lts(lts) => lts.num_of_states(),
+        }
+    }
+
+    /// Returns the number of transitions in the LTS.
+    pub fn num_of_transitions(&self) -> usize {
+        match self {
+            GenericLts::Aut(lts) => lts.num_of_transitions(),
+            GenericLts::Lts(lts) => lts.num_of_transitions(),
+        }
+    }
 }
 
 /// Reads an explicit labelled transition system from the given path and format.
