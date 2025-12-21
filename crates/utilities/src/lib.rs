@@ -20,6 +20,7 @@ mod random_test;
 mod tagged_index;
 mod test_logger;
 mod timing;
+mod vecset;
 
 pub use compressed_vec::*;
 pub use error::*;
@@ -35,3 +36,4 @@ pub use random_test::*;
 pub use tagged_index::*;
 pub use test_logger::*;
 pub use timing::*;
+pub use vecset::*;

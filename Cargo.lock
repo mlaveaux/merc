@@ -821,6 +821,7 @@ dependencies = [
  "env_logger",
  "log",
  "merc_lts",
+ "merc_preorder",
  "merc_reduction",
  "merc_tools",
  "merc_unsafety",
@@ -987,22 +988,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "merc_pest_consume"
-version = "2.0.0"
+name = "merc_preorder"
+version = "1.0.0"
 dependencies = [
+ "bitvec",
+ "bumpalo",
+ "clap",
  "itertools 0.14.0",
- "merc_pest_consume_macros",
- "pest",
- "pest_derive",
-]
-
-[[package]]
-name = "merc_pest_consume_macros"
-version = "2.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "log",
+ "merc_io",
+ "merc_lts",
+ "merc_reduction",
+ "merc_syntax",
+ "merc_utilities",
+ "rand",
+ "rustc-hash 2.1.1",
+ "test-log",
 ]
 
 [[package]]
@@ -1132,6 +1133,7 @@ dependencies = [
  "delegate",
  "env_logger",
  "hashbrown 0.16.1",
+ "itertools 0.14.0",
  "log",
  "pest",
  "rand",

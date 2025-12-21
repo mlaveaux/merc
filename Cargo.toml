@@ -32,6 +32,7 @@ members = [
     "crates/number",
     "crates/rec-tests",
     "crates/reduction",
+    "crates/preorder",
     "crates/sabre",
     "crates/sabre/benchmarks",
     "crates/symbolic",
@@ -114,6 +115,7 @@ merc_ldd = { path = "crates/ldd" }
 merc_lts = { version = "1.1", path = "crates/lts" }
 merc_macros = { version = "1.0", path = "crates/macros" }
 merc_number = { version = "1.0", path = "crates/number" }
+merc_preorder = { path = "crates/preorder" }
 merc_rec-tests = { path = "crates/rec-tests" }
 merc_reduction = { path = "crates/reduction" }
 merc_sabre = { path = "crates/sabre" }
