@@ -12,7 +12,7 @@ use crate::strong_bisim_sigref_naive;
 use crate::weak_bisim_sigref_naive;
 use crate::weak_bisimulation;
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Equivalence {
     /// Partition based refinement algorithms.
     WeakBisim,
