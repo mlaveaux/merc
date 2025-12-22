@@ -13,6 +13,8 @@ thread_local! {
 }
 
 /// Defines default symbols and terms for data elements.
+/// 
+/// For now these mirror the mCRL2 definitions since that is convenient.
 pub struct DataSymbols {
     pub sort_id_symbol: ManuallyDrop<Symbol>,
     /// OpId(name, sort)
@@ -30,7 +32,7 @@ impl DataSymbols {
         Self {
             sort_id_symbol: ManuallyDrop::new(Symbol::new("SortId", 1)),
             data_function_symbol: ManuallyDrop::new(Symbol::new("OpId", 2)),
-            data_variable: ManuallyDrop::new(Symbol::new("Var", 2)),
+            data_variable: ManuallyDrop::new(Symbol::new("DataVarId", 2)),
 
             data_where_clause: ManuallyDrop::new(Symbol::new("Where", 2)),
             data_abstraction: ManuallyDrop::new(Symbol::new("Abstraction", 2)),

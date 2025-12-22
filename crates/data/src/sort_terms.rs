@@ -8,12 +8,12 @@ use merc_aterm::ATermArgs;
 use merc_aterm::ATermIndex;
 use merc_aterm::ATermRef;
 use merc_aterm::Markable;
-use merc_aterm::storage::Marker;
 use merc_aterm::Symb;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::TermIterator;
 use merc_aterm::Transmutable;
+use merc_aterm::storage::Marker;
 use merc_macros::merc_derive_terms;
 use merc_macros::merc_term;
 
