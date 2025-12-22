@@ -178,9 +178,9 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
 
     print_allocator_metrics();
 
-        apply_lts!(lts, timing, |lts, timing| -> Result<(), MercError>{
+        apply_lts!(lts, timing, |lts, timing| -> Result<(), MercError> {
             let reduced_lts = reduce_lts(lts, args.equivalence, timing);
-            
+
             info!(
                 "Reduced LTS has {} states and {} transitions.",
                 LargeFormatter(reduced_lts.num_of_states()),

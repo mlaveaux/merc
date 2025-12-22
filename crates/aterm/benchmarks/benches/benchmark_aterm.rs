@@ -16,8 +16,8 @@ use merc_aterm::ATermRef;
 use merc_aterm::ATermSend;
 use merc_aterm::Symb;
 use merc_aterm::Symbol;
-use merc_aterm::storage::THREAD_TERM_POOL;
 use merc_aterm::Term;
+use merc_aterm::storage::THREAD_TERM_POOL;
 
 /// Sets the number of threads for all the benchmarks.
 pub const THREADS: [usize; 6] = [1, 2, 4, 8, 16, 32];
