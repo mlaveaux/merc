@@ -12,18 +12,40 @@ use clap::ValueEnum;
 use log::debug;
 use log::trace;
 use merc_utilities::MercError;
+use oxidd::BooleanFunction;
+use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::util::AllocResult;
-use oxidd::BooleanFunction;
-use oxidd::ManagerRef;
 
+use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
 use crate::VertexIndex;
-use crate::PG;
+
+/// Utility to print a repeated static string a given number of times.
+pub struct Repeat {
+    s: &'static str,
+    times: usize,
+}
+
+impl Repeat {
+    /// Creates a new Repeat instance.
+    pub fn new(s: &'static str, times: usize) -> Self {
+        Self { s, times }
+    }
+}
+
+impl fmt::Display for Repeat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for _ in 0..self.times {
+            f.write_str(self.s)?;
+        }
+        Ok(())
+    }
+}
 
 /// Variant of the Zielonka algorithm to use.
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,12 +84,8 @@ pub fn solve_variability_zielonka(
 
     let full_V = V.clone();
     let (W0, W1) = match variant {
-        ZielonkaVariant::Family => {
-            zielonka.solve_recursive(V)?
-        },
-        ZielonkaVariant::FamilyOptimisedLeft => {
-            zielonka.solve_optimised_left_recursive(V)?
-        },
+        ZielonkaVariant::Family => zielonka.solve_recursive(V, 0)?,
+        ZielonkaVariant::FamilyOptimisedLeft => zielonka.solve_optimised_left_recursive(V, 0)?,
         ZielonkaVariant::Product => {
             panic!("Product-based Zielonka is implemented in solve_product_zielonka");
         }
@@ -81,8 +99,7 @@ pub fn solve_variability_zielonka(
     let (W0, W1) = if alternative_solving {
         // Intersect the results with the game's configuration
         let config = game.configuration();
-        (W0.and_function(&config)?,
-         W1.and_function(&config)?)
+        (W0.and_function(&config)?, W1.and_function(&config)?)
     } else {
         (W0, W1)
     };
@@ -150,13 +167,16 @@ impl<'a> VariabilityZielonkaSolver<'a> {
     }
 
     /// Solves the variability parity game for the given set of vertices V.
-    fn solve_recursive(&mut self, gamma: Submap) -> Result<(Submap, Submap), MercError> {
+    fn solve_recursive(&mut self, gamma: Submap, depth: usize) -> Result<(Submap, Submap), MercError> {
         self.recursive_calls += 1;
+
+        // For debugging mostly
+        let indent = Repeat::new(" ", depth);
         let gamma_copy = gamma.clone();
 
         // 1. if \gamma == \epsilon then
         if gamma.is_empty() {
-            trace!("Empty subgame");
+            debug!("{}return (gamma, gamma)", indent);
             return Ok((gamma.clone(), gamma));
         }
 
@@ -179,7 +199,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         }
 
         debug!(
-            "solve_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
+            "{indent}solve_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
             gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
             highest_prio,
             lowest_prio,
@@ -190,14 +210,11 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         let alpha = self.attractor(x, &gamma, mu)?;
 
         // 9. (omega'_0, omega'_1) := solve(\gamma \ \alpha)
-        debug!("begin solve_rec(gamma \\ alpha)");
-        let (omega1_0, omega1_1) = self.solve_recursive(gamma.clone().minus(&alpha)?)?;
-        debug!("end solve_rec(gamma \\ alpha)");
         debug!(
-            "|omega'_0| = {}, |omega'_1| = {}",
-            omega1_0.number_of_non_empty(),
-            omega1_1.number_of_non_empty(),
+            "{indent}solve_rec(gamma \\ alpha), |alpha| = {}",
+            alpha.number_of_non_empty()
         );
+        let (omega1_0, omega1_1) = self.solve_recursive(gamma.clone().minus(&alpha)?, depth + 1)?;
 
         let (mut omega1_x, mut omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
         if omega1_not_x.is_empty() {
@@ -205,7 +222,10 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             omega1_x = gamma;
             omega1_not_x.clear()?;
             // 20. return (omega_0, omega_1)
-            debug!("return (omega'_0, omega'_1)");
+            debug!(
+                "{indent}return (omega'_0, omega'_1) |omega'_x| = {}",
+                omega1_x.number_of_non_empty()
+            );
             self.check_partition(&omega1_x, &omega1_not_x, &gamma_copy)?;
             return Ok(combine(omega1_x, omega1_not_x, x));
         }
@@ -213,29 +233,29 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // 14. \beta := attr_notalpha(\omega'_notx)
         let beta = self.attractor(not_x, &gamma, omega1_not_x)?;
         // 15. (omega''_0, omega''_1) := solve(gamma \ beta)
-        debug!("begin solve_rec(gamma \\ beta)");
-        let (mut omega2_0, mut omega2_1) = self.solve_recursive(gamma.minus(&beta)?)?;
-        debug!("end solve_rec(gamma \\ beta)");
+        debug!("{indent}solve_rec(gamma \\ beta)");
+        let (mut omega2_0, mut omega2_1) = self.solve_recursive(gamma.minus(&beta)?, depth + 1)?;
 
         // 17. omega''_notx := omega''_notx \cup \beta
         let (omega2_x, mut omega2_not_x) = x_and_not_x(omega2_0, omega2_1, not_x);
         omega2_not_x = omega2_not_x.or(&beta)?;
 
         // 20. return (omega_0, omega_1)
-        debug!("return (omega''_0, omega''_1)");
+        debug!("{indent}return (omega''_0, omega''_1)");
         self.check_partition(&omega2_x, &omega2_not_x, &gamma_copy)?;
         Ok(combine(omega2_x, omega2_not_x, x))
     }
 
     /// Left-optimised Zielonka solver that has improved theoretical complexity, but might be slower in practice.
-    fn solve_optimised_left_recursive(&mut self, gamma: Submap) -> Result<(Submap, Submap), MercError> {
+    fn solve_optimised_left_recursive(&mut self, gamma: Submap, depth: usize) -> Result<(Submap, Submap), MercError> {
         self.recursive_calls += 1;
+        let indent = Repeat::new(" ", depth);
         let gamma_copy = gamma.clone();
 
         // 1. if \gamma == \epsilon then
         if gamma.is_empty() {
             // 2. return (\epsilon, \epsilon)
-            debug!("empty subgame");
+            debug!("{}return (gamma, gamma)", indent);
             return Ok((gamma.clone(), gamma));
         }
 
@@ -261,7 +281,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         }
 
         debug!(
-            "solve_optimised_left_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
+            "{indent}solve_optimised_left_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
             gamma.mapping.iter().filter(|f| f.satisfiable()).count(),
             highest_prio,
             lowest_prio,
@@ -273,9 +293,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         let alpha = self.attractor(x, &gamma, mu)?;
 
         // 10. (omega'_0, omega'_1) := solve(gamma \ alpha)
-        debug!("begin solve_optimised_left_rec(gamma \\ alpha)");
-        let (omega1_0, omega1_1) = self.solve_optimised_left_recursive(gamma.clone().minus(&alpha)?)?;
-        debug!("end solve_optimised_left_rec(gamma \\ alpha)");
+        debug!("{indent}solve_optimised_left_rec(gamma \\ alpha) |alpha| = {}", alpha.number_of_non_empty());
+        let (omega1_0, omega1_1) = self.solve_optimised_left_recursive(gamma.clone().minus(&alpha)?, depth + 1)?;
 
         // omega_prime[not_x] restricted to (gamma \ C)
         let C_restricted = minus(
@@ -297,7 +316,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             self.check_partition(&omega1_x, &omega1_not_x, &gamma_copy)?;
 
             // 22. return (omega_0, omega_1)
-            debug!("return (omega'_0, omega'_1)");
+            debug!("{indent}return (omega'_0, omega'_1)");
             return Ok(combine(omega1_x, omega1_not_x, x));
         }
 
@@ -307,15 +326,16 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             C1 = C1.or(func)?;
         }
         C1 = C1.and(&C)?;
-        
+
         // beta := attr_not_x(omega'_not_x | C')
-        let C1_restricted = minus(            
+        let C1_restricted = minus(
             &if self.alternative_solving {
                 self.manager_ref.with_manager_shared(|m| BDDFunction::t(m)).clone()
             } else {
                 self.game.configuration().clone()
-            },            
-            &C1)?;
+            },
+            &C1,
+        )?;
 
         let omega1_not_x = omega1_not_x.minus_function(&C1_restricted)?;
         let beta = self.attractor(not_x, &gamma, omega1_not_x.clone())?;
@@ -323,9 +343,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // Solve on (gamma | C') \ beta
         let gamma = gamma.minus_function(&C1)?;
 
-        debug!("begin solve_optimised_left_rec((gamma | C') \\ alpha')");
-        let (omega2_0, omega2_1) = self.solve_optimised_left_recursive(gamma.minus(&beta)?)?;
-        debug!("end solve_optimised_left_rec((gamma | C') \\ alpha')");
+        debug!("{indent}solve_optimised_left_rec((gamma | C') \\ alpha')");
+        let (omega2_0, omega2_1) = self.solve_optimised_left_recursive(gamma.minus(&beta)?, depth + 1)?;
 
         // 18. omega'_x := omega'_x\C' cup alpha\C' cup omega''_x
         // 19. omega_not_x := omega'_not_x\C' cup omega''_x cup beta
@@ -337,7 +356,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         let omega2_x = omega1_x.or(&alpha)?.or(&omega2_x)?;
         let omega2_not_x = omega1_not_x.or(&omega2_not_x)?.or(&beta)?;
 
-        debug!("return (omega''_0, omega''_1)");
+        debug!("{indent}return (omega''_0, omega''_1)");
         Ok(combine(omega2_x, omega2_not_x, x))
     }
 
@@ -360,8 +379,6 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             // temp_vertices keeps track of which vertices are in the queue.
             self.temp_vertices.set(*v, true);
         }
-
-        let size_before = A.number_of_non_empty();
 
         // 4. While Q not empty do
         // 5. w := Q.pop()
@@ -407,8 +424,6 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                 }
             }
         }
-
-        debug!("Attracted {} vertices", A.number_of_non_empty() - size_before);
 
         debug_assert!(
             !self.temp_vertices.any(),
@@ -641,24 +656,24 @@ impl fmt::Debug for Submap {
 #[cfg(test)]
 mod tests {
     use merc_macros::merc_test;
-    use oxidd::bdd::BDDFunction;
-    use oxidd::util::AllocResult;
     use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::util::AllocResult;
 
     use merc_utilities::random_test;
 
     use crate::FormatConfig;
+    use crate::PG;
     use crate::Submap;
+    use crate::VertexIndex;
+    use crate::ZielonkaVariant;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
     use crate::solve_variability_product_zielonka;
     use crate::solve_variability_zielonka;
     use crate::solve_zielonka;
-    use crate::VertexIndex;
-    use crate::ZielonkaVariant;
-    use crate::PG;
     use crate::write_vpg;
 
     #[merc_test]
@@ -697,12 +712,20 @@ mod tests {
                 for v in vpg.iter_vertices() {
                     if pg_solution[0][*v] {
                         // Won by Even
-                        debug_assert!(solution[0][v].and(&cube).unwrap().satisfiable(), "Projection {}, vertex {v} is won by even in the product, but not in the vpg", FormatConfig(&bits));
+                        debug_assert!(
+                            solution[0][v].and(&cube).unwrap().satisfiable(),
+                            "Projection {}, vertex {v} is won by even in the product, but not in the vpg",
+                            FormatConfig(&bits)
+                        );
                     }
 
                     if pg_solution[1][*v] {
                         // Won by Odd
-                        debug_assert!(solution[1][v].and(&cube).unwrap().satisfiable(), "Projection {}, vertex {v} is won by odd in the product, but not in the vpg", FormatConfig(&bits));
+                        debug_assert!(
+                            solution[1][v].and(&cube).unwrap().satisfiable(),
+                            "Projection {}, vertex {v} is won by odd in the product, but not in the vpg",
+                            FormatConfig(&bits)
+                        );
                     }
                 }
             }

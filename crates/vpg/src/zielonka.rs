@@ -3,7 +3,7 @@
 //! Authors: Maurice Laveaux, Sjef van Loo, Erik de Vink and Tim A.C. Willemse
 //!
 //! Implements the standard Zielonka recursive solver for any parity game
-//! implementing the [crate::PG] trait.
+//! implementing the [`crate::PG`] trait.
 
 use std::ops::BitAnd;
 
@@ -19,6 +19,7 @@ use crate::ParityGame;
 use crate::Player;
 use crate::Predecessors;
 use crate::Priority;
+use crate::Repeat;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
 use crate::compute_reachable;
@@ -35,7 +36,7 @@ pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
 
     let mut zielonka = ZielonkaSolver::new(game);
 
-    let W = zielonka.solve_recursive(V);
+    let W = zielonka.solve_recursive(V, 0);
 
     // Check that the result is a valid partition
     debug_assert!(
@@ -137,8 +138,9 @@ impl ZielonkaSolver<'_> {
     }
 
     /// Recursively solves the parity game for the given set of vertices V.
-    fn solve_recursive(&mut self, mut V: Set) -> [Set; 2] {
+    fn solve_recursive(&mut self, mut V: Set, depth: usize) -> [Set; 2] {
         self.recursive_calls += 1;
+        let indent = Repeat::new(" ", depth);
 
         if !V.any() {
             return [V.clone(), V];
@@ -157,7 +159,8 @@ impl ZielonkaSolver<'_> {
         }
 
         debug!(
-            "solve_rec(V) |V| = {}, highest prio = {}, lowest prio = {}, player = {}, |U| = {}",
+            "{}solve_rec(V) |V| = {}, highest prio = {}, lowest prio = {}, player = {}, |U| = {}",
+            indent,
             V.count_ones(),
             highest_prio,
             lowest_prio,
@@ -167,14 +170,14 @@ impl ZielonkaSolver<'_> {
 
         let A = self.attractor(alpha, &V, U);
 
-        debug!("begin solve_rec(V \\ A)");
+        debug!("{}solve_rec(V \\ A) |A| = {}", indent, A.count_ones());
         let mut W_prime = self.solve_recursive(
             V.iter()
                 .enumerate()
                 .map(|(index, value)| value.bitand(!A[index]))
                 .collect(),
+            depth + 1,
         );
-        debug!("end solve_rec(V \\ A)");
 
         if !W_prime[not_alpha.to_index()].any() {
             W_prime[alpha.to_index()] |= A;
@@ -190,9 +193,8 @@ impl ZielonkaSolver<'_> {
                 value.commit(tmp);
             }
 
-            debug!("begin solve_rec(V \\ B)");
-            let mut W_double_prime = self.solve_recursive(V); // V has been updated to V \ B
-            debug!("end solve_rec(V \\ B)");
+            debug!("{}solve_rec(V \\ B)", indent);
+            let mut W_double_prime = self.solve_recursive(V, depth + 1); // V has been updated to V \ B
 
             W_double_prime[not_alpha.to_index()] |= B;
             W_double_prime
@@ -230,12 +232,6 @@ impl ZielonkaSolver<'_> {
                 }
             }
         }
-
-        debug!(
-            "Attracted |A| = {} vertices towards |U| = {}",
-            A.count_ones(),
-            initial_size
-        );
 
         A
     }

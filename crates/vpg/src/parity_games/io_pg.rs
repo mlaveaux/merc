@@ -5,7 +5,6 @@ use std::io::Write;
 
 use itertools::Itertools;
 use log::info;
-use log::trace;
 use regex::Regex;
 use streaming_iterator::StreamingIterator;
 use thiserror::Error;
@@ -64,8 +63,6 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
 
     let mut vertex_count = 0;
     while let Some(line) = lines.next() {
-        trace!("{line}");
-
         // Parse the line: <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
         let mut parts = line.split_whitespace();
 

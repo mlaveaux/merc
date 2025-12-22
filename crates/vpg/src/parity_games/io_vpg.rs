@@ -7,7 +7,6 @@ use std::io::Write;
 
 use itertools::Itertools;
 use log::info;
-use log::trace;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::util::OptBool;
@@ -92,8 +91,6 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     let progress = TimeProgress::new(|percentage: usize| info!("Reading vertices {}%...", percentage), 1);
     let mut vertex_count = 0;
     while let Some(line) = lines.next() {
-        trace!("{line}");
-
         // Parse the line: <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
         let mut parts = line.split_whitespace();
 
