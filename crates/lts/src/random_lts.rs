@@ -1,12 +1,15 @@
 use rand::Rng;
 
+use crate::product_lts;
+use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilderFast;
 use crate::StateIndex;
-use crate::product_lts;
 
 /// Generates a random LTS with the desired number of states, labels and out
 /// degree by composing three smaller random LTSs using the synchronous product.
+/// This is often a more realistic structure then fully random LTSs, but
+/// otherwise see [`random_lts_monolithic`].
 pub fn random_lts(
     rng: &mut impl Rng,
     num_of_states: usize,
@@ -17,9 +20,18 @@ pub fn random_lts(
         .map(|_| random_lts_monolithic(rng, num_of_states, num_of_labels, outdegree))
         .collect();
 
+    // Synchronize on some of the labels.
+    let synchronized_labels: Vec<String> = (1..num_of_labels.min(3))
+        .map(|i| {
+            char::from_digit(i, 36)
+                .expect("Radix is less than 37, so should not panic")
+                .to_string()
+        })
+        .collect();
+
     components
         .into_iter()
-        .reduce(|acc, lts| product_lts(&acc, &lts))
+        .reduce(|acc, lts| product_lts(&acc, &lts, Some(synchronized_labels.clone())))
         .expect("At least one component should be present")
 }
 
@@ -40,7 +52,11 @@ pub fn random_lts_monolithic(
     let mut labels: Vec<String> = Vec::new();
     labels.push("tau".to_string()); // The initial hidden label, assumed to be index 0.
     for i in 0..(num_of_labels - 1) {
-        labels.push(char::from_digit(i + 10, 36).unwrap().to_string());
+        labels.push(
+            char::from_digit(i, 36)
+                .expect("Radix is less than 37, so should not panic")
+                .to_string(),
+        );
     }
 
     let mut builder = LtsBuilderFast::with_capacity(labels.clone(), Vec::new(), num_of_states);

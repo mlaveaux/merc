@@ -103,6 +103,7 @@ mod tests {
     use crate::is_failures_refinement;
 
     #[test]
+    #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
     fn test_random_trace_refinement() {
         random_test(100, |rng| {
             let spec_lts = random_lts(rng, 10, 20, 5);
@@ -119,7 +120,7 @@ mod tests {
                     spec_lts,
                     RefinementType::Trace,
                     ExplorationStrategy::BFS,
-                    true,
+                    false,
                     &mut timing
                 ),
                 "Strong bisimulation implies trace refinement."

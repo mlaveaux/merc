@@ -9,10 +9,11 @@ use crate::StateIndex;
 use crate::TransitionLabel;
 
 /// Computes the synchronous product LTS of two given LTSs.
-///
-/// This is useful for generating random LTSs by composing smaller random LTSs,
-/// which is often a more realistic structure then fully random LTSs.
-pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(left: &L, right: &R) -> LabelledTransitionSystem<L::Label> {
+/// 
+///  If `synchronized_labels` is `None`, then all common labels (except tau) are
+/// considered synchronized. Otherwise, the provided labels are used for
+/// synchronization.
+pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(left: &L, right: &R, synchronized_labels: Option<Vec<L::Label>>) -> LabelledTransitionSystem<L::Label> {
     // Determine the combination of action labels
     let mut all_labels: IndexedSet<L::Label> = IndexedSet::new();
 
@@ -21,17 +22,23 @@ pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(left: &L, right: &R) -> Lab
     }
 
     // Determine the synchronised labels
-    let mut synchronised_labels: Vec<L::Label> = Vec::new();
-    for label in right.labels() {
-        let (_index, inserted) = all_labels.insert(label.clone());
+    let synchronised_labels = match synchronized_labels {
+        Some(x) => x,
+        None => {
+            let mut new_synchronized_labels: Vec<L::Label> = Vec::new();
+            for label in right.labels() {
+                let (_index, inserted) = all_labels.insert(label.clone());
 
-        if !inserted {
-            synchronised_labels.push(label.clone());
+                if !inserted {
+                    new_synchronized_labels.push(label.clone());
+                }
+            }
+
+            // Tau can never be synchronised.
+            new_synchronized_labels.retain(|l| !l.is_tau_label());
+            new_synchronized_labels
         }
-    }
-
-    // Tau can never be synchronised.
-    synchronised_labels.retain(|l| !l.is_tau_label());
+    };
 
     // For the product we do not know the number of states and transitions in advance.
     let mut lts_builder = LtsBuilderFast::new(all_labels.to_vec(), Vec::new());
@@ -137,7 +144,7 @@ mod tests {
 
             trace!("{left:?}");
             trace!("{right:?}");
-            let _product = product_lts(&left, &right);
+            let _product = product_lts(&left, &right, None);
         });
     }
 }

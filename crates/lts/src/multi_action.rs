@@ -104,52 +104,52 @@ mod inner {
 
     /// Represents a TimedMultiAction in mCRL2, which is a multi-action with an associated time.
     #[merc_term(is_mcrl2_timed_multi_action)]
-    pub(crate) struct MCRL2TimedMultiAction {
+    pub struct MCRL2TimedMultiAction {
         term: ATerm,
     }
 
     impl MCRL2TimedMultiAction {
         /// Returns the actions contained in the multi-action.
-        pub(crate) fn actions(&self) -> ATermList<MCRL2Action> {
+        pub fn actions(&self) -> ATermList<MCRL2Action> {
             self.term.arg(0).into()
         }
 
         /// Returns the time at which the multi-action occurs.
-        pub(crate) fn time(&self) -> DataExpressionRef<'_> {
+        pub fn time(&self) -> DataExpressionRef<'_> {
             self.term.arg(1).into()
         }
     }
 
     #[merc_term(is_mcrl2_action)]
-    pub(crate) struct MCRL2Action {
+    pub struct MCRL2Action {
         term: ATerm,
     }
 
     impl MCRL2Action {
         /// Returns the label of the action.
-        pub(crate) fn label(&self) -> MCRL2ActionLabelRef<'_> {
+        pub fn label(&self) -> MCRL2ActionLabelRef<'_> {
             self.term.arg(0).into()
         }
 
         /// Returns the data arguments of the action.
-        pub(crate) fn arguments(&self) -> ATermList<DataExpression> {
+        pub fn arguments(&self) -> ATermList<DataExpression> {
             self.term.arg(1).into()
         }
     }
 
     #[merc_term(is_mcrl2_action_label)]
-    struct MCRL2ActionLabel {
+    pub struct MCRL2ActionLabel {
         term: ATerm,
     }
 
     impl MCRL2ActionLabel {
-        pub(crate) fn name(&self) -> ATermStringRef<'_> {
+        pub fn name(&self) -> ATermStringRef<'_> {
             self.term.arg(0).into()
         }
     }
 }
 
-use inner::*;
+pub use inner::*;
 
 /// See [`is_mcrl2_timed_multi_action_symbol`]
 fn is_mcrl2_timed_multi_action<'a, 'b>(term: &'b impl Term<'a, 'b>) -> bool {
