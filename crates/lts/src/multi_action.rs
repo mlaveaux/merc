@@ -1,10 +1,26 @@
 use std::fmt;
 use std::hash::Hash;
-use std::mem::ManuallyDrop;
+
+use delegate::delegate;
 
 use itertools::Itertools;
-use merc_aterm::{ATerm, Symbol};
+use merc_aterm::ATerm;
+use merc_aterm::ATermArgs;
+use merc_aterm::ATermIndex;
+use merc_aterm::ATermList;
+use merc_aterm::ATermRef;
+use merc_aterm::Markable;
+use merc_aterm::storage::Marker;
+use merc_aterm::Symb;
+use merc_aterm::SymbolRef;
+use merc_aterm::Term;
+use merc_aterm::TermIterator;
+use merc_aterm::Transmutable;
 use merc_collections::VecSet;
+use merc_data::DataVariableRef;
+use merc_data::is_data_variable;
+use merc_macros::merc_derive_terms;
+use merc_macros::merc_term;
 use merc_utilities::MercError;
 
 use crate::TransitionLabel;
@@ -51,13 +67,118 @@ impl MultiAction {
     }
 
     /// Constructs a multi-action from an ATerm representation.
-    pub fn from_mcrl2_aterm(_term: ATerm) -> Self {
-        unimplemented!("Cannot yet translate the mCRL2 terms");
+    pub fn from_mcrl2_aterm(term: ATerm) -> Result<Self, MercError> {
+        if is_mcrl2_timed_multi_action_symbol(&term.get_head_symbol()) {
+            let multi_action = MCRL2TimedMultiAction::from(term);
+
+            if is_data_variable(&multi_action.time()) {
+                let variable: DataVariableRef = multi_action.time().into();
+                if variable.name() != "@undefined_real" {
+                    return Err("Timed multi-actions are not supported.".into());
+                }
+            } else {
+                return Err("Timed multi-actions are not supported.".into());
+            }
+
+            let mut actions = VecSet::new();
+            for action in multi_action.actions() {
+                actions.insert(Action {
+                    label: action.label().name().to_string(),
+                    arguments: Vec::new(), // TODO: Extract arguments if needed
+                });
+            }
+
+            Ok(MultiAction { actions })
+        } else {
+            return Err(format!("Expected TimedMultAction symbol, got {}.", term).into());
+        }
     }
 }
 
-thread_local! {
-    pub static TIMED_MULTI_ACTION: ManuallyDrop<Symbol> = ManuallyDrop::new(Symbol::new("TimedMultiAction", 2));
+#[merc_derive_terms]
+mod inner {
+    use merc_aterm::ATermStringRef;
+    use merc_data::{DataExpression, DataExpressionRef};
+
+    use super::*;
+
+    /// Represents a TimedMultiAction in mCRL2, which is a multi-action with an associated time.
+    #[merc_term(is_mcrl2_timed_multi_action)]
+    pub(crate) struct MCRL2TimedMultiAction {
+        term: ATerm,
+    }
+
+    impl MCRL2TimedMultiAction {
+        /// Returns the actions contained in the multi-action.
+        pub(crate) fn actions(&self) -> ATermList<MCRL2Action> {
+            self.term.arg(0).into()
+        }
+
+        /// Returns the time at which the multi-action occurs.
+        pub(crate) fn time(&self) -> DataExpressionRef<'_> {
+            self.term.arg(1).into()
+        }
+    }
+
+    #[merc_term(is_mcrl2_action)]
+    pub(crate) struct MCRL2Action {
+        term: ATerm,
+    }
+
+    impl MCRL2Action {
+        /// Returns the label of the action.
+        pub(crate) fn label(&self) -> MCRL2ActionLabelRef<'_> {
+            self.term.arg(0).into()
+        }
+
+        /// Returns the data arguments of the action.
+        pub(crate) fn arguments(&self) -> ATermList<DataExpression> {
+            self.term.arg(1).into()
+        }
+    }
+
+    #[merc_term(is_mcrl2_action_label)]
+    struct MCRL2ActionLabel {
+        term: ATerm,
+    }
+
+    impl MCRL2ActionLabel {
+        pub(crate) fn name(&self) -> ATermStringRef<'_> {
+            self.term.arg(0).into()
+        }
+    }
+}
+
+use inner::*;
+
+/// See [`is_mcrl2_timed_multi_action_symbol`]
+fn is_mcrl2_timed_multi_action<'a, 'b>(term: &'b impl Term<'a, 'b>) -> bool {
+    is_mcrl2_timed_multi_action_symbol(&term.get_head_symbol())
+}
+
+/// See [`is_mcrl2_action_symbol`]
+fn is_mcrl2_action<'a, 'b>(term: &'b impl Term<'a, 'b>) -> bool {
+    is_mcrl2_action_symbol(&term.get_head_symbol())
+}
+
+/// See [`is_mcrl2_action_label_symbol`]
+fn is_mcrl2_action_label<'a, 'b>(term: &'b impl Term<'a, 'b>) -> bool {
+    is_mcrl2_action_label_symbol(&term.get_head_symbol())
+}
+
+/// Checks if the given symbol represents a TimedMultiAction in mCRL2.
+fn is_mcrl2_timed_multi_action_symbol(symbol: &SymbolRef<'_>) -> bool {
+    symbol.name() == "TimedMultAct" && symbol.arity() == 2
+}
+
+/// Checks if the given symbol represents an Action in mCRL2.
+fn is_mcrl2_action_symbol(symbol: &SymbolRef<'_>) -> bool {
+    symbol.name() == "Action" && symbol.arity() == 2
+}
+
+/// Checks if the given symbol represents an ActionLabel in mCRL2.
+fn is_mcrl2_action_label_symbol(symbol: &SymbolRef<'_>) -> bool {
+    symbol.name() == "ActId" && symbol.arity() == 2
 }
 
 /// Represents a single action label, with its (data) arguments

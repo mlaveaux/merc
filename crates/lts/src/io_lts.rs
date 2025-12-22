@@ -1,11 +1,3 @@
-//!
-//!  write_lts_header(data_spec, parameters, action_labels)
-//!
-//! In any order:
-//!  Write transitions (to, label, from), where 'to' and 'from' are indices and 'label' the multi_action, as necessary.
-//!  Write state labels (state_label_lts) in their order such that writing the i-th state label belongs to state with index i.
-//!  Write the initial state.
-
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::BufWriter;
@@ -83,13 +75,17 @@ pub fn read_lts(
                         );
                     } else {
                         // New multi-action found, add it to the builder.
-                        let multi_action = MultiAction::from_mcrl2_aterm(label);
-                        builder.add_label(multi_action);
+                        let label_index = builder.add_label(MultiAction::from_mcrl2_aterm(label)?);
+                        builder.add_transition_index(
+                            StateIndex::new(from.value()),
+                            label_index,
+                            StateIndex::new(to.value()),
+                        );
                     }
 
                     progress.print(builder.num_of_transitions());
                 } else if t == probabilistic_transition_mark() {
-                    unimplemented!("Probabilistic transitions are not supported yet.");
+                    return Err("Probabilistic transitions are not supported yet.".into());
                 } else if is_list_term(&t) {
                     // State labels can be ignored for the reduction algorithm.
                 } else if t == initial_state_marker() {
@@ -107,11 +103,33 @@ pub fn read_lts(
 }
 
 /// Write a labelled transition system in binary 'lts' format to the given
-/// writer. Requires that the labels are ATerm streamable.
+/// writer. Requires that the labels are ATerm streamable. Note that the writer
+/// is buffered internally using a `BufWriter`.
 ///
 /// # Details
 ///
-/// Note that the writer is buffered internally using a `BufWriter`.
+/// This format is build on top the ATerm binary format. The structure is as
+/// follows:
+/// 
+///     lts_marker: ATerm
+///     data_spec: see [`merc_data::DataSpecification::write`]
+///     parameters: ATermList 
+///     action_labels: ATermList
+///
+/// Afterwards we can write the following elements in any order:
+/// 
+/// initial stateL
+///    initial_state_marker: ATerm
+///    state: ATermInt
+/// 
+/// transition:
+///     transition_marker: ATerm
+///     from: ATermInt
+///     label: ATerm (the multi_action)
+///     to: ATermInt
+/// 
+/// state_label (index derived from order of appearance):
+///    state_label: ATermList::<DataExpression>
 pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError>
 where
     L: LTS,

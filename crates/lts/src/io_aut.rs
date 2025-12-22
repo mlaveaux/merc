@@ -27,54 +27,22 @@ pub enum IOError {
     InvalidTransition(String),
 }
 
-/// Dedicated function to parse the following transition formats:
-///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
-///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+/// Loads a labelled transition system in the
+/// [Aldebaran](https://cadp.inria.fr/man/aldebaran.html#sect6) format of the
+/// CADP toolset from the given reader. Note that the reader has a buffer in the
+/// form of  `BufReader`` internally.
 ///
-/// This was generally faster than the regex variant, since that one has to backtrack after
-fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
-    let start_paren = input.find('(')?;
-    let start_comma = input.find(',')?;
-
-    // Find the comma in the second part
-    let start_second_comma = input.rfind(',')?;
-    let end_paren = input.rfind(')')?;
-
-    let from = input.get(start_paren + 1..start_comma)?.trim();
-    let label = input.get(start_comma + 1..start_second_comma)?.trim();
-    let to = input.get(start_second_comma + 1..end_paren)?.trim();
-    // Handle the special case where it has quotes.
-    if label.starts_with('"') && label.ends_with('"') {
-        return Some((from, &label[1..label.len() - 1], to));
-    }
-
-    Some((from, label, to))
-}
-
-/// A trait for labels that can be used in transitions.
-impl TransitionLabel for String {
-    fn is_tau_label(&self) -> bool {
-        self == "tau"
-    }
-
-    fn tau_label() -> Self {
-        "tau".to_string()
-    }
-
-    fn matches_label(&self, label: &String) -> bool {
-        self == label
-    }
-}
-
-/// Loads a labelled transition system in the Aldebaran format from the given
-/// reader. Note that the reader has a buffer in the form of  `BufReader``
-/// internally.
-///
+/// # Details
+/// 
 /// The Aldebaran format consists of a header: `des (<initial>: Nat,
 ///     <num_of_transitions>: Nat, <num_of_states>: Nat)`
 ///     
-/// And one line for every transition: `(<from>: Nat, "<label>": Str, <to>:
-///     Nat)` `(<from>: Nat, <label>: Str, <to>: Nat)`
+/// And one line for every transition either one of these cases: 
+///  `(<from>: Nat, "<label>": Str, <to>: Nat)` 
+///  `(<from>: Nat, <label>: Str, <to>: Nat)`
+/// 
+/// To be fully compatible with the original syntax definition, the labels 
+/// of the edges should consist of at most 5000 characters.
 pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
     info!("Reading LTS in .aut format...");
 
@@ -153,6 +121,46 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
     }
 
     Ok(())
+}
+
+/// Dedicated function to parse the following transition formats:
+///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
+///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+///
+/// This was generally faster than the regex variant, since that one has to backtrack to handle both
+/// the quoted and unquoted label variants.
+fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
+    let start_paren = input.find('(')?;
+    let start_comma = input.find(',')?;
+
+    // Find the comma in the second part
+    let start_second_comma = input.rfind(',')?;
+    let end_paren = input.rfind(')')?;
+
+    let from = input.get(start_paren + 1..start_comma)?.trim();
+    let label = input.get(start_comma + 1..start_second_comma)?.trim();
+    let to = input.get(start_second_comma + 1..end_paren)?.trim();
+    // Handle the special case where it has quotes.
+    if label.starts_with('"') && label.ends_with('"') {
+        return Some((from, &label[1..label.len() - 1], to));
+    }
+
+    Some((from, label, to))
+}
+
+/// A trait for labels that can be used in transitions.
+impl TransitionLabel for String {
+    fn is_tau_label(&self) -> bool {
+        self == "tau"
+    }
+
+    fn tau_label() -> Self {
+        "tau".to_string()
+    }
+
+    fn matches_label(&self, label: &String) -> bool {
+        self == label
+    }
 }
 
 #[cfg(test)]

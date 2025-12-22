@@ -81,24 +81,10 @@ macro_rules! apply_lts_pair {
 impl GenericLts {
     /// Applies the given function to both LTSs when they are the same variant.
     /// Returns an error if the variants do not match.
-    pub fn apply_pair<T, FAut, FLts, R>(
-        self,
-        other: GenericLts,
-        arguments: T,
-        apply_aut: FAut,
-        apply_lts: FLts,
-    ) -> R
+    pub fn apply_pair<T, FAut, FLts, R>(self, other: GenericLts, arguments: T, apply_aut: FAut, apply_lts: FLts) -> R
     where
-        FAut: FnOnce(
-            LabelledTransitionSystem<String>,
-            LabelledTransitionSystem<String>,
-            T,
-        ) -> R,
-        FLts: FnOnce(
-            LabelledTransitionSystem<MultiAction>,
-            LabelledTransitionSystem<MultiAction>,
-            T,
-        ) -> R,
+        FAut: FnOnce(LabelledTransitionSystem<String>, LabelledTransitionSystem<String>, T) -> R,
+        FLts: FnOnce(LabelledTransitionSystem<MultiAction>, LabelledTransitionSystem<MultiAction>, T) -> R,
     {
         match (self, other) {
             (GenericLts::Aut(a), GenericLts::Aut(b)) => apply_aut(a, b, arguments),
