@@ -28,6 +28,7 @@ use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
 use crate::compute_reachable;
+use crate::make_vpg_total;
 
 /// Translates a feature transition system into a variability parity game.
 pub fn translate(
@@ -53,7 +54,6 @@ pub fn translate(
         &simplified_labels,
         &equation_system,
         manager_ref.with_manager_shared(|manager| BDDFunction::t(manager)),
-        true,
     );
 
     algorithm.translate(fts.initial_state_index(), 0)?;
@@ -71,9 +71,8 @@ pub fn translate(
         || algorithm.edges.iter().cloned(),
     );
 
-    // Check that the result is a total VPG.
-    debug_assert!(result.is_total(manager_ref)?, "Resulting VPG is not total after translation",);
-    // Check that all vertices are reachable from the initial vertex.
+    // Check that all vertices are reachable from the initial vertex. After
+    // totality it could be that the true or false nodes are not reachable.
     if cfg!(debug_assertions) {
         let (_, reachable_vertices) = compute_reachable(&result);
         debug_assert!(
@@ -82,7 +81,14 @@ pub fn translate(
         );
     }
 
-    Ok(result)
+    // Ensure that the result is a total VPG.
+    let total_result = if !result.is_total(manager_ref)? {
+        make_vpg_total(manager_ref, &result)?
+    } else {
+        result        
+    };
+
+    Ok(total_result)
 }
 
 /// Is used to distinguish between StateFrm and Equation vertices in the vertex map.
@@ -109,9 +115,6 @@ struct Translation<'a> {
     // Used for the breadth first search.
     queue: Vec<(StateIndex, Formula<'a>, VertexIndex)>,
 
-    /// Set to true to ensure that the resulting VPG edge relation is total
-    make_total: bool,
-
     /// The parsed labels of the FTS.
     parsed_labels: &'a Vec<MultiAction>,
 
@@ -135,7 +138,6 @@ impl<'a> Translation<'a> {
         parsed_labels: &'a Vec<MultiAction>,
         equation_system: &'a ModalEquationSystem,
         true_bdd: BDDFunction,
-        make_total: bool,
     ) -> Self {
         let progress: TimeProgress<usize> = TimeProgress::new(|num_of_vertices: usize| {
             info!("Translated {} vertices...", num_of_vertices);
@@ -149,7 +151,6 @@ impl<'a> Translation<'a> {
             fts,
             parsed_labels,
             equation_system,
-            make_total,
             true_bdd,
             progress,
         }
@@ -196,20 +197,10 @@ impl<'a> Translation<'a> {
             StateFrm::True => {
                 // (s, true) → odd, 0
                 self.vertices[vertex_index] = (Player::Odd, Priority::new(0));
-
-                if self.make_total {
-                    // Self-loop
-                    self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
-                }
             }
             StateFrm::False => {
                 // (s, false) → even, 0
                 self.vertices[vertex_index] = (Player::Even, Priority::new(0));
-
-                if self.make_total {
-                    // Self-loop
-                    self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
-                }
             }
             StateFrm::Binary { op, lhs, rhs } => {
                 match op {
@@ -256,14 +247,12 @@ impl<'a> Translation<'a> {
                         // (s, [a] Ψ) → odd, (s', Ψ) for all s' with s -a-> s', 0
                         self.vertices[vertex_index] = (Player::Odd, Priority::new(0));
 
-                        let mut matched = false;
                         for transition in self.fts.outgoing_transitions(s) {
                             let action = &self.parsed_labels[*transition.label];
 
                             trace!("Matching action {} against formula {}", action, formula);
 
                             if match_regular_formula(formula, &action) {
-                                matched = true;
                                 let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((
@@ -272,23 +261,16 @@ impl<'a> Translation<'a> {
                                     s_prime_psi,
                                 ));
                             }
-                        }
-
-                        if !matched && self.make_total {
-                            // No matching transitions, add a self-loop to ensure totality
-                            self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                         }
                     }
                     ModalityOperator::Diamond => {
                         // (s, <a> Ψ) → even, (s', Ψ) for all s' with s -a-> s', 0
                         self.vertices[vertex_index] = (Player::Even, Priority::new(0));
 
-                        let mut matched = false;
                         for transition in self.fts.outgoing_transitions(s) {
                             let action = &self.parsed_labels[*transition.label];
 
                             if match_regular_formula(formula, &action) {
-                                matched = true;
                                 let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((
@@ -297,11 +279,6 @@ impl<'a> Translation<'a> {
                                     s_prime_psi,
                                 ));
                             }
-                        }
-
-                        if !matched && self.make_total {
-                            // No matching transitions, add a self-loop to ensure totality
-                            self.edges.push((vertex_index, self.true_bdd.clone(), vertex_index));
                         }
                     }
                 }
