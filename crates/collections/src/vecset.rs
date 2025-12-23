@@ -1,6 +1,26 @@
-use std::fmt;
+use std::{fmt, slice::Iter};
 
 use itertools::Itertools;
+
+#[macro_export]
+macro_rules! vecset {
+    () => {
+        $crate::vecset::VecSet::new()
+    };
+    ($elem:expr; $n:expr) => {{
+        let mut __set = $crate::vecset::VecSet::new();
+        let __count: usize = $n;
+        if __count > 0 {
+            __set.insert($elem);
+        }
+        __set
+    }};
+    ($($x:expr),+ $(,)?) => {{
+        let mut __set = $crate::vecset::VecSet::new();
+        $( let _ = __set.insert($x); )*
+        __set
+    }};
+}
 
 ///
 /// A set that is internally represented by a sorted vector. Mostly useful for
@@ -51,6 +71,15 @@ impl<T: Ord> VecSet<T> {
     /// Returns the number of elements in the set.
     pub fn len(&self) -> usize {
         self.sorted_array.len()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a VecSet<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.sorted_array.iter()
     }
 }
 
