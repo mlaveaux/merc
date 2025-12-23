@@ -4,21 +4,24 @@ use std::hash::Hash;
 use delegate::delegate;
 
 use itertools::Itertools;
+use merc_aterm::storage::Marker;
 use merc_aterm::ATerm;
 use merc_aterm::ATermArgs;
 use merc_aterm::ATermIndex;
 use merc_aterm::ATermList;
 use merc_aterm::ATermRef;
+use merc_aterm::ATermString;
 use merc_aterm::Markable;
-use merc_aterm::storage::Marker;
 use merc_aterm::Symb;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::TermIterator;
 use merc_aterm::Transmutable;
 use merc_collections::VecSet;
-use merc_data::DataVariableRef;
 use merc_data::is_data_variable;
+use merc_data::DataExpression;
+use merc_data::DataVariable;
+use merc_data::DataVariableRef;
 use merc_macros::merc_derive_terms;
 use merc_macros::merc_term;
 use merc_utilities::MercError;
@@ -66,7 +69,28 @@ impl MultiAction {
         Ok(MultiAction { actions })
     }
 
-    /// Constructs a multi-action from an ATerm representation.
+    /// Converts the MultiAction into its mCRL2 ATerm representation.
+    pub fn to_mcrl2_aterm(&self) -> Result<ATerm, MercError> {
+        let action_terms: Vec<MCRL2Action> = self
+            .actions
+            .iter()
+            .map(|action| {
+                let label_term = MCRL2ActionLabel::new(
+                    ATermString::new(&action.label).copy(),
+                    ATermList::<DataExpression>::empty(),
+                );
+                let arguments_term = ATermList::<DataExpression>::empty(); // TODO: Convert arguments if needed
+
+                MCRL2Action::new(label_term.copy(), arguments_term)
+            })
+            .collect();
+
+        let actions_list = ATermList::<MCRL2Action>::from_double_iter(action_terms.into_iter());
+        let time_term: DataExpression = DataVariable::new("@undefined_real").into();
+        Ok(MCRL2TimedMultiAction::new(actions_list, time_term.copy()).into())
+    }
+
+    /// Constructs a MultiAction from an mCRL2 ATerm representation.
     pub fn from_mcrl2_aterm(term: ATerm) -> Result<Self, MercError> {
         if is_mcrl2_timed_multi_action_symbol(&term.get_head_symbol()) {
             let multi_action = MCRL2TimedMultiAction::from(term);
@@ -97,8 +121,9 @@ impl MultiAction {
 
 #[merc_derive_terms]
 mod inner {
-    use merc_aterm::ATermStringRef;
+    use merc_aterm::{ATermStringRef, Symbol};
     use merc_data::{DataExpression, DataExpressionRef};
+    use merc_macros::merc_ignore;
 
     use super::*;
 
@@ -109,6 +134,14 @@ mod inner {
     }
 
     impl MCRL2TimedMultiAction {
+        /// Creates a new TimedMultiAction with the given actions and time.
+        #[merc_ignore]
+        pub fn new(actions: ATermList<MCRL2Action>, time: DataExpressionRef<'_>) -> Self {
+            let args: &[ATermRef<'_>] = &[actions.copy(), time.into()];
+            let term = ATerm::with_args(&Symbol::new("TimedMultAct", 2), args);
+            MCRL2TimedMultiAction { term: term.protect() }
+        }
+
         /// Returns the actions contained in the multi-action.
         pub fn actions(&self) -> ATermList<MCRL2Action> {
             self.term.arg(0).into()
@@ -126,6 +159,14 @@ mod inner {
     }
 
     impl MCRL2Action {
+        /// Creates a new Action with the given label and arguments.
+        #[merc_ignore]
+        pub fn new(label: MCRL2ActionLabelRef<'_>, arguments: ATermList<DataExpression>) -> Self {
+            let args: &[ATermRef<'_>] = &[label.into(), arguments.copy()];
+            let term = ATerm::with_args(&Symbol::new("Action", 2), args);
+            MCRL2Action { term: term.protect() }
+        }
+
         /// Returns the label of the action.
         pub fn label(&self) -> MCRL2ActionLabelRef<'_> {
             self.term.arg(0).into()
@@ -143,6 +184,15 @@ mod inner {
     }
 
     impl MCRL2ActionLabel {
+        /// Constructs a new action label with the given name and arguments.
+        #[merc_ignore]
+        pub fn new(name: ATermStringRef<'_>, args: ATermList<DataExpression>) -> Self {
+            let args: &[ATermRef<'_>] = &[name.into(), args.copy()];
+            let term = ATerm::with_args(&Symbol::new("ActId", 2), args);
+            MCRL2ActionLabel { term: term.protect() }
+        }
+
+        /// Obtain the name of the action label.
         pub fn name(&self) -> ATermStringRef<'_> {
             self.term.arg(0).into()
         }
@@ -188,6 +238,13 @@ pub struct Action {
     arguments: Vec<String>,
 }
 
+impl Action {
+    /// Creates a new action label with the given name and arguments.
+    pub fn new(label: String, arguments: Vec<String>) -> Self {
+        Action { label, arguments }
+    }
+}
+
 impl TransitionLabel for MultiAction {
     fn is_tau_label(&self) -> bool {
         self.actions.is_empty()
@@ -205,10 +262,12 @@ impl TransitionLabel for MultiAction {
     fn from_index(i: usize) -> Self {
         // For now we only generate single actions, but these could become multiactions as well
         MultiAction {
-            actions: VecSet::singleton(Action::new(char::from_digit(i as u32, 36)
-            .expect("Radix is less than 37, so should not panic")
-            .to_string(),
-            Vec::new()))
+            actions: VecSet::singleton(Action::new(
+                char::from_digit(i as u32, 36)
+                    .expect("Radix is less than 37, so should not panic")
+                    .to_string(),
+                Vec::new(),
+            )),
         }
     }
 }
@@ -250,23 +309,17 @@ mod tests {
         let action = MultiAction::from_string("a | b(1, 2) | c").unwrap();
 
         assert_eq!(action.actions.len(), 3);
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "a" && act.arguments.is_empty())
-        );
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "b" && act.arguments == vec!["1", "2"])
-        );
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "c" && act.arguments.is_empty())
-        );
+        assert!(action
+            .actions
+            .iter()
+            .any(|act| act.label == "a" && act.arguments.is_empty()));
+        assert!(action
+            .actions
+            .iter()
+            .any(|act| act.label == "b" && act.arguments == vec!["1", "2"]));
+        assert!(action
+            .actions
+            .iter()
+            .any(|act| act.label == "c" && act.arguments.is_empty()));
     }
 }
