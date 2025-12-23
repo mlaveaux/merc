@@ -1,5 +1,6 @@
 use rand::Rng;
 
+use crate::TransitionLabel;
 use crate::product_lts;
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
@@ -8,7 +9,7 @@ use crate::StateIndex;
 
 /// Generates a random LTS with the desired number of states, labels and out
 /// degree by composing three smaller random LTSs using the synchronous product.
-/// This is often a more realistic structure then fully random LTSs, but
+/// This is often a more realistic structure than fully random LTSs, but
 /// otherwise see [`random_lts_monolithic`].
 pub fn random_lts(
     rng: &mut impl Rng,
@@ -36,26 +37,25 @@ pub fn random_lts(
 }
 
 /// Generates a monolithic LTS with the desired number of states, labels, out
-/// degree and in degree for all the states.
-pub fn random_lts_monolithic(
+/// degree and in degree for all the states. Uses the given TransitionLabel type
+/// to generate the transition labels.
+pub fn random_lts_monolithic<L: TransitionLabel>(
     rng: &mut impl Rng,
     num_of_states: usize,
     num_of_labels: u32,
     outdegree: usize,
-) -> LabelledTransitionSystem<String> {
+) -> LabelledTransitionSystem<L> {
     assert!(
         num_of_labels < 26,
         "Too many labels requested, we only support alphabetic labels."
     );
 
     // Introduce lower case letters for the labels.
-    let mut labels: Vec<String> = Vec::new();
-    labels.push("tau".to_string()); // The initial hidden label, assumed to be index 0.
+    let mut labels: Vec<L> = Vec::new();
+    labels.push(L::tau_label()); // The initial hidden label, assumed to be index 0.
     for i in 0..(num_of_labels - 1) {
         labels.push(
-            char::from_digit(i, 36)
-                .expect("Radix is less than 37, so should not panic")
-                .to_string(),
+            L::from_index(i as usize)
         );
     }
 

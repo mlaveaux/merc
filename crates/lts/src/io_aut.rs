@@ -159,6 +159,52 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
     Ok(())
 }
 
+/// Dedicated function to parse the following transition formats:
+///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
+///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+///
+/// This was generally faster than the regex variant, since that one has to backtrack to handle both
+/// the quoted and unquoted label variants.
+fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
+    let start_paren = input.find('(')?;
+    let start_comma = input.find(',')?;
+
+    // Find the comma in the second part
+    let start_second_comma = input.rfind(',')?;
+    let end_paren = input.rfind(')')?;
+
+    let from = input.get(start_paren + 1..start_comma)?.trim();
+    let label = input.get(start_comma + 1..start_second_comma)?.trim();
+    let to = input.get(start_second_comma + 1..end_paren)?.trim();
+    // Handle the special case where it has quotes.
+    if label.starts_with('"') && label.ends_with('"') {
+        return Some((from, &label[1..label.len() - 1], to));
+    }
+
+    Some((from, label, to))
+}
+
+/// A trait for labels that can be used in transitions.
+impl TransitionLabel for String {
+    fn is_tau_label(&self) -> bool {
+        self == "tau"
+    }
+
+    fn tau_label() -> Self {
+        "tau".to_string()
+    }
+
+    fn matches_label(&self, label: &String) -> bool {
+        self == label
+    }
+    
+    fn from_index(i: usize) -> Self {
+        char::from_digit(i as u32, 36)
+            .expect("Radix is less than 37, so should not panic")
+            .to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::random_lts_monolithic;
@@ -227,7 +273,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_random_aut_io() {
         random_test(100, |rng| {
-            let lts = random_lts_monolithic(rng, 100, 3, 20);
+            let lts = random_lts_monolithic::<String>(rng, 100, 3, 20);
 
             let mut buffer: Vec<u8> = Vec::new();
             write_aut(&mut buffer, &lts).unwrap();
