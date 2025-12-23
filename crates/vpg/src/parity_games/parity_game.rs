@@ -74,7 +74,7 @@ impl ParityGame {
     pub fn from_edges<F, I>(
         initial_vertex: VertexIndex,
         owner: Vec<Player>,
-        priority: Vec<Priority>,
+        mut priority: Vec<Priority>,
         make_total: bool,
         mut edges: F,
     ) -> Self
@@ -160,6 +160,13 @@ impl ParityGame {
                     // No outgoing edges, add self-loop
                     edges_to[start] = VertexIndex::new(vertex_idx);
                     vertices[vertex_idx] += 1; // Increment end offset
+
+                    // Change the priority of the vertex such that the self-loop is winning for the opponent.
+                    priority[vertex_idx] = Priority::new(
+                        owner[vertex_idx]
+                            .opponent()
+                            .to_index(),
+                    );
                 }
             }
         }
