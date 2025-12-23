@@ -1,5 +1,5 @@
-use std::fs::read_to_string;
 use std::fs::File;
+use std::fs::read_to_string;
 use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
@@ -19,8 +19,17 @@ use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
+use merc_vpg::CubeIterAll;
+use merc_vpg::FeatureDiagram;
+use merc_vpg::FormatConfig;
+use merc_vpg::ParityGameFormat;
+use merc_vpg::PgDot;
+use merc_vpg::Player;
+use merc_vpg::VpgDot;
+use merc_vpg::ZielonkaVariant;
 use merc_vpg::compute_reachable;
 use merc_vpg::guess_format_from_extension;
+use merc_vpg::project_variability_parity_games_iter;
 use merc_vpg::read_fts;
 use merc_vpg::read_pg;
 use merc_vpg::read_vpg;
@@ -30,14 +39,6 @@ use merc_vpg::solve_zielonka;
 use merc_vpg::translate;
 use merc_vpg::write_pg;
 use merc_vpg::write_vpg;
-use merc_vpg::CubeIterAll;
-use merc_vpg::FeatureDiagram;
-use merc_vpg::FormatConfig;
-use merc_vpg::ParityGameFormat;
-use merc_vpg::PgDot;
-use merc_vpg::Player;
-use merc_vpg::VpgDot;
-use merc_vpg::ZielonkaVariant;
 
 #[derive(clap::Parser, Debug)]
 #[command(
@@ -71,6 +72,7 @@ struct Cli {
 enum Commands {
     Solve(SolveArgs),
     Reachable(ReachableArgs),
+    Project(ProjectArgs),
     Translate(TranslateArgs),
     Display(DisplayArgs),
 }
@@ -99,6 +101,21 @@ struct ReachableArgs {
     filename: String,
 
     output: String,
+
+    #[arg(long, short)]
+    format: Option<ParityGameFormat>,
+}
+
+/// Arguments for projecting a variability parity game
+#[derive(clap::Args, Debug)]
+struct ProjectArgs {
+    filename: String,
+
+    output: String,
+
+    /// Whether to compute the reachable part after outputting each projection
+    #[arg(long, short, default_value_t = false)]
+    reachable: bool,
 
     #[arg(long, short)]
     format: Option<ParityGameFormat>,
@@ -152,6 +169,7 @@ fn main() -> Result<ExitCode, MercError> {
         match command {
             Commands::Solve(args) => handle_solve(&cli, args, &mut timing)?,
             Commands::Reachable(args) => handle_reachable(&cli, args, &mut timing)?,
+            Commands::Project(args) => handle_project(&cli, args, &mut timing)?,
             Commands::Translate(args) => handle_translate(&cli, args)?,
             Commands::Display(args) => handle_display(&cli, args, &mut timing)?,
         }
@@ -186,10 +204,16 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
 
         let mut time_solve = timing.start("solve_zielonka");
         let solution = solve_zielonka(&game);
-        if solution[0][0] {
-            println!("{}", Player::Even.solution())
+        if args.full_solution {
+            for (index, player_set) in solution.iter().enumerate() {
+                println!("W{index}: {}", player_set.iter_ones().format(", "));
+            }
         } else {
-            println!("{}", Player::Odd.solution())
+            if solution[0][0] {
+                println!("{}", Player::Even.solution())
+            } else {
+                println!("{}", Player::Odd.solution())
+            }
         }
         time_solve.finish();
     } else {
@@ -307,6 +331,58 @@ fn handle_reachable(cli: &Cli, args: &ReachableArgs, timing: &mut Timing) -> Res
             let mut output_file = File::create(&args.output)?;
             // Write reachable part using the PG writer, as reachable_game is a ParityGame.
             write_pg(&mut output_file, &reachable_game)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Compute all the projects of a variability parity game and write them to output.
+fn handle_project(cli: &Cli, args: &ProjectArgs, timing: &mut Timing) -> Result<(), MercError> {
+    let path = Path::new(&args.filename);
+    let mut file = File::open(&path)?;
+    let format = guess_format_from_extension(path, args.format).ok_or("Unknown parity game file format.")?;
+
+    if format != ParityGameFormat::VPG {
+        return Err(MercError::from(
+            "The project command only works for variability parity games.",
+        ));
+    }
+
+    // Read the variability parity game.
+    let manager_ref = oxidd::bdd::new_manager(
+        cli.oxidd_node_capacity,
+        cli.oxidd_cache_capacity.unwrap_or(cli.oxidd_node_capacity),
+        cli.oxidd_workers,
+    );
+
+    let mut time_read = timing.start("read_vpg");
+    let vpg = read_vpg(&manager_ref, &mut file)?;
+    time_read.finish();
+
+    let output_path = Path::new(&args.output);
+
+    for result in project_variability_parity_games_iter(&vpg) {
+        let (cube, _bdd, pg) = result?;
+
+        let extension = output_path.extension().ok_or("Missing extension on output file")?;
+        let mut new_path = output_path.with_file_name(format!(
+            "{}_{}",
+            output_path
+                .file_stem()
+                .ok_or("Missing filename on output")?
+                .to_string_lossy(),
+            FormatConfig(&cube)
+        ));
+        new_path.add_extension(extension);
+
+        let mut output_file = File::create(new_path)?;
+
+        if args.reachable {
+            let (reachable_pg, _projection) = compute_reachable(&pg);
+            write_pg(&mut output_file, &reachable_pg)?;
+        } else {
+            write_pg(&mut output_file, &pg)?;
         }
     }
 
