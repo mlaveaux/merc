@@ -201,6 +201,16 @@ impl TransitionLabel for MultiAction {
         // TODO: Is this correct, now a|b matches a?
         self.actions.iter().any(|action| &action.label == label)
     }
+
+    fn from_index(i: usize) -> Self {
+        // For now we only generate single actions, but these could become multiactions as well
+        MultiAction {
+            actions: VecSet::singleton(Action::new(char::from_digit(i as u32, 36)
+            .expect("Radix is less than 37, so should not panic")
+            .to_string(),
+            Vec::new()))
+        }
+    }
 }
 
 impl fmt::Display for MultiAction {

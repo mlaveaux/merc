@@ -161,6 +161,12 @@ impl TransitionLabel for String {
     fn matches_label(&self, label: &String) -> bool {
         self == label
     }
+
+    fn from_index(i: usize) -> Self {
+        char::from_digit(i as u32, 36)
+            .expect("Radix is less than 37, so should not panic")
+            .to_string()
+    }
 }
 
 #[cfg(test)]
@@ -231,7 +237,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_random_aut_io() {
         random_test(100, |rng| {
-            let lts = random_lts_monolithic(rng, 100, 3, 20);
+            let lts = random_lts_monolithic::<String>(rng, 100, 3, 20);
 
             let mut buffer: Vec<u8> = Vec::new();
             write_aut(&mut buffer, &lts).unwrap();

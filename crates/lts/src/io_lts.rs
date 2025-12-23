@@ -108,7 +108,7 @@ pub fn read_lts(
 ///
 /// # Details
 ///
-/// This format is build on top the ATerm binary format. The structure is as
+/// This format is built on top the ATerm binary format. The structure is as
 /// follows:
 /// 
 ///     lts_marker: ATerm
@@ -118,7 +118,7 @@ pub fn read_lts(
 ///
 /// Afterwards we can write the following elements in any order:
 /// 
-/// initial stateL
+/// initial state:
 ///    initial_state_marker: ATerm
 ///    state: ATermInt
 /// 
@@ -132,8 +132,7 @@ pub fn read_lts(
 ///    state_label: ATermList::<DataExpression>
 pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError>
 where
-    L: LTS,
-    L::Label: ATermStreamable,
+    L: LTS<Label = MultiAction>
 {
     info!("Writing LTS in .lts format...");
 
@@ -146,6 +145,13 @@ where
     writer.write_aterm(&ATermList::<ATerm>::empty().into())?; // Empty parameters
     writer.write_aterm(&ATermList::<ATerm>::empty().into())?; // Empty action labels
 
+    // Convert the internal multi-actions to the ATerm representation that mCRL2 expects.
+    let label_terms = lts
+        .labels()
+        .iter()
+        .map(|label| label.to_mcrl2_aterm())
+        .collect::<Result<Vec<ATerm>, MercError>>()?;
+
     // Write the initial state.
     writer.write_aterm(&initial_state_marker())?;
     writer.write_aterm(&ATermInt::new(*lts.initial_state_index()))?;
@@ -154,7 +160,7 @@ where
         for transition in lts.outgoing_transitions(state) {
             writer.write_aterm(&transition_marker())?;
             writer.write_aterm(&ATermInt::new(*state))?;
-            lts.labels()[transition.label.value()].write(&mut writer)?;
+            writer.write_aterm(&label_terms[transition.label.value()])?;
             writer.write_aterm(&ATermInt::new(*transition.to))?;
         }
     }
@@ -200,45 +206,44 @@ mod tests {
         assert_eq!(lts.num_of_transitions(), 92);
     }
 
-    // TODO: Generate random LTSs with proper action labels.
-    // #[test]
-    // #[cfg_attr(miri, ignore)]
-    // fn test_random_lts_io() {
-    //     random_test(100, |rng| {
-    //         let lts = random_lts_monolithic(rng, 100, 3, 20);
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_random_lts_io() {
+        random_test(100, |rng| {
+            let lts = random_lts_monolithic::<MultiAction>(rng, 100, 3, 20);
 
-    //         let mut buffer: Vec<u8> = Vec::new();
-    //         write_lts(&mut buffer, &lts).unwrap();
+            let mut buffer: Vec<u8> = Vec::new();
+            write_lts(&mut buffer, &lts).unwrap();
 
-    //         let lts_read = read_lts(&buffer[0..], vec![]).unwrap();
+            let lts_read = read_lts(&buffer[0..], vec![]).unwrap();
 
-    //         // If labels are not used, the number of labels may be less. So find a remapping of old labels to new labels.
-    //         let mapping = lts
-    //             .labels()
-    //             .iter()
-    //             .enumerate()
-    //             .filter_map(|(_i, label)| lts_read.labels().iter().position(|l| l.to_string() == *label))
-    //             .collect::<Vec<_>>();
+            // If labels are not used, the number of labels may be less. So find a remapping of old labels to new labels.
+            let mapping = lts
+                .labels()
+                .iter()
+                .enumerate()
+                .filter_map(|(_i, label)| lts_read.labels().iter().position(|l| l == label))
+                .collect::<Vec<_>>();
 
-    //         assert!(lts.num_of_states() == lts_read.num_of_states());
-    //         assert!(lts.num_of_transitions() == lts_read.num_of_transitions());
+            assert!(lts.num_of_states() == lts_read.num_of_states());
+            assert!(lts.num_of_transitions() == lts_read.num_of_transitions());
 
-    //         // Check that all the outgoing transitions are the same.
-    //         for state_index in lts.iter_states() {
-    //             // The labels
-    //             let transitions: Vec<_> = lts.outgoing_transitions(state_index).collect();
-    //             let transitions_read: Vec<_> = lts_read.outgoing_transitions(state_index).collect();
+            // Check that all the outgoing transitions are the same.
+            for state_index in lts.iter_states() {
+                // The labels
+                let transitions: Vec<_> = lts.outgoing_transitions(state_index).collect();
+                let transitions_read: Vec<_> = lts_read.outgoing_transitions(state_index).collect();
 
-    //             // Check that transitions are the same, modulo label remapping.
-    //             transitions.iter().for_each(|t| {
-    //                 let mapped_label = mapping[t.label.value()];
-    //                 assert!(
-    //                     transitions_read
-    //                         .iter()
-    //                         .any(|tr| tr.to == t.to && tr.label.value() == mapped_label)
-    //                 );
-    //             });
-    //         }
-    //     })
-    // }
+                // Check that transitions are the same, modulo label remapping.
+                transitions.iter().for_each(|t| {
+                    let mapped_label = mapping[t.label.value()];
+                    assert!(
+                        transitions_read
+                            .iter()
+                            .any(|tr| tr.to == t.to && tr.label.value() == mapped_label)
+                    );
+                });
+            }
+        })
+    }
 }
