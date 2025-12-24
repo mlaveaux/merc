@@ -19,7 +19,7 @@ pub fn project_variability_parity_game(
     for v in vpg.iter_vertices() {
         for edge in vpg.outgoing_conf_edges(v) {
             // Check if the edge is enabled by the feature selection, if so, include it.
-            if feature_selection.and(&edge.configuration())?.satisfiable() {
+            if feature_selection.and(edge.configuration())?.satisfiable() {
                 edges.push((v, edge.to()));
             }
         }
@@ -36,7 +36,7 @@ pub fn project_variability_parity_game(
 
 /// Projects all configurations of a variability parity game into standard parity games.
 pub fn project_variability_parity_games_iter(vpg: &VariabilityParityGame) -> impl Iterator<Item = Result<(Vec<OptBool>, BDDFunction, ParityGame), MercError>> {
-    CubeIterAll::new(vpg.variables(), &vpg.configuration()).map(|cube| {
+    CubeIterAll::new(vpg.variables(), vpg.configuration()).map(|cube| {
         let (cube, bdd) = cube?;
         let pg = project_variability_parity_game(vpg, &bdd)?;
         Ok((cube, bdd, pg))

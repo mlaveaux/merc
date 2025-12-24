@@ -246,8 +246,8 @@ impl PG for VariabilityParityGame {
 
 impl fmt::Display for VariabilityParityGame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Variability Parity Game:\n")?;
-        write!(f, "Configuration BDD: {}\n", FormatConfigSet(self.configuration()))?;
+        writeln!(f, "Variability Parity Game:")?;
+        writeln!(f, "Configuration BDD: {}", FormatConfigSet(self.configuration()))?;
 
         for v in self.iter_vertices() {
             write!(
@@ -267,7 +267,7 @@ impl fmt::Display for VariabilityParityGame {
                 first = false;
             }
 
-            write!(f, "]\n")?;
+            writeln!(f, "]")?;
         }
 
         Ok(())

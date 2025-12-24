@@ -117,7 +117,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
         // Store the offset for the vertex
         vertices.push(edges_configuration.len());
 
-        while let Some(successors) = parts.next() {
+        for successors in parts {
             // Parse successors (remaining parts, removing trailing semicolon)
             for successor in successors
                 .trim_end_matches(';')
@@ -255,7 +255,7 @@ impl fmt::Display for FormatConfigSet<'_> {
         write!(
             f,
             "{}",
-            CubeIter::new(&self.0).format_with("+", |cube, fmt| { fmt(&format_args!("{}", FormatConfig(&cube))) })
+            CubeIter::new(self.0).format_with("+", |cube, fmt| { fmt(&format_args!("{}", FormatConfig(&cube))) })
         )
     }
 }

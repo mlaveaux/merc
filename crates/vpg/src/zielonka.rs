@@ -59,7 +59,7 @@ pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
 
 /// Solves the given variability parity game using the product-based Zielonka algorithm.
 pub fn solve_variability_product_zielonka(vpg: &VariabilityParityGame) -> impl Iterator<Item = (Vec<OptBool>, BDDFunction, [Set;2])> {
-    project_variability_parity_games_iter(&vpg)
+    project_variability_parity_games_iter(vpg)
         .map(|result| {
             let (cube, bdd, pg) = result.expect("Projection should not fail");
             let (reachable_pg, projection) = compute_reachable(&pg);
@@ -88,7 +88,7 @@ pub fn solve_variability_product_zielonka(vpg: &VariabilityParityGame) -> impl I
 /// is consistent with the solution of the variability parity game.
 pub fn verify_variability_product_zielonka_solution(vpg: &VariabilityParityGame, solution: &[Submap; 2]) -> Result<(), MercError> {
     info!("Verifying variability product-based Zielonka solution...");
-    for (bits, cube, pg_solution) in solve_variability_product_zielonka(&vpg) {
+    for (bits, cube, pg_solution) in solve_variability_product_zielonka(vpg) {
         for v in vpg.iter_vertices() {
             if pg_solution[0][*v] {
                 // Won by Even

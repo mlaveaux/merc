@@ -44,7 +44,7 @@ pub fn translate(
     // Simplify the labels by stripping BDD information
     let simplified_labels: Vec<MultiAction> = parsed_labels?
         .iter()
-        .map(|ma| strip_feature_configuration_from_multi_action(ma))
+        .map(strip_feature_configuration_from_multi_action)
         .collect();
 
     let equation_system = ModalEquationSystem::new(formula);
@@ -59,7 +59,7 @@ pub fn translate(
     algorithm.translate(fts.initial_state_index(), 0)?;
 
     // Convert the feature diagram (with names) to a VPG
-    let variables: Vec<BDDFunction> = fts.features().iter().map(|(_, var)| var.clone()).collect();
+    let variables: Vec<BDDFunction> = fts.features().values().map(|var| var.clone()).collect();
 
     let result = VariabilityParityGame::from_edges(
         manager_ref,
@@ -252,7 +252,7 @@ impl<'a> Translation<'a> {
 
                             trace!("Matching action {} against formula {}", action, formula);
 
-                            if match_regular_formula(formula, &action) {
+                            if match_regular_formula(formula, action) {
                                 let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((
@@ -270,7 +270,7 @@ impl<'a> Translation<'a> {
                         for transition in self.fts.outgoing_transitions(s) {
                             let action = &self.parsed_labels[*transition.label];
 
-                            if match_regular_formula(formula, &action) {
+                            if match_regular_formula(formula, action) {
                                 let s_prime_psi = self.queue_vertex(transition.to, Formula::StateFrm(expr));
 
                                 self.edges.push((

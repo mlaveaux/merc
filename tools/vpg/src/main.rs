@@ -214,12 +214,10 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             for (index, player_set) in solution.iter().enumerate() {
                 println!("W{index}: {}", player_set.iter_ones().format(", "));
             }
+        } else if solution[0][0] {
+            println!("{}", Player::Even.solution())
         } else {
-            if solution[0][0] {
-                println!("{}", Player::Even.solution())
-            } else {
-                println!("{}", Player::Odd.solution())
-            }
+            println!("{}", Player::Odd.solution())
         }
         time_solve.finish();
     } else {
@@ -260,7 +258,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
                 for (cube, vertices) in w {
                     println!(
                         "For product {} the following vertices are in: {}",
-                        FormatConfig(&cube),
+                        FormatConfig(cube),
                         vertices
                             .iter_ones()
                             .filter(|v| if args.full_solution { true } else { *v == 0 })
@@ -273,7 +271,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             for (index, w) in solutions.iter().enumerate() {
                 println!("W{index}: ");
 
-                for entry in CubeIterAll::new(game.variables(), &game.configuration()) {
+                for entry in CubeIterAll::new(game.variables(), game.configuration()) {
                     let (config, config_function) = entry?;
 
                     println!(
@@ -304,9 +302,9 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
 /// Also logs the vertex index mapping to aid inspection.
 fn handle_reachable(cli: &Cli, args: &ReachableArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(path)?;
 
-    let format = guess_format_from_extension(&path, args.format).ok_or("Unknown parity game file format.")?;
+    let format = guess_format_from_extension(path, args.format).ok_or("Unknown parity game file format.")?;
 
     match format {
         ParityGameFormat::PG => {
@@ -356,7 +354,7 @@ fn handle_reachable(cli: &Cli, args: &ReachableArgs, timing: &mut Timing) -> Res
 /// Compute all the projects of a variability parity game and write them to output.
 fn handle_project(cli: &Cli, args: &ProjectArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(path)?;
     let format = guess_format_from_extension(path, args.format).ok_or("Unknown parity game file format.")?;
 
     if format != ParityGameFormat::VPG {
@@ -382,15 +380,14 @@ fn handle_project(cli: &Cli, args: &ProjectArgs, timing: &mut Timing) -> Result<
         let (cube, _bdd, pg) = result?;
 
         let extension = output_path.extension().ok_or("Missing extension on output file")?;
-        let mut new_path = output_path.with_file_name(format!(
+        let new_path = output_path.with_file_name(format!(
             "{}_{}",
             output_path
                 .file_stem()
                 .ok_or("Missing filename on output")?
                 .to_string_lossy(),
             FormatConfig(&cube)
-        ));
-        new_path.add_extension(extension);
+        )).with_extension(extension);
 
         let mut output_file = File::create(new_path)?;
 

@@ -118,7 +118,7 @@ fn visit_statefrm_rec(
     formula: &StateFrm,
     function: &mut impl FnMut(&StateFrm) -> Result<(), MercError>,
 ) -> Result<(), MercError> {
-    function(&formula)?;
+    function(formula)?;
 
     match formula {
         StateFrm::Binary { lhs, rhs, .. } => {

@@ -42,12 +42,12 @@ impl Equation {
     }
 }
 
-impl Into<StateFrm> for Equation {
-    fn into(self) -> StateFrm {
+impl From<Equation> for StateFrm {
+    fn from(val: Equation) -> Self {
         StateFrm::FixedPoint {
-            operator: self.operator,
-            variable: self.variable,
-            body: Box::new(self.rhs),
+            operator: val.operator,
+            variable: val.variable,
+            body: Box::new(val.rhs),
         }
     }
 }
@@ -69,7 +69,7 @@ impl ModalEquationSystem {
         );
 
         debug_assert!(
-            equations.len() > 0,
+            !equations.is_empty(),
             "At least one fixpoint equation expected in the equation system"
         );
 
@@ -162,7 +162,7 @@ fn apply_e(equations: &mut Vec<Equation>, formula: &StateFrm) {
             debug!("Adding equation for variable {}", variable.identifier);
             // Add the equation with the renamed variable (the span is the same as the original variable).
             equations.push(Equation {
-                operator: operator.clone(),
+                operator: *operator,
                 variable: variable.clone(),
                 rhs: rhs(body),
             });

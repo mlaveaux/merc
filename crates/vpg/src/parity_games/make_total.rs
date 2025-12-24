@@ -42,7 +42,7 @@ pub fn make_vpg_total(manager_ref: &BDDManagerRef, vpg: &VariabilityParityGame) 
             edges.push((vertex, edge.configuration().clone(), edge.to()));
 
             // Keep track of the overall outgoing configuration.
-            all_outgoing = all_outgoing.or(&edge.configuration())?;
+            all_outgoing = all_outgoing.or(edge.configuration())?;
         }
 
         // Missing configurations are those in the universe not covered by any outgoing edge.

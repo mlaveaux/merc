@@ -102,7 +102,7 @@ pub fn solve_variability_zielonka(
     let (W0, W1) = if alternative_solving {
         // Intersect the results with the game's configuration
         let config = game.configuration();
-        (W0.and_function(&config)?, W1.and_function(&config)?)
+        (W0.and_function(config)?, W1.and_function(config)?)
     } else {
         (W0, W1)
     };
@@ -589,7 +589,7 @@ impl Submap {
     fn and_function(mut self, configuration: &BDDFunction) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
             let was_satisfiable = func.satisfiable();
-            *func = func.and(&configuration)?;
+            *func = func.and(configuration)?;
             let is_satisfiable = func.satisfiable();
 
             if was_satisfiable && !is_satisfiable {
@@ -604,7 +604,7 @@ impl Submap {
     fn minus_function(mut self, configuration: &BDDFunction) -> Result<Submap, MercError> {
         for (i, func) in self.mapping.iter_mut().enumerate() {
             let was_satisfiable = func.satisfiable();
-            *func = minus(func, &configuration)?;
+            *func = minus(func, configuration)?;
             let is_satisfiable = func.satisfiable();
 
             if was_satisfiable && !is_satisfiable {
