@@ -1,9 +1,9 @@
 //! Authors: Maurice Laveaux and Jan J. Martens
 
-use merc_lts::LTS;
 use merc_lts::LabelledTransitionSystem;
 use merc_lts::LtsBuilderFast;
 use merc_lts::StateIndex;
+use merc_lts::LTS;
 use merc_utilities::TagIndex;
 
 use crate::BlockPartition;
@@ -38,11 +38,11 @@ pub trait Partition {
 /// Returns a new LTS based on the given partition.
 ///
 /// The naive version will add the transitions of all states in the block to the quotient LTS.
-pub fn quotient_lts_naive(
-    lts: &impl LTS,
+pub fn quotient_lts_naive<L: LTS>(
+    lts: &L,
     partition: &impl Partition,
     eliminate_tau_loops: bool,
-) -> LabelledTransitionSystem {
+) -> LabelledTransitionSystem<L::Label> {
     // Introduce the transitions based on the block numbers, the number of blocks is a decent approximation for the number of transitions.
     let mut builder = LtsBuilderFast::with_capacity(
         lts.labels().into(),
@@ -81,10 +81,10 @@ pub fn quotient_lts_naive(
 /// Optimised implementation for block partitions.
 ///
 /// Chooses a single state in the block as representative. If BRANCHING then the chosen state is a bottom state.
-pub fn quotient_lts_block<const BRANCHING: bool>(
-    lts: &impl LTS,
+pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
+    lts: &L,
     partition: &BlockPartition,
-) -> LabelledTransitionSystem {
+) -> LabelledTransitionSystem<L::Label> {
     let mut builder = LtsBuilderFast::new(lts.labels().into(), Vec::new());
 
     for block in (0..partition.num_of_blocks()).map(BlockIndex::new) {

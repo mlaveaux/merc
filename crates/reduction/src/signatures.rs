@@ -289,7 +289,7 @@ pub fn weak_bisim_signature_sorted_taus(
 
 /// Perform the preprocessing necessary for branching bisimulation with the
 /// sorted signature see `branching_bisim_signature_sorted`.
-pub fn preprocess_branching(lts: impl LTS) -> LabelledTransitionSystem {
+pub fn preprocess_branching<L: LTS>(lts: L) -> LabelledTransitionSystem<L::Label> {
     let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = quotient_lts_naive(&lts, &scc_partition, true);
     drop(lts);

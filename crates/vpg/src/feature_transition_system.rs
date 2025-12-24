@@ -176,7 +176,7 @@ impl fmt::Debug for FeatureDiagram {
 /// where each label is associated with a feature expression.
 pub struct FeatureTransitionSystem {
     /// The underlying labelled transition system.
-    lts: LabelledTransitionSystem,
+    lts: LabelledTransitionSystem<String>,
 
     /// The feature expression associated with each label.
     feature_labels: Vec<BDDFunction>,
@@ -188,7 +188,7 @@ pub struct FeatureTransitionSystem {
 impl FeatureTransitionSystem {
     /// Creates a new feature transition system.
     pub fn new(
-        lts: LabelledTransitionSystem,
+        lts: LabelledTransitionSystem<String>,
         feature_labels: Vec<BDDFunction>,
         features: HashMap<String, BDDFunction>,
     ) -> Self {

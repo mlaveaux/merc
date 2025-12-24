@@ -19,13 +19,13 @@ pub enum Equivalence {
     /// Various signature based reduction algorithms.
     WeakBisimSigref,
     StrongBisim,
-    StrongBisimNaive,
+    StrongBisimNaive, 
     BranchingBisim,
     BranchingBisimNaive,
 }
 
 /// Reduces the given LTS modulo the given equivalence using signature refinement
-pub fn reduce_lts(lts: impl LTS, equivalence: Equivalence, timing: &mut Timing) -> LabelledTransitionSystem {
+pub fn reduce_lts<L: LTS>(lts: L, equivalence: Equivalence, timing: &mut Timing) -> LabelledTransitionSystem<L::Label> {
     let (result, mut timer) = match equivalence {
         Equivalence::WeakBisim => {
             let (lts, partition) = weak_bisimulation(lts, timing);
@@ -40,7 +40,7 @@ pub fn reduce_lts(lts: impl LTS, equivalence: Equivalence, timing: &mut Timing) 
         Equivalence::StrongBisim => {
             let (lts, partition) = strong_bisim_sigref(lts, timing);
             let quotient_time = timing.start("quotient");
-            (quotient_lts_block::<false>(&lts, &partition), quotient_time)
+            (quotient_lts_block::<_, false>(&lts, &partition), quotient_time)
         }
         Equivalence::StrongBisimNaive => {
             let (lts, partition) = strong_bisim_sigref_naive(lts, timing);
@@ -50,7 +50,7 @@ pub fn reduce_lts(lts: impl LTS, equivalence: Equivalence, timing: &mut Timing) 
         Equivalence::BranchingBisim => {
             let (lts, partition) = branching_bisim_sigref(lts, timing);
             let quotient_time = timing.start("quotient");
-            (quotient_lts_block::<true>(&lts, &partition), quotient_time)
+            (quotient_lts_block::<_, true>(&lts, &partition), quotient_time)
         }
         Equivalence::BranchingBisimNaive => {
             let (lts, partition) = branching_bisim_sigref_naive(lts, timing);

@@ -65,7 +65,7 @@ pub fn strong_bisim_sigref_naive<L: LTS>(lts: L, timing: &mut Timing) -> (L, Ind
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement
-pub fn branching_bisim_sigref<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem, BlockPartition) {
+pub fn branching_bisim_sigref<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem<L::Label>, BlockPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     let incoming = IncomingTransitions::new(&preprocessed_lts);
@@ -130,7 +130,7 @@ pub fn branching_bisim_sigref<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledT
 pub fn branching_bisim_sigref_naive<L: LTS>(
     lts: L,
     timing: &mut Timing,
-) -> (LabelledTransitionSystem, IndexedPartition) {
+) -> (LabelledTransitionSystem<L::Label>, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
@@ -172,7 +172,7 @@ pub fn branching_bisim_sigref_naive<L: LTS>(
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn weak_bisim_sigref_naive(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition) {
+pub fn weak_bisim_sigref_naive<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem<L::Label>, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
@@ -594,7 +594,7 @@ mod tests {
 
     /// Checks that the branching bisimulation partition is a refinement of the strong bisimulation partition.
     fn is_refinement(
-        lts: &LabelledTransitionSystem,
+        lts: &impl LTS,
         strong_partition: &impl Partition,
         branching_partition: &impl Partition,
     ) {

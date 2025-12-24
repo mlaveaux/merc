@@ -48,6 +48,11 @@ impl<T: Ord> VecSet<T> {
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.sorted_array.iter()
     }
+
+    /// Returns the number of elements in the set.
+    pub fn len(&self) -> usize {
+        self.sorted_array.len()
+    }
 }
 
 impl<T: fmt::Debug> fmt::Debug for VecSet<T> {

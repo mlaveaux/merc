@@ -10,9 +10,11 @@
 use log::trace;
 use merc_lts::LTS;
 use merc_lts::StateIndex;
+use merc_reduction::Equivalence;
 use merc_reduction::Partition;
 use merc_reduction::branching_bisim_sigref;
 use merc_reduction::quotient_lts_block;
+use merc_reduction::reduce_lts;
 use merc_utilities::Timing;
 use merc_utilities::VecSet;
 
@@ -36,17 +38,14 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
     preprocess: bool,
     timing: &mut Timing,
 ) -> bool {
-
-
     // For the preprocessing/quotienting step it makes sense to merge both LTSs
-    // together in case that some states are equivalent. So we do this is all branches.
+    // together in case that some states are equivalent. So we do this in all branches.
     let (merged_lts, initial_spec) = if preprocess {
         if COUNTER_EXAMPLE {
             // If a counter example is to be generated, we only reduce the
             // specification LTS such that the trace remains valid.
-            // let reduced_spec = reduce_lts(spec_lts, Equivalence::BranchingBisim, timing);
-            // impl_lts.merge_disjoint(&reduced_spec)
-            unimplemented!("Adjust initial_spec after reduction");
+            let reduced_spec = reduce_lts(spec_lts, Equivalence::BranchingBisim, timing);
+            impl_lts.merge_disjoint(&reduced_spec)
         } else {
             let (merged_lts, initial_spec) = impl_lts.merge_disjoint(&spec_lts);
 
@@ -54,7 +53,7 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
             let (preprocess_lts, partition) = branching_bisim_sigref(merged_lts, timing);
 
             let initial_spec = partition.block_number(initial_spec);
-            let reduced_lts = quotient_lts_block::<true>(&preprocess_lts, &partition);
+            let reduced_lts = quotient_lts_block::<_, true>(&preprocess_lts, &partition);
             
             // After partitioning the block becomes the state in the reduced_lts.
             (reduced_lts, StateIndex::new(*initial_spec))
