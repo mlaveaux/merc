@@ -2,12 +2,12 @@ name: Cargo Clippy
 
 permissions:
   contents: read
-  pull-request: write
+  pull-requests: write
 
 on:
   push:
     branches: [ main ]
-  pull_requests:
+  pull_request:
     branches: [ main ]
     
 env:
