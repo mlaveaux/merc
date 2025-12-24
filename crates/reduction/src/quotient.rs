@@ -113,9 +113,11 @@ pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
 
         // Add all transitions from the representative state.
         for transition in lts.outgoing_transitions(candidate) {
+        for transition in lts.outgoing_transitions(candidate) {
             if BRANCHING {
                 // Candidate is a bottom state, so add all transitions.
                 debug_assert!(
+                    !(lts.is_hidden_label(transition.label) && partition.block_number(transition.to) == block),
                     !(lts.is_hidden_label(transition.label) && partition.block_number(transition.to) == block),
                     "This state is not bottom {}",
                     block
@@ -124,7 +126,7 @@ pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
 
             builder.add_transition(
                 StateIndex::new(*block),
-                &lts.labels()[transition.label],
+                transition.label,
                 StateIndex::new(*partition.block_number(transition.to)),
             );
         }

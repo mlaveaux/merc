@@ -4,6 +4,7 @@ use rand::rngs::StdRng;
 
 use crate::test_logger;
 
+
 /// Constructs a random number generator that should be used in random tests. Prints its seed to the console for reproducibility.
 pub fn random_test<F>(iterations: usize, mut test_function: F)
 where
@@ -11,8 +12,18 @@ where
 {
     test_logger();
 
+    if let Ok(seed_str) = std::env::var("MERC_SEED") {
+        let seed = seed_str.parse::<u64>().expect("MERC_SEED must be a valid u64");
+        println!("seed: {seed} (fixed by MERC_SEED)");
+        let mut rng = StdRng::seed_from_u64(seed);
+        for _ in 0..iterations {
+            test_function(&mut rng);
+        }
+        return;
+    }
+
     let seed: u64 = rand::random();
-    println!("seed: {seed}");
+    println!("random seed: {seed} (use MERC_SEED=<seed> to set fixed seed)");
     let mut rng = StdRng::seed_from_u64(seed);
 
     for _ in 0..iterations {
