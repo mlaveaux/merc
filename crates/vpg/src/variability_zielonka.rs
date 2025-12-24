@@ -484,7 +484,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 /// Returns the boolean set difference of two BDD functions: lhs \ rhs.
 /// Implemented as lhs AND (NOT rhs).
 pub fn minus(lhs: &BDDFunction, rhs: &BDDFunction) -> AllocResult<BDDFunction> {
-    lhs.and(&rhs.not()?)
+    rhs.imp_strict(lhs)
 }
 
 /// A mapping from vertices to configurations.
