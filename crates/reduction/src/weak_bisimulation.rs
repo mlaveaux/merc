@@ -23,7 +23,10 @@ use crate::preprocess_branching;
 type BitArray = BitVec<u64, Lsb0>;
 
 /// Apply weak bisimulation reduction
-pub fn weak_bisimulation(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, SimpleBlockPartition) {
+pub fn weak_bisimulation<L: LTS>(
+    lts: L,
+    timing: &mut Timing,
+) -> (LabelledTransitionSystem<L::Label>, SimpleBlockPartition) {
     let mut time_pre = timing.start("preprocessing");
     let tau_loop_free_lts = preprocess_branching(lts);
     time_pre.finish();

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::mem::transmute;
 
-use merc_utilities::IndexedSet;
+use merc_collections::IndexedSet;
 
 use crate::SymbolRef;
 use crate::aterm::ATermRef;

@@ -5,10 +5,9 @@ use itertools::Itertools;
 ///
 /// A set that is internally represented by a sorted vector. Mostly useful for
 /// a compact representation of sets that are not changed often.
-/// 
+///
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VecSet<T> {
-
     /// The internal storage with the invariant that the array is sorted.
     sorted_array: Vec<T>,
 }

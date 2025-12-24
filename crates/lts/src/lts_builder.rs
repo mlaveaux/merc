@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 
-use merc_utilities::ByteCompressedVec;
-use merc_utilities::CompressedEntry;
+use merc_collections::ByteCompressedVec;
+use merc_collections::CompressedEntry;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
@@ -73,20 +73,23 @@ impl<L: TransitionLabel> LtsBuilder<L> {
 
         Self {
             transition_from: ByteCompressedVec::with_capacity(num_of_transitions, num_of_states.bytes_required()),
-            transition_labels: ByteCompressedVec::with_capacity(num_of_transitions, num_of_labels.max(labels.len()).bytes_required()),
+            transition_labels: ByteCompressedVec::with_capacity(
+                num_of_transitions,
+                num_of_labels.max(labels.len()).bytes_required(),
+            ),
             transition_to: ByteCompressedVec::with_capacity(num_of_transitions, num_of_states.bytes_required()),
             labels_index,
             labels,
             num_of_states: 0,
         }
     }
-    
+
     /// Adds a transition to the builder. For efficiently reasons, we can use
     /// another type `Q` for the label.
-    pub fn add_transition<Q: ?Sized>(&mut self, from: StateIndex, label: &Q, to: StateIndex) 
-        where 
-            L: Borrow<Q>,
-            Q: ToOwned<Owned = L> + Eq + Hash,
+    pub fn add_transition<Q: ?Sized>(&mut self, from: StateIndex, label: &Q, to: StateIndex)
+    where
+        L: Borrow<Q>,
+        Q: ToOwned<Owned = L> + Eq + Hash,
     {
         let label_index = if let Some(&index) = self.labels_index.get(label) {
             index

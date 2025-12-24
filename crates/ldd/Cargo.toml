@@ -15,6 +15,7 @@ rust-version.workspace = true
 
 [dependencies]
 merc_aterm.workspace = true
+merc_collections.workspace = true
 merc_io.workspace = true
 merc_number.workspace = true
 merc_utilities.workspace = true

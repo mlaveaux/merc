@@ -9,12 +9,12 @@ use std::ops::IndexMut;
 
 use hashbrown::Equivalent;
 use hashbrown::HashSet;
-
 use rustc_hash::FxBuildHasher;
 
-use crate::GenerationCounter;
-use crate::GenerationalIndex;
-use crate::NoHasherBuilder;
+use merc_utilities::GenerationCounter;
+use merc_utilities::GenerationalIndex;
+use merc_utilities::NoHasherBuilder;
+use merc_utilities::cast;
 
 /// A type-safe index for use with [IndexedSet]. Uses generational indices in debug builds to assert
 /// correct usage of indices.
@@ -425,12 +425,14 @@ impl<'a, T, S> IntoIterator for &'a IndexedSet<T, S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::random_test;
-
-    use super::*;
+    use std::collections::HashMap;
 
     use rand::Rng;
-    use std::collections::HashMap;
+
+    use merc_utilities::random_test;
+
+    use crate::IndexedSet;
+    use crate::SetIndex;
 
     #[test]
     fn test_random_indexed_set_construction() {

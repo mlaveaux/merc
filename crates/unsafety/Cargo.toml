@@ -24,6 +24,7 @@ merc_mimalloc = ["dep:mimalloc"]
 merc_debug = ["tikv-jemallocator?/debug"]
 
 [dependencies]
+merc_collections.workspace = true
 merc_utilities.workspace = true
 
 allocator-api2.workspace = true

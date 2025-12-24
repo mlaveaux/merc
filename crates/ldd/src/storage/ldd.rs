@@ -9,9 +9,9 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use merc_utilities::ProtectionIndex;
-use merc_utilities::ProtectionSet;
-use merc_utilities::SetIndex;
+use merc_collections::ProtectionIndex;
+use merc_collections::ProtectionSet;
+use merc_collections::SetIndex;
 
 /// An alias for the ldd index type.
 pub type LddIndex = SetIndex;

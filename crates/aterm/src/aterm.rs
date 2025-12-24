@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 use delegate::delegate;
 
+use merc_collections::ProtectionIndex;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use merc_utilities::MercError;
 use merc_utilities::PhantomUnsend;
-use merc_utilities::ProtectionIndex;
 
 use crate::ATermIntRef;
 use crate::ATermList;
@@ -213,7 +213,7 @@ impl fmt::Debug for ATermRef<'_> {
 /// called is undefined. For this purpose one can use `ManuallyDrop` to simply
 /// never drop thread local terms, since exiting the thread will clean up the
 /// protection sets anyway.
-/// 
+///
 /// We do not mark term access as unsafe, since that would make their use
 /// cumbersome. An alternative would be to required
 /// THREAD_TERM_POOL.with_borrow(|tp| ...) around every access, but that would

@@ -5,8 +5,8 @@ use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
-use merc_utilities::ByteCompressedVec;
-use merc_utilities::bytevec;
+use merc_collections::ByteCompressedVec;
+use merc_collections::bytevec;
 
 use crate::PG;
 use crate::VariabilityParityGame;

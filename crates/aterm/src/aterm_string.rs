@@ -91,7 +91,7 @@ impl ATermStreamable for String {
 
     fn read<R: ATermRead>(reader: &mut R) -> Result<Self, MercError>
     where
-        Self: Sized 
+        Self: Sized,
     {
         let term: ATermString = reader.read_aterm()?.ok_or("Expected a string ATerm")?.into();
         Ok(term.value().to_string())

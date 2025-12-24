@@ -3,7 +3,8 @@ use std::hash::Hash;
 
 use itertools::Itertools;
 use merc_aterm::ATerm;
-use merc_utilities::{MercError, VecSet};
+use merc_collections::VecSet;
+use merc_utilities::MercError;
 
 use crate::TransitionLabel;
 
@@ -104,20 +105,32 @@ impl fmt::Debug for MultiAction {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::MultiAction;
-
 
     #[test]
     fn test_multi_action_parse_string() {
         let action = MultiAction::from_string("a | b(1, 2) | c").unwrap();
 
         assert_eq!(action.actions.len(), 3);
-        assert!(action.actions.iter().any(|act| act.label == "a" && act.arguments.is_empty()));
-        assert!(action.actions.iter().any(|act| act.label == "b" && act.arguments == vec!["1", "2"]));
-        assert!(action.actions.iter().any(|act| act.label == "c" && act.arguments.is_empty()));
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "a" && act.arguments.is_empty())
+        );
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "b" && act.arguments == vec!["1", "2"])
+        );
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "c" && act.arguments.is_empty())
+        );
     }
 }

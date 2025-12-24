@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+merc_collections.workspace = true
 merc_io.workspace = true
 merc_lts.workspace = true
 merc_reduction.workspace = true

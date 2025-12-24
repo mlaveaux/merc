@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use merc_utilities::IndexedSet;
+use merc_collections::IndexedSet;
 
 use crate::Marker;
 use crate::SymbolRef;

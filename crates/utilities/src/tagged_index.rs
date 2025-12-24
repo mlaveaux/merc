@@ -6,10 +6,6 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use std::slice::SliceIndex;
 
-use delegate::delegate;
-
-use crate::CompressedEntry;
-
 /// An index is an index that can only be compared with equivalent tags. Note that the constructor does
 /// not requires us to provide a tag, and as such anyone can make a tagged index. It is not a proof of a
 /// valid index. This could be extended in the future.
@@ -145,18 +141,5 @@ impl<T, Tag> Deref for TagIndex<T, Tag> {
 
     fn deref(&self) -> &Self::Target {
         &self.index
-    }
-}
-
-impl<T: CompressedEntry, Tag> CompressedEntry for TagIndex<T, Tag> {
-    delegate! {
-        to self.index {
-            fn to_bytes(&self, bytes: &mut [u8]);
-            fn bytes_required(&self) -> usize;
-        }
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Self {
-        TagIndex::new(T::from_bytes(bytes))
     }
 }
