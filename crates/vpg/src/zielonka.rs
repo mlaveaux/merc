@@ -155,7 +155,7 @@ impl ZielonkaSolver<'_> {
     }
 
     /// Recursively solves the parity game for the given set of vertices V.
-    fn zielonka_rec(&mut self, mut V: Set, depth: usize) -> (Set, Set) {
+    fn zielonka_rec(&mut self, V: Set, depth: usize) -> (Set, Set) {
         self.recursive_calls += 1;
         let full_V = V.clone(); // Used for debugging
         let indent = Repeat::new(" ", depth);
@@ -204,12 +204,6 @@ impl ZielonkaSolver<'_> {
         } else {
             let B = self.attractor(not_alpha, &V, W1_not_alpha);
 
-            // Computes V \ B in place
-            for (index, value) in V.iter_mut().enumerate() {
-                let tmp = value.bitand(!B[index]);
-                value.commit(tmp);
-            }
-
             trace!("{}Vertices in B: {}", indent, DisplaySet(&A));
             debug!("{}zielonka(V \\ B)", indent);
             let (W2_0, W2_1) = self.zielonka_rec(V.bitand(!B.clone()), depth + 1); 
@@ -242,7 +236,7 @@ impl ZielonkaSolver<'_> {
                         true
                     } else {
                         // Check if all successors of v are in the attractor
-                        self.game.outgoing_edges(v).all(|w_prime| V[*w_prime] && A[*w_prime])
+                        self.game.outgoing_edges(v).all(|w_prime| !V[*w_prime] || A[*w_prime])
                     };
 
                     if attracted && !A[*v] {
