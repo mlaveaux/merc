@@ -1,5 +1,6 @@
 [package]
 name = "merc_lts"
+description = "A crate to manipulate labelled transition systems in Aldebaran (.aut) and mCRL2 (.lts) formats"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
