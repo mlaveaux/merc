@@ -854,6 +854,7 @@ dependencies = [
  "env_logger",
  "itertools 0.14.0",
  "log",
+ "merc_symbolic",
  "merc_syntax",
  "merc_tools",
  "merc_unsafety",
@@ -922,6 +923,7 @@ version = "1.0.0"
 dependencies = [
  "ahash",
  "delegate",
+ "itertools 0.14.0",
  "log",
  "merc_aterm",
  "merc_io",
@@ -1056,12 +1058,14 @@ dependencies = [
 name = "merc_symbolic"
 version = "1.0.0"
 dependencies = [
+ "itertools 0.14.0",
  "merc_aterm",
  "merc_data",
  "merc_io",
  "merc_ldd",
  "merc_utilities",
  "oxidd",
+ "rand",
 ]
 
 [[package]]
@@ -1134,6 +1138,7 @@ dependencies = [
  "merc_io",
  "merc_lts",
  "merc_macros",
+ "merc_symbolic",
  "merc_syntax",
  "merc_utilities",
  "oxidd",
