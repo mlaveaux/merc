@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::hash::Hash;
 
 use merc_collections::VecSet;
@@ -17,13 +18,44 @@ pub struct Antichain<K, V> {
     antichain_inserts: usize,
 }
 
-impl<K: Eq + Hash, V: Ord> Antichain<K, V> {
+impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
+    /// Creates a new empty antichain.
+    pub fn new() -> Self {
+        Antichain {
+            storage: HashMap::new(),
+            max_antichain: 0,
+            antichain_misses: 0,
+            antichain_inserts: 0,
+        }
+    }
+
     /// Inserts the given (s, T) pair into the antichain and returns true iff it was
     /// not already present.
     pub fn insert(&mut self, key: K, value: VecSet<V>) -> bool {
-        self.storage.entry(key).or_insert_with(|| {
-            self.antichain_misses += 1; // Was not present
-            VecSet::singleton(value)
+
+
+        let mut inserted = false;
+        self.storage.entry(key)
+            .and_modify(|entry| {
+                let mut removed = false;
+                entry.retain(|inner_value| {
+                    // Remove any entry that is a superset of the new value
+                    if !value.is_subset(inner_value) {
+                        true
+                    } else {
+                        removed = true;
+                        false
+                    }
+                });
+
+                if removed {
+                    entry.insert(value.clone());
+                    inserted = true;
+                }
+            })
+            .or_insert_with(|| {
+                self.antichain_misses += 1; // Was not present
+                VecSet::singleton(value)
         });
 
         self.antichain_inserts += 1;
@@ -33,5 +65,69 @@ impl<K: Eq + Hash, V: Ord> Antichain<K, V> {
     }
 }
 
+impl<K, V: fmt::Debug + Ord> Antichain<K, V> {
+    /// Checks the internal consistency of the antichain invariant.
+    fn check_consistency(&self) {
+        for (_key, values) in &self.storage {
+            for i in values.iter() {
+                for j in values.iter() {
+                    assert!(
+                        !i.is_subset(j) && !j.is_subset(i),
+                        "Antichain invariant violated: {:?} and {:?} are comparable.",
+                        i,
+                        j
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use merc_collections::vecset;
+    use merc_utilities::random_test;
+    use rand::Rng;
+
+    use crate::Antichain;
+
+
+    #[test]
+    fn test_antichain() {
+        let mut antichain: Antichain<u32, u32> = Antichain::new();
+
+        let inserted = antichain.insert(1, vecset![2, 3]);
+        assert!(inserted);
+
+        let inserted = antichain.insert(1, vecset![2, 3, 6]);
+        assert!(!inserted, "The pair (1, {{2,3}}) is already included in the antichain.");
+
+        let inserted = antichain.insert(1, vecset![2]);
+        assert!(inserted, "The pair (1, {{2}}) should overwrite (1, {{2, 3}}.");
+
+        let inserted = antichain.insert(1, vecset![5, 6]);
+        assert!(inserted, "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs.");
+    }
+
+    #[test]
+    fn test_random_antichain() {
+        random_test(100, |rng| {
+            let mut antichain: Antichain<u32, u32> = Antichain::new();
+
+            // Insert random pairs into the antichain.
+            for _ in 0..50 {
+                let key = rng.random_range(0..10);
+                let set_size = rng.random_range(1..5);
+                let mut value = vecset![];
+
+                for _ in 0..set_size {
+                    value.insert(rng.random_range(0..20));
+                }
+
+                antichain.insert(key, value);
+            }
+
+            antichain.check_consistency();            
+        })
+    }
+}

@@ -5,10 +5,10 @@ use itertools::Itertools;
 #[macro_export]
 macro_rules! vecset {
     () => {
-        $crate::vecset::VecSet::new()
+        $crate::VecSet::new()
     };
     ($elem:expr; $n:expr) => {{
-        let mut __set = $crate::vecset::VecSet::new();
+        let mut __set = $crate::VecSet::new();
         let __count: usize = $n;
         if __count > 0 {
             __set.insert($elem);
@@ -16,7 +16,7 @@ macro_rules! vecset {
         __set
     }};
     ($($x:expr),+ $(,)?) => {{
-        let mut __set = $crate::vecset::VecSet::new();
+        let mut __set = $crate::VecSet::new();
         $( let _ = __set.insert($x); )*
         __set
     }};
@@ -37,6 +37,57 @@ impl<T: Ord> VecSet<T> {
         Self {
             sorted_array: Vec::new(),
         }
+    }
+
+    /// Returns the capacity of the set.
+    pub fn capacity(&self) -> usize {
+        self.sorted_array.capacity()
+    }
+
+    /// Returns true iff the set contains the given element.
+    pub fn contains(&self, element: &T) -> bool {
+        self.sorted_array.binary_search(element).is_ok()
+    }
+
+    /// Clears the set, removing all elements.
+    pub fn clear(&mut self) {
+        self.sorted_array.clear();
+    }
+
+    /// Retains only the elements specified by the predicate.
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        // Removing elements does not change the order.
+        self.sorted_array.retain(|e| f(e));
+    }
+
+    /// Returns true iff this set is a subset of the other set.
+    pub fn is_subset(&self, other: &VecSet<T>) -> bool {
+        let mut self_iter = self.sorted_array.iter();
+        let mut other_iter = other.sorted_array.iter();
+
+        let mut self_next = self_iter.next();
+        let mut other_next = other_iter.next();
+
+        while let Some(self_val) = self_next {
+            match other_next {
+                Some(other_val) => {
+                    if self_val == other_val {
+                        self_next = self_iter.next();
+                        other_next = other_iter.next();
+                    } else if self_val > other_val {
+                        other_next = other_iter.next();
+                    } else {
+                        return false; // self_val < other_val
+                    }
+                }
+                None => return false, // other is exhausted
+            }
+        }
+
+        true
     }
 
     /// Returns a new set only containing the given element.

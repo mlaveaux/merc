@@ -18,6 +18,7 @@ use merc_reduction::quotient_lts_block;
 use merc_reduction::reduce_lts;
 use merc_utilities::Timing;
 
+use crate::Antichain;
 use crate::RefinementType;
 
 /// Sets the exploration strategy for the failures refinement algorithm.
@@ -62,7 +63,11 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
         impl_lts.merge_disjoint(&spec_lts)
     };
 
-    let mut working = vec![(merged_lts.initial_state_index(), vec![initial_spec])];
+    let mut working = vec![(merged_lts.initial_state_index(), VecSet::singleton(initial_spec))];
+
+    // The antichain data structure is used for storing explored states. However, as opposed to a discovered set it
+    // allows for pruning additional pairs based on the `antichain` property.
+    let mut antichain = Antichain::new();
 
     while let Some((impl_state, spec)) = working.pop() {
         trace!("Checking ({:?}, {:?})", impl_state, spec);
@@ -83,6 +88,11 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
             if spec_prime.is_empty() {
                 // if spec' = {} then
                 return false; //    return false;
+            }
+
+            if !antichain.insert(impl_transition.to, spec_prime.clone()) {
+                // if antichain_insert(impl,spec') then
+                working.push((impl_transition.to, spec_prime));
             }
         }
     }
