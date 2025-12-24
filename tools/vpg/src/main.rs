@@ -14,6 +14,8 @@ use merc_vpg::make_vpg_total;
 use merc_vpg::verify_variability_product_zielonka_solution;
 use oxidd::BooleanFunction;
 
+use merc_symbolic::CubeIterAll;
+use merc_symbolic::FormatConfig;
 use merc_syntax::UntypedStateFrmSpec;
 use merc_tools::VerbosityFlag;
 use merc_tools::Version;
@@ -21,8 +23,6 @@ use merc_tools::VersionFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
-use merc_symbolic::CubeIterAll;
-use merc_symbolic::FormatConfig;
 use merc_vpg::FeatureDiagram;
 use merc_vpg::ParityGameFormat;
 use merc_vpg::PgDot;

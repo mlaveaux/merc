@@ -1,16 +1,15 @@
-
 use oxidd::BooleanFunction;
-use oxidd::ManagerRef;
 use oxidd::Manager;
+use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
 use merc_ldd::DataRef;
+use merc_ldd::Ldd;
 use merc_ldd::LddRef;
+use merc_ldd::Storage;
 use merc_ldd::height;
 use merc_utilities::MercError;
-use merc_ldd::Ldd;
-use merc_ldd::Storage;
 
 /// Converts an LDD representing a set of vectors into a BDD representing the same set by bitblasting the vector elements.
 fn ldd_to_bdd(
@@ -28,7 +27,7 @@ fn ldd_to_bdd(
         return Ok(manager_ref.with_manager_shared(|manager| BDDFunction::t(manager)));
     }
 
-    // TODO: Implement caching    
+    // TODO: Implement caching
     let DataRef(value, down, right) = storage.get_ref(ldd);
     let DataRef(bits_value, bits_down, _bits_right) = storage.get_ref(bits); // Is singleton so right is ignored.
 
@@ -42,12 +41,12 @@ fn ldd_to_bdd(
         if value & (1 << i) != 0 {
             // bit is 1
             down = manager_ref.with_manager_shared(|manager| {
-                BDDFunction::var(manager, first_variable + 2*bit)?.ite(&BDDFunction::f(manager), &down)
+                BDDFunction::var(manager, first_variable + 2 * bit)?.ite(&BDDFunction::f(manager), &down)
             })?;
         } else {
             // bit is 0
             down = manager_ref.with_manager_shared(|manager| {
-                BDDFunction::var(manager, first_variable + 2*bit)?.ite(&down, &BDDFunction::f(manager))
+                BDDFunction::var(manager, first_variable + 2 * bit)?.ite(&down, &BDDFunction::f(manager))
             })?;
         }
     }
@@ -85,7 +84,10 @@ fn compute_bits(highest: &Vec<u32>) -> Vec<u32> {
 
 #[cfg(test)]
 mod tests {
-    use merc_ldd::{fmt_node, from_iter, random_vector_set, singleton};
+    use merc_ldd::fmt_node;
+    use merc_ldd::from_iter;
+    use merc_ldd::random_vector_set;
+    use merc_ldd::singleton;
     use merc_utilities::random_test;
 
     use super::*;
@@ -101,10 +103,15 @@ mod tests {
             let highest = compute_highest(&mut storage, &ldd);
             println!("Highest: {:?}", highest);
             for (i, h) in highest.iter().enumerate() {
-
                 // Determine the highest value for every vector
                 for value in set.iter() {
-                    assert!(*h >= value[i], "The highest value for depth {} is {}, but vector has value {}", i, h, value[i]);
+                    assert!(
+                        *h >= value[i],
+                        "The highest value for depth {} is {}, but vector has value {}",
+                        i,
+                        h,
+                        value[i]
+                    );
                 }
             }
 
@@ -117,9 +124,13 @@ mod tests {
                 } else {
                     (u32::BITS - highest[i].leading_zeros())
                 };
-                assert_eq!(*b, expected_bits, "The number of bits for depth {} is {}, but expected {}", i, b, expected_bits);
+                assert_eq!(
+                    *b, expected_bits,
+                    "The number of bits for depth {} is {}, but expected {}",
+                    i, b, expected_bits
+                );
             }
-        })        
+        })
     }
 
     #[test]

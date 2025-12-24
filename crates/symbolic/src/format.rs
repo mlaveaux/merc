@@ -1,7 +1,8 @@
 use std::fmt;
 
 use itertools::Itertools;
-use oxidd::{bdd::BDDFunction, util::OptBool};
+use oxidd::bdd::BDDFunction;
+use oxidd::util::OptBool;
 
 use crate::CubeIter;
 

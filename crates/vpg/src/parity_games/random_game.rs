@@ -1,4 +1,3 @@
-
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use rand::Rng;

@@ -16,11 +16,9 @@ use streaming_iterator::StreamingIterator;
 
 use merc_io::LineIterator;
 use merc_io::TimeProgress;
-use merc_symbolic::CubeIter;
 use merc_symbolic::FormatConfigSet;
 use merc_utilities::MercError;
 
-use crate::CubeIter;
 use crate::IOError;
 use crate::PG;
 use crate::ParityGame;
