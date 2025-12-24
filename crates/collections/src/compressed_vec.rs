@@ -3,11 +3,13 @@ use std::marker::PhantomData;
 
 use bitvec::bitvec;
 use bitvec::order::Lsb0;
+use delegate::delegate;
 use log::trace;
 
-use crate::BytesFormatter;
-use crate::debug_trace;
-use crate::is_valid_permutation;
+use merc_utilities::BytesFormatter;
+use merc_utilities::TagIndex;
+use merc_utilities::debug_trace;
+use merc_utilities::is_valid_permutation;
 
 /// A vector data structure that stores objects in a byte compressed format. The basic idea is that elements of type `T` impplement the `CompressedEntry` trait which allows them to be converted to and from a byte representation. The vector dynamically adjusts the number of bytes used per entry based on the maximum size of the entries added so far.
 ///
@@ -445,16 +447,31 @@ impl<T: CompressedEntry + fmt::Debug> fmt::Debug for ByteCompressedVec<T> {
     }
 }
 
+/// Implement it for the TagIndex for convenience.
+impl<T: CompressedEntry + Copy, Tag> CompressedEntry for TagIndex<T, Tag> {
+    delegate! {
+        to self.value() {
+            fn to_bytes(&self, bytes: &mut [u8]);
+            fn bytes_required(&self) -> usize;
+        }
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        TagIndex::new(T::from_bytes(bytes))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::bytevec;
-    use crate::random_test;
-
     use rand::Rng;
     use rand::distr::Uniform;
     use rand::seq::SliceRandom;
+
+    use merc_utilities::random_test;
+
+    use crate::bytevec;
 
     #[test]
     fn test_index_bytevector() {

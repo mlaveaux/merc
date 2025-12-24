@@ -6,12 +6,12 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 
+use merc_collections::IndexedSet;
 use merc_io::BitStreamRead;
 use merc_io::BitStreamReader;
 use merc_io::BitStreamWrite;
 use merc_io::BitStreamWriter;
 use merc_number::bits_for_value;
-use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 use merc_utilities::debug_trace;
 

@@ -5,7 +5,6 @@ use clap::ValueEnum;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
-use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::MultiAction;
 use crate::read_aut;
@@ -40,17 +39,6 @@ pub enum GenericLts {
     /// The LTS in the mCRL2 .lts format.
     Lts(LabelledTransitionSystem<MultiAction>),
 }
-
-impl GenericLts {
-
-    pub fn apply<L: LTS>(self, f: impl FnOnce(L) -> L) -> L {
-        match self {
-            GenericLts::Aut(lts) => f(lts),
-            GenericLts::Lts(lts) => f(lts),
-        }
-    }
-}
-
 
 /// Reads an explicit labelled transition system from the given path and format.
 pub fn read_explicit_lts(

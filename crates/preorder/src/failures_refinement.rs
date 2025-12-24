@@ -8,6 +8,7 @@
 //! transition system in case the inclusion is answered by no.
 
 use log::trace;
+use merc_collections::VecSet;
 use merc_lts::LTS;
 use merc_lts::StateIndex;
 use merc_reduction::Equivalence;
@@ -16,7 +17,6 @@ use merc_reduction::branching_bisim_sigref;
 use merc_reduction::quotient_lts_block;
 use merc_reduction::reduce_lts;
 use merc_utilities::Timing;
-use merc_utilities::VecSet;
 
 use crate::RefinementType;
 
@@ -54,7 +54,7 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
 
             let initial_spec = partition.block_number(initial_spec);
             let reduced_lts = quotient_lts_block::<_, true>(&preprocess_lts, &partition);
-            
+
             // After partitioning the block becomes the state in the reduced_lts.
             (reduced_lts, StateIndex::new(*initial_spec))
         }
@@ -69,7 +69,6 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
         // pop (impl,spec) from working;
 
         for impl_transition in merged_lts.outgoing_transitions(impl_state) {
-
             // spec' := {s' | exists s in spec. s-e->s'};
             let mut spec_prime = VecSet::new();
             for s in &spec {
@@ -81,8 +80,9 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
             }
 
             trace!("spec' = {:?}", spec_prime);
-            if spec_prime.is_empty() { // if spec' = {} then
-                return false;  //    return false;
+            if spec_prime.is_empty() {
+                // if spec' = {} then
+                return false; //    return false;
             }
         }
     }
@@ -93,29 +93,40 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
 /// Stores cached information about the LTSs to speed up refinement checks.
 struct LtsCache {}
 
-
 #[cfg(test)]
 mod tests {
     use merc_lts::random_lts;
-    use merc_reduction::{Equivalence, reduce_lts};
-    use merc_utilities::{Timing, random_test};
+    use merc_reduction::Equivalence;
+    use merc_reduction::reduce_lts;
+    use merc_utilities::Timing;
+    use merc_utilities::random_test;
 
-    use crate::{ExplorationStrategy, RefinementType, is_failures_refinement};
-
+    use crate::ExplorationStrategy;
+    use crate::RefinementType;
+    use crate::is_failures_refinement;
 
     #[test]
     fn test_random_trace_refinement() {
         random_test(100, |rng| {
             let spec_lts = random_lts(rng, 10, 20, 5);
 
-            
             let mut timing = Timing::default();
             let impl_lts = reduce_lts(spec_lts.clone(), Equivalence::StrongBisim, &mut timing);
 
             println!("Impl lts = {:?}", impl_lts);
             println!("Spec lts = {:?}", spec_lts);
-            
-            assert!(is_failures_refinement::<_, false>(impl_lts, spec_lts, RefinementType::Trace, ExplorationStrategy::BFS, true, &mut timing), "Strong bisimulation implies trace refinement.");
+
+            assert!(
+                is_failures_refinement::<_, false>(
+                    impl_lts,
+                    spec_lts,
+                    RefinementType::Trace,
+                    ExplorationStrategy::BFS,
+                    true,
+                    &mut timing
+                ),
+                "Strong bisimulation implies trace refinement."
+            );
         });
     }
 }

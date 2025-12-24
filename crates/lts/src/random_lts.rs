@@ -12,8 +12,8 @@ pub fn random_lts(
     num_of_states: usize,
     num_of_labels: u32,
     outdegree: usize,
-) -> LabelledTransitionSystem {
-    let components: Vec<LabelledTransitionSystem> = (0..3)
+) -> LabelledTransitionSystem<String> {
+    let components: Vec<LabelledTransitionSystem<String>> = (0..3)
         .map(|_| random_lts_monolithic(rng, num_of_states, num_of_labels, outdegree))
         .collect();
 
@@ -22,8 +22,6 @@ pub fn random_lts(
         .reduce(|acc, lts| product_lts(&acc, &lts))
         .expect("At least one component should be present")
 }
-
-
 
 /// Generates a monolithic LTS with the desired number of states, labels, out
 /// degree and in degree for all the states.

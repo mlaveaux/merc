@@ -20,12 +20,13 @@ pub type LabelIndex = TagIndex<usize, LabelTag>;
 pub type StateIndex = TagIndex<usize, StateTag>;
 
 /// The trait for labelled transition systems.
-/// 
+///
 /// Uses (strong) indices to refer to states and labels. The state indices are
 /// represented as `StateIndex`, and the label indices as `LabelIndex`. The
 /// labels themselves are given by type `Label`.
-pub trait LTS 
-    where Self: Sized
+pub trait LTS
+where
+    Self: Sized,
 {
     /// The associated type for transition labels.
     type Label: TransitionLabel;
@@ -57,9 +58,12 @@ pub trait LTS
     /// Consumes the current LTS and merges it with another one, returning the
     /// disjoint merged LTS and the initial state of the other LTS in the merged
     /// LTS.
-    /// 
+    ///
     /// TODO: Can this be generalised to returning `Self`?
-    fn merge_disjoint<L: LTS<Label = Self::Label>>(self, other: &L) -> (LabelledTransitionSystem<Self::Label>, StateIndex);
+    fn merge_disjoint<L: LTS<Label = Self::Label>>(
+        self,
+        other: &L,
+    ) -> (LabelledTransitionSystem<Self::Label>, StateIndex);
 }
 
 /// A common trait for all transition labels. For various algorithms on LTSs we

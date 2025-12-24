@@ -11,10 +11,10 @@ use std::cell::RefCell;
 
 use merc_aterm::ATerm;
 use merc_aterm::ATermRead;
+use merc_collections::IndexedSet;
 use merc_io::BitStreamRead;
 use merc_io::BitStreamWrite;
 use merc_number::bits_for_value;
-use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
 use crate::Data;

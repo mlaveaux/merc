@@ -5,27 +5,13 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-
-[features]
-# Disable logging when miri is enabled since that does not work with isolation mode.
-merc_miri = []
-
-# Enables the debug_trace macro to show additional log messages.
-merc_debug-trace = []
-
 [dependencies]
-ahash.workspace = true
-arbitrary.workspace = true
-backtrace.workspace = true
+merc_utilities.workspace = true
+
 bitvec.workspace = true
 delegate.workspace = true
-env_logger.workspace = true
 hashbrown.workspace = true
+itertools.workspace = true
 log.workspace = true
-pest.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
-itertools.workspace = true
-
-[build-dependencies]
-toml.workspace = true

@@ -16,6 +16,7 @@ version.workspace = true
 merc_debug = ["parking_lot/deadlock_detection"]
 
 [dependencies]
+merc_collections.workspace = true
 merc_io.workspace = true
 merc_macros.workspace = true
 merc_number.workspace = true

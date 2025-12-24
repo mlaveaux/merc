@@ -1,5 +1,5 @@
-use merc_utilities::ByteCompressedVec;
-use merc_utilities::bytevec;
+use merc_collections::ByteCompressedVec;
+use merc_collections::bytevec;
 
 use crate::LTS;
 use crate::LabelIndex;

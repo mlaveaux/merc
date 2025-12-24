@@ -25,7 +25,6 @@ use merc_aterm::Symbol;
 use merc_aterm::is_list_term;
 use merc_data::DataSpecification;
 use merc_io::TimeProgress;
-use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
 use crate::LTS;
@@ -35,7 +34,10 @@ use crate::MultiAction;
 use crate::StateIndex;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
-pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<MultiAction>, MercError> {
+pub fn read_lts(
+    reader: impl Read,
+    hidden_labels: Vec<String>,
+) -> Result<LabelledTransitionSystem<MultiAction>, MercError> {
     info!("Reading LTS in .lts format...");
 
     let mut reader = BinaryATermReader::new(BufReader::new(reader))?;
@@ -106,13 +108,14 @@ pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
 
 /// Write a labelled transition system in binary 'lts' format to the given
 /// writer. Requires that the labels are ATerm streamable.
-/// 
+///
 /// # Details
-/// 
+///
 /// Note that the writer is buffered internally using a `BufWriter`.
-pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError> 
-    where L: LTS,
-        L::Label: ATermStreamable,
+pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError>
+where
+    L: LTS,
+    L::Label: ATermStreamable,
 {
     info!("Writing LTS in .lts format...");
 

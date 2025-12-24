@@ -7,8 +7,9 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use delegate::delegate;
+
+use merc_collections::ProtectionIndex;
 use merc_unsafety::StablePointer;
-use merc_utilities::ProtectionIndex;
 
 use crate::Markable;
 use crate::SharedSymbol;

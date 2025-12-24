@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 
-use rand::seq::index;
-
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
@@ -30,15 +28,13 @@ pub struct LtsBuilderFast<L> {
 impl<L: TransitionLabel> LtsBuilderFast<L> {
     /// Initializes a new empty builder.
     pub fn new(labels: Vec<L>, hidden_labels: Vec<String>) -> Self {
-        Self::with_capacity(labels, hidden_labels, 0, 0, 0)
+        Self::with_capacity(labels, hidden_labels, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
     pub fn with_capacity(
         mut labels: Vec<L>,
         hidden_labels: Vec<String>,
-        _num_of_states: usize,
-        _num_of_labels: usize,
         num_of_transitions: usize,
     ) -> Self {
         // Remove duplicates from the labels.
@@ -72,10 +68,10 @@ impl<L: TransitionLabel> LtsBuilderFast<L> {
     }
 
     /// Adds a transition to the builder.
-    pub fn add_transition<Q>(&mut self, from: StateIndex, label: Q, to: StateIndex) 
-        where 
-            L: Borrow<Q>,
-            Q: ToOwned<Owned = L> + Eq + Hash,
+    pub fn add_transition<Q>(&mut self, from: StateIndex, label: &Q, to: StateIndex)
+    where
+        L: Borrow<Q>,
+        Q: ToOwned<Owned = L> + Eq + Hash,
     {
         let label_index = if let Some(&index) = self.labels_index.get(&label) {
             index

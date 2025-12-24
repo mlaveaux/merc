@@ -4,8 +4,8 @@ use std::hash::Hash;
 use std::ops::Deref;
 use std::ops::Index;
 
-use crate::GenerationCounter;
-use crate::GenerationalIndex;
+use merc_utilities::GenerationCounter;
+use merc_utilities::GenerationalIndex;
 
 /// A type-safe index for the ProtectionSet to prevent accidental use of wrong indices
 #[repr(transparent)]
@@ -32,8 +32,10 @@ impl fmt::Display for ProtectionIndex {
     }
 }
 
-/// The protection set keeps track of nodes that should not be garbage
-/// collected since they are being referenced by instances.
+/// A collection that assigns a unique index to every object added to it, and allows
+/// removing objects while reusing their indices later. This is useful for managing
+/// objects that must not be garbage collected, and as such it is called a protection set.
+/// Is is similar to a [ `crate::IndexedSet`], except that we cannot look up elements by value.
 #[derive(Debug, Default)]
 pub struct ProtectionSet<T> {
     roots: Vec<Entry<T>>, // The set of root active nodes.
@@ -235,8 +237,8 @@ mod tests {
 
     use rand::Rng;
 
-    use crate::random_test;
-    use crate::test_logger;
+    use merc_utilities::random_test;
+    use merc_utilities::test_logger;
 
     #[test]
     #[cfg_attr(miri, ignore)]

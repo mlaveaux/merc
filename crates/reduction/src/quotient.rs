@@ -1,9 +1,9 @@
 //! Authors: Maurice Laveaux and Jan J. Martens
 
+use merc_lts::LTS;
 use merc_lts::LabelledTransitionSystem;
 use merc_lts::LtsBuilderFast;
 use merc_lts::StateIndex;
-use merc_lts::LTS;
 use merc_utilities::TagIndex;
 
 use crate::BlockPartition;

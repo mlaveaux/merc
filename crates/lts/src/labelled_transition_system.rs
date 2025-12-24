@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use merc_utilities::ByteCompressedVec;
-use merc_utilities::CompressedEntry;
-use merc_utilities::CompressedVecMetrics;
+use merc_collections::ByteCompressedVec;
+use merc_collections::CompressedEntry;
+use merc_collections::CompressedVecMetrics;
+use merc_collections::bytevec;
 use merc_utilities::LargeFormatter;
 use merc_utilities::TagIndex;
-use merc_utilities::bytevec;
 
 use crate::LTS;
 use crate::LabelIndex;
@@ -19,12 +19,11 @@ use crate::TransitionLabel;
 /// labelled transitions between them.
 ///
 /// # Details
-/// 
+///
 /// Uses byte compressed vectors to store the states and their outgoing
 /// transitions efficiently in memory.
 #[derive(PartialEq, Eq, Clone)]
 pub struct LabelledTransitionSystem<Label> {
-
     /// Encodes the states and their outgoing transitions.
     states: ByteCompressedVec<usize>,
     transition_labels: ByteCompressedVec<LabelIndex>,

@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use log::debug;
 
+use merc_collections::ProtectionIndex;
 use merc_pest_consume::Parser;
 use merc_sharedmutex::RecursiveLock;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use merc_utilities::debug_trace;
 use merc_utilities::MercError;
-use merc_utilities::ProtectionIndex;
 
 use crate::AGRESSIVE_GC;
 use crate::GlobalTermPool;

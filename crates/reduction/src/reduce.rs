@@ -19,7 +19,7 @@ pub enum Equivalence {
     /// Various signature based reduction algorithms.
     WeakBisimSigref,
     StrongBisim,
-    StrongBisimNaive, 
+    StrongBisimNaive,
     BranchingBisim,
     BranchingBisimNaive,
 }

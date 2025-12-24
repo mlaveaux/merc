@@ -5,8 +5,8 @@ use std::rc::Rc;
 
 use ldd::LddIndex;
 use ldd::SharedProtectionSet;
-use merc_utilities::IndexedSet;
-use merc_utilities::ProtectionSet;
+use merc_collections::IndexedSet;
+use merc_collections::ProtectionSet;
 
 use crate::operations::height;
 

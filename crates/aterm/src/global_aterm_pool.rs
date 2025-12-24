@@ -8,11 +8,11 @@ use std::time::Instant;
 
 use log::debug;
 
+use merc_collections::ProtectionSet;
 use merc_sharedmutex::GlobalBfSharedMutex;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
 use merc_utilities::LargeFormatter;
-use merc_utilities::ProtectionSet;
 use merc_utilities::debug_trace;
 
 use crate::ATermIndex;

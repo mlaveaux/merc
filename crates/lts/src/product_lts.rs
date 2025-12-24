@@ -1,25 +1,27 @@
 use log::trace;
-use merc_utilities::IndexedSet;
+
+use merc_collections::IndexedSet;
 
 use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilderFast;
 use crate::StateIndex;
+use crate::TransitionLabel;
 
 /// Computes the synchronous product LTS of two given LTSs.
 ///
 /// This is useful for generating random LTSs by composing smaller random LTSs,
 /// which is often a more realistic structure then fully random LTSs.
-pub fn product_lts(left: &impl LTS, right: &impl LTS) -> LabelledTransitionSystem {
+pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(left: &L, right: &R) -> LabelledTransitionSystem<L::Label> {
     // Determine the combination of action labels
-    let mut all_labels: IndexedSet<String> = IndexedSet::new();
+    let mut all_labels: IndexedSet<L::Label> = IndexedSet::new();
 
     for label in left.labels() {
         all_labels.insert(label.clone());
     }
 
     // Determine the synchronised labels
-    let mut synchronised_labels: Vec<String> = Vec::new();
+    let mut synchronised_labels: Vec<L::Label> = Vec::new();
     for label in right.labels() {
         let (_index, inserted) = all_labels.insert(label.clone());
 
@@ -29,7 +31,7 @@ pub fn product_lts(left: &impl LTS, right: &impl LTS) -> LabelledTransitionSyste
     }
 
     // Tau can never be synchronised.
-    synchronised_labels.retain(|l| l != "tau");
+    synchronised_labels.retain(|l| !l.is_tau_label());
 
     // For the product we do not know the number of states and transitions in advance.
     let mut lts_builder = LtsBuilderFast::new(all_labels.to_vec(), Vec::new());
