@@ -8,74 +8,36 @@ use merc_utilities::LargeFormatter;
 use merc_utilities::TagIndex;
 use merc_utilities::bytevec;
 
-/// A unique type for the labels.
-pub struct LabelTag;
-
-/// A unique type for the states.
-pub struct StateTag;
-
-/// The index type for a label.
-pub type LabelIndex = TagIndex<usize, LabelTag>;
-
-/// The index for a state.
-pub type StateIndex = TagIndex<usize, StateTag>;
-
-pub trait LTS
-where
-    Self: Sized,
-{
-    /// Returns the index of the initial state
-    fn initial_state_index(&self) -> StateIndex;
-
-    /// Returns the set of outgoing transitions for the given state.
-    fn outgoing_transitions(&self, state_index: StateIndex) -> impl Iterator<Item = Transition> + '_;
-
-    /// Iterate over all state_index in the labelled transition system
-    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<Self>;
-
-    /// Returns the number of states.
-    fn num_of_states(&self) -> usize;
-
-    /// Returns the number of labels.
-    fn num_of_labels(&self) -> usize;
-
-    /// Returns the number of transitions.
-    fn num_of_transitions(&self) -> usize;
-
-    /// Returns the list of labels.
-    fn labels(&self) -> &[String];
-
-    /// Returns true iff the given label index is a hidden label.
-    fn is_hidden_label(&self, label_index: LabelIndex) -> bool;
-
-    /// Consumes the current LTS and merges it with another one, returning the
-    /// disjoint merged LTS and the initial state of the other LTS in the merged
-    /// LTS.
-    fn merge_disjoint(self, other: &Self) -> (Self, StateIndex);
-}
+use crate::LTS;
+use crate::LabelIndex;
+use crate::LabelTag;
+use crate::StateIndex;
+use crate::Transition;
+use crate::TransitionLabel;
 
 /// Represents a labelled transition system consisting of states with directed
 /// labelled transitions between them.
 ///
 /// # Details
-///
-/// This LTS uses (dense) indices to refer to states and labels. The state indices
-/// are represented as `StateIndex`, and the label indices as `LabelIndex`.
+/// 
+/// Uses byte compressed vectors to store the states and their outgoing
+/// transitions efficiently in memory.
 #[derive(PartialEq, Eq, Clone)]
-pub struct LabelledTransitionSystem {
+pub struct LabelledTransitionSystem<Label> {
+
     /// Encodes the states and their outgoing transitions.
     states: ByteCompressedVec<usize>,
     transition_labels: ByteCompressedVec<LabelIndex>,
     transition_to: ByteCompressedVec<StateIndex>,
 
     /// Keeps track of the labels for every index, and which of them are hidden.
-    labels: Vec<String>,
+    labels: Vec<Label>,
 
     /// The index of the initial state.
     initial_state: StateIndex,
 }
 
-impl LabelledTransitionSystem {
+impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
     /// Creates a new a labelled transition system with the given transitions,
     /// labels, and hidden labels.
     ///
@@ -89,8 +51,8 @@ impl LabelledTransitionSystem {
         initial_state: StateIndex,
         num_of_states: Option<usize>,
         mut transition_iter: F,
-        labels: Vec<String>,
-    ) -> LabelledTransitionSystem
+        labels: Vec<Label>,
+    ) -> LabelledTransitionSystem<Label>
     where
         F: FnMut() -> I,
         I: Iterator<Item = (StateIndex, LabelIndex, StateIndex)>,
@@ -184,7 +146,7 @@ impl LabelledTransitionSystem {
     /// Internally this works by offsetting the state indices of the other LTS by the number of states
     /// in the current LTS, and combining the action labels. The offset is returned such that
     /// can find the states of the other LTS in the merged LTS as the initial state of the other LTS.
-    fn merge_disjoint_impl(mut self, other: &impl LTS) -> (LabelledTransitionSystem, StateIndex) {
+    fn merge_disjoint_impl(mut self, other: &impl LTS<Label = Label>) -> (Self, StateIndex) {
         // Determine the combination of action labels
         let mut all_labels = self.labels().to_vec();
         for label in other.labels() {
@@ -193,7 +155,7 @@ impl LabelledTransitionSystem {
             }
         }
 
-        let label_indices: HashMap<String, TagIndex<usize, LabelTag>> = HashMap::from_iter(
+        let label_indices: HashMap<Label, TagIndex<usize, LabelTag>> = HashMap::from_iter(
             all_labels
                 .iter()
                 .enumerate()
@@ -248,7 +210,7 @@ impl LabelledTransitionSystem {
 
     /// Creates a labelled transition system from another one, given the permutation of state indices
     ///
-    pub fn new_from_permutation<P>(lts: LabelledTransitionSystem, permutation: P) -> Self
+    pub fn new_from_permutation<P>(lts: Self, permutation: P) -> Self
     where
         P: Fn(StateIndex) -> StateIndex + Copy,
     {
@@ -288,7 +250,9 @@ impl LabelledTransitionSystem {
     }
 }
 
-impl LTS for LabelledTransitionSystem {
+impl<Label> LTS for LabelledTransitionSystem<Label> {
+    type Label = Label;
+
     fn initial_state_index(&self) -> StateIndex {
         self.initial_state
     }
@@ -320,7 +284,7 @@ impl LTS for LabelledTransitionSystem {
         self.transition_labels.len()
     }
 
-    fn labels(&self) -> &[String] {
+    fn labels(&self) -> &[Label] {
         &self.labels[0..]
     }
 
@@ -330,19 +294,6 @@ impl LTS for LabelledTransitionSystem {
 
     fn merge_disjoint(self, other: &Self) -> (Self, StateIndex) {
         self.merge_disjoint_impl(other)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Transition {
-    pub label: LabelIndex,
-    pub to: StateIndex,
-}
-
-impl Transition {
-    /// Constructs a new transition.
-    pub fn new(label: LabelIndex, to: StateIndex) -> Self {
-        Self { label, to }
     }
 }
 
@@ -377,7 +328,7 @@ impl fmt::Display for LtsMetrics {
     }
 }
 
-impl fmt::Debug for LabelledTransitionSystem {
+impl<Label: fmt::Debug> fmt::Debug for LabelledTransitionSystem<Label> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
