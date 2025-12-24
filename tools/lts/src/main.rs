@@ -153,10 +153,12 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
             LargeFormatter(lts.num_of_transitions())
         );
 
-        println!("Labels:");
-        for label in lts.labels() {
-            println!("\t {}", label);
-        }
+        apply_lts!(lts, (), |lts, _| {
+            println!("Labels:");
+            for label in lts.labels() {
+                println!("\t {}", label);
+            }
+        });
     } else {
         return Err("Unsupported file format for info.".into());
     }
