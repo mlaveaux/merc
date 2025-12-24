@@ -27,7 +27,7 @@ pub fn random_bitvectors(rng: &mut impl Rng, num_vars: usize, num_vectors: usize
 /// Create a BDD from the given bitvector.
 pub fn from_iter<'a>(
     manager_ref: &BDDManagerRef,
-    variables: &Vec<BDDFunction>,
+    variables: &[BDDFunction],
     vectors: impl Iterator<Item = &'a Vec<OptBool>>,
 ) -> Result<BDDFunction, MercError> {
     let mut bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
@@ -54,7 +54,7 @@ pub fn from_iter<'a>(
 pub fn random_bdd(
     manager_ref: &BDDManagerRef,
     rng: &mut impl Rng,
-    variables: &Vec<BDDFunction>,
+    variables: &[BDDFunction],
 ) -> Result<BDDFunction, MercError> {
     let bitvectors = random_bitvectors(rng, variables.len(), 100);
     from_iter(manager_ref, variables, bitvectors.iter())

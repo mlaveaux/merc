@@ -37,8 +37,7 @@ pub fn random_parity_game(
 
     // Build edges using a closure that can be iterated twice (as required by from_edges).
     // We generate a deterministic set by capturing a precomputed edge list.
-    let mut edge_list: Vec<(VertexIndex, VertexIndex)> = Vec::new();
-    edge_list.reserve(num_of_vertices * outdegree);
+    let mut edge_list: Vec<(VertexIndex, VertexIndex)> = Vec::with_capacity(num_of_vertices * outdegree);
 
     for v in 0..num_of_vertices {
         // For each vertex, generate 0..outdegree outgoing edges.

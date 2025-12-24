@@ -91,7 +91,7 @@ impl ModalEquationSystem {
     /// that the alternation depth of a formula with a rhs is always 1, since the chain cannot be extended.
     pub fn alternation_depth(&self, i: usize) -> usize {
         let equation = &self.equations[i];
-        self.alternation_depth_rec(i, equation.body(), equation.operator(), &equation.variable().identifier)
+        self.alternation_depth_rec(i, equation.body(), &equation.variable().identifier)
     }
 
     /// Finds an equation by its variable identifier.
@@ -107,7 +107,6 @@ impl ModalEquationSystem {
         &self,
         i: usize,
         formula: &StateFrm,
-        op: FixedPointOperator,
         identifier: &String,
     ) -> usize {
         let equation = &self.equations[i];
@@ -122,7 +121,7 @@ impl ModalEquationSystem {
                         .expect("Equation not found for identifier");
                     if j > i {
                         let depth =
-                            self.alternation_depth_rec(j, &inner_equation.rhs, inner_equation.operator, identifier);
+                            self.alternation_depth_rec(j, &inner_equation.rhs, identifier);
                         depth
                             + (if inner_equation.operator != equation.operator {
                                 1 // Alternation occurs.
@@ -136,9 +135,9 @@ impl ModalEquationSystem {
                 }
             }
             StateFrm::Binary { lhs, rhs, .. } => self
-                .alternation_depth_rec(i, lhs, op, identifier)
-                .max(self.alternation_depth_rec(i, rhs, op, identifier)),
-            StateFrm::Modality { expr, .. } => self.alternation_depth_rec(i, expr, op, identifier),
+                .alternation_depth_rec(i, lhs, identifier)
+                .max(self.alternation_depth_rec(i, rhs, identifier)),
+            StateFrm::Modality { expr, .. } => self.alternation_depth_rec(i, expr, identifier),
             StateFrm::True | StateFrm::False => 0,
             _ => {
                 unimplemented!("Cannot determine alternation depth of formula {}", formula)

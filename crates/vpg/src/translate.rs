@@ -59,7 +59,7 @@ pub fn translate(
     algorithm.translate(fts.initial_state_index(), 0)?;
 
     // Convert the feature diagram (with names) to a VPG
-    let variables: Vec<BDDFunction> = fts.features().values().map(|var| var.clone()).collect();
+    let variables: Vec<BDDFunction> = fts.features().values().cloned().collect();
 
     let result = VariabilityParityGame::from_edges(
         manager_ref,

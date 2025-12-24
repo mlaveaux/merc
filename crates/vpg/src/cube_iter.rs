@@ -109,7 +109,7 @@ impl Iterator for CubeIterAll<'_> {
 }
 
 /// Perform the binary increment, returns false if overflow occurs.
-fn increment(cube: &mut Vec<OptBool>) -> bool {
+fn increment(cube: &mut [OptBool]) -> bool {
     for value in cube.iter_mut() {
         // Set each variable to true until we find one that is false
         if *value == OptBool::False {
