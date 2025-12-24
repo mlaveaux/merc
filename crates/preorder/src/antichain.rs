@@ -36,31 +36,36 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
         self.storage
             .entry(key)
             .and_modify(|entry| {
-                let mut removed = false;
+                let mut contains = false;
                 entry.retain(|inner_value| {
-                    // Remove any entry that is a superset of the new value
-                    if !value.is_subset(inner_value) {
+                    if inner_value.is_subset(&value) {
+                        // The new value is a superset of an existing entry
+                        contains = true;
                         true
-                    } else {
-                        removed = true;
+                    } else if value.is_subset(inner_value) {
+                        // Remove any entry that is a superset of the new value
                         false
+                    } else {
+                        // Leave incomparable entries unchanged
+                        true
                     }
                 });
 
-                if removed {
+                if !contains {
                     entry.insert(value.clone());
                     inserted = true;
                 }
             })
             .or_insert_with(|| {
                 self.antichain_misses += 1; // Was not present
+                inserted = true;
                 VecSet::singleton(value)
             });
 
         self.antichain_inserts += 1;
         self.max_antichain = self.max_antichain.max(self.storage.len());
 
-        true
+        inserted
     }
 }
 
@@ -70,6 +75,11 @@ impl<K, V: fmt::Debug + Ord> Antichain<K, V> {
         for (_key, values) in &self.storage {
             for i in values.iter() {
                 for j in values.iter() {
+                    if i == j {
+                        // Ignore identical entries
+                        continue;
+                    }
+
                     assert!(
                         !i.is_subset(j) && !j.is_subset(i),
                         "Antichain invariant violated: {:?} and {:?} are comparable.",
@@ -79,6 +89,16 @@ impl<K, V: fmt::Debug + Ord> Antichain<K, V> {
                 }
             }
         }
+    }
+}
+
+impl<T: fmt::Debug, U: fmt::Debug> fmt::Debug for Antichain<T, U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Antichain {{")?;
+        for (key, values) in &self.storage {
+            writeln!(f, "  {:?}: {:?}", key, values)?;
+        }
+        writeln!(f, "}}")
     }
 }
 
@@ -97,16 +117,18 @@ mod tests {
         let inserted = antichain.insert(1, vecset![2, 3]);
         assert!(inserted);
 
+        println!("{:?}", antichain);
+
         let inserted = antichain.insert(1, vecset![2, 3, 6]);
-        assert!(!inserted, "The pair (1, {{2,3}}) is already included in the antichain.");
+        assert!(!inserted, "The pair (1, {{2,3,6}}) should not be inserted in {:?}.", antichain);
 
         let inserted = antichain.insert(1, vecset![2]);
-        assert!(inserted, "The pair (1, {{2}}) should overwrite (1, {{2, 3}}.");
+        assert!(inserted, "The pair (1, {{2}}) should overwrite (1, {{2, 3}}) in {:?}.", antichain);
 
         let inserted = antichain.insert(1, vecset![5, 6]);
         assert!(
             inserted,
-            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs."
+            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs in {:?}.", antichain
         );
     }
 
