@@ -88,7 +88,7 @@ pub fn solve_variability_zielonka(
     let full_V = V.clone();
     let (W0, W1) = match variant {
         ZielonkaVariant::Family => zielonka.solve_recursive(V, 0)?,
-        ZielonkaVariant::FamilyOptimisedLeft => zielonka.solve_optimised_left_recursive(V, 0)?,
+        ZielonkaVariant::FamilyOptimisedLeft => zielonka.zielonka_family_optimised(V, 0)?,
         ZielonkaVariant::Product => {
             panic!("Product-based Zielonka is implemented in solve_product_zielonka");
         }
@@ -209,6 +209,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             mu.number_of_non_empty()
         );
 
+        trace!("{indent}Vertices in gamma: {:?}", gamma);
         trace!("{indent}Vertices in mu: {:?}", mu);
         let alpha = self.attractor(x, &gamma, mu)?;
         trace!("{indent}Vertices in alpha: {:?}", alpha);
@@ -246,7 +247,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
     }
 
     /// Left-optimised Zielonka solver that has improved theoretical complexity, but might be slower in practice.
-    fn solve_optimised_left_recursive(&mut self, gamma: Submap, depth: usize) -> Result<(Submap, Submap), MercError> {
+    fn zielonka_family_optimised(&mut self, gamma: Submap, depth: usize) -> Result<(Submap, Submap), MercError> {
         self.recursive_calls += 1;
         let indent = Repeat::new(" ", depth);
         let gamma_copy = gamma.clone();
@@ -267,19 +268,19 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // 7. C := { c in \bigC | exists v in V : p(v) = m && c in \gamma(v) }
         // 8. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
         let mut mu = Submap::new(
-            self.manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)),
+            self.false_bdd.clone(),
             self.false_bdd.clone(),
             self.game.num_of_vertices(),
         );
 
-        let mut C = self.manager_ref.with_manager_shared(|m| BDDFunction::f(m));
+        let mut C = self.false_bdd.clone();
         for v in &self.priority_vertices[*highest_prio] {
             mu.set(*v, gamma[*v].clone());
             C = C.or(&gamma[*v])?;
         }
 
         debug!(
-            "{indent}solve_optimised_left_rec(gamma) |gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
+            "{indent}|gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
             gamma.number_of_non_empty(),
             highest_prio,
             lowest_prio,
@@ -288,11 +289,14 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         );
 
         // 9. alpha := attr_x(\mu).
+        trace!("{indent}gamma: {:?}", gamma);
+        trace!("{indent}C: {}", FormatConfigSet(&C));
         let alpha = self.attractor(x, &gamma, mu)?;
+        trace!("{indent}alpha: {:?}", alpha);
 
         // 10. (omega'_0, omega'_1) := solve(gamma \ alpha)
-        debug!("{indent}solve_optimised_left_rec(gamma \\ alpha) |alpha| = {}", alpha.number_of_non_empty());
-        let (omega1_0, omega1_1) = self.solve_optimised_left_recursive(gamma.clone().minus(&alpha)?, depth + 1)?;
+        debug!("{indent}zielonka_family_opt(gamma \\ alpha) |alpha| = {}", alpha.number_of_non_empty());
+        let (omega1_0, omega1_1) = self.zielonka_family_optimised(gamma.clone().minus(&alpha)?, depth + 1)?;
 
         // omega_prime[not_x] restricted to (gamma \ C)
         let C_restricted = minus(
@@ -304,58 +308,59 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             &C,
         )?;
 
-        let (omega1_x, omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
-        let omega1_not_x = omega1_not_x.minus_function(&C_restricted)?;
+        let (mut omega1_x, omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
+        let omega1_not_x_restricted = omega1_not_x.clone().minus_function(&C_restricted)?;
 
         // 10.
-        if omega1_not_x.is_empty() {
+        if omega1_not_x_restricted.is_empty() {
             // 11. omega'_x := omega'_x \cup A
-            let omega1_x = omega1_x.or(&alpha)?;
+            omega1_x = omega1_x.or(&alpha)?;
             self.check_partition(&omega1_x, &omega1_not_x, &gamma_copy)?;
 
             // 22. return (omega_0, omega_1)
-            debug!("{indent}return (omega'_0, omega'_1)");
-            return Ok(combine(omega1_x, omega1_not_x, x));
+            Ok(combine(omega1_x, omega1_not_x, x))
+        } else {
+            // C' := { c in C | exists v: c in omega'_not_x(v) }
+            let mut C1 = self.false_bdd.clone();
+            for (_v, func) in omega1_not_x.iter() {
+                C1 = C1.or(func)?;
+            }
+            C1 = C1.and(&C)?;
+
+            // beta := attr_not_x(omega'_not_x | C')
+            let C1_restricted = minus(
+                &if self.alternative_solving {
+                    self.manager_ref.with_manager_shared(|m| BDDFunction::t(m)).clone()
+                } else {
+                    self.game.configuration().clone()
+                },
+                &C1,
+            )?;
+
+            let omega1_not_x_restricted1 = omega1_not_x.clone().minus_function(&C1_restricted)?;
+            trace!("{indent}omega'_notx_restricted: {:?}", omega1_not_x_restricted1);
+            let alpha1 = self.attractor(not_x, &gamma, omega1_not_x_restricted1)?;
+            trace!("{indent}alpha': {:?}", alpha1);
+
+            // Solve on (gamma | C') \ alpha'
+            let gamma_restricted = gamma.minus_function(&C1_restricted)?;
+
+            debug!("{indent}zielonka_family_opt((gamma | C') \\ alpha')");
+            let (omega2_0, omega2_1) = self.zielonka_family_optimised(gamma_restricted.minus(&alpha1)?, depth + 1)?;
+
+            // 18. omega'_x := omega'_x\C' cup alpha\C' cup omega''_x
+            // 19. omega_not_x := omega'_not_x\C' cup omega''_x cup beta
+            let (omega2_x, omega2_not_x) = x_and_not_x(omega2_0, omega2_1, x);
+            let omega1_x_restricted = omega1_x.minus_function(&C1)?;
+            let omega1_not_x_restricted = omega1_not_x.minus_function(&C1)?;
+
+            let alpha_restricted = alpha.minus_function(&C1)?;
+            let omega2_x_result = omega2_x.or(&omega1_x_restricted.or(&alpha_restricted)?)?;
+            let omega2_not_x_result = omega2_not_x.or(&omega1_not_x_restricted)?.or(&alpha1)?;
+
+            debug!("{indent}return (omega''_0, omega''_1)");
+            Ok(combine(omega2_x_result, omega2_not_x_result, x))
         }
-
-        // C' := { c in C | exists v: c in omega'_not_x(v) }
-        let mut C1 = self.manager_ref.with_manager_shared(|m| BDDFunction::f(m));
-        for (v, func) in omega1_not_x.iter() {
-            C1 = C1.or(func)?;
-        }
-        C1 = C1.and(&C)?;
-
-        // beta := attr_not_x(omega'_not_x | C')
-        let C1_restricted = minus(
-            &if self.alternative_solving {
-                self.manager_ref.with_manager_shared(|m| BDDFunction::t(m)).clone()
-            } else {
-                self.game.configuration().clone()
-            },
-            &C1,
-        )?;
-
-        let omega1_not_x = omega1_not_x.minus_function(&C1_restricted)?;
-        let beta = self.attractor(not_x, &gamma, omega1_not_x.clone())?;
-
-        // Solve on (gamma | C') \ beta
-        let gamma = gamma.minus_function(&C1)?;
-
-        debug!("{indent}solve_optimised_left_rec((gamma | C') \\ alpha')");
-        let (omega2_0, omega2_1) = self.solve_optimised_left_recursive(gamma.minus(&beta)?, depth + 1)?;
-
-        // 18. omega'_x := omega'_x\C' cup alpha\C' cup omega''_x
-        // 19. omega_not_x := omega'_not_x\C' cup omega''_x cup beta
-        let (omega2_x, mut omega2_not_x) = x_and_not_x(omega2_0, omega2_1, not_x);
-        let omega1_x = omega1_x.minus_function(&C1)?;
-        let omega2_not_x = omega2_not_x.minus_function(&C1)?;
-
-        let alpha = alpha.minus_function(&C1)?;
-        let omega2_x = omega1_x.or(&alpha)?.or(&omega2_x)?;
-        let omega2_not_x = omega1_not_x.or(&omega2_not_x)?.or(&beta)?;
-
-        debug!("{indent}return (omega''_0, omega''_1)");
-        Ok(combine(omega2_x, omega2_not_x, x))
     }
 
     /// Computes the attractor for `player` to the set `A` within the set of vertices `gamma`.
@@ -688,7 +693,6 @@ mod tests {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
             let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
-            println!("Solving VPG {}", vpg);
 
             write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
@@ -697,20 +701,22 @@ mod tests {
         })
     }
 
-    // #[merc_test]
-    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
-    // fn test_random_variability_parity_game_solve_optimised_left() {
-    //     random_test(100, |rng| {
-    //         let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
-    //         let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+    #[merc_test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_variability_parity_game_solve_optimised_left() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+            
+            write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
-    //         let solution =
-    //             solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::FamilyOptimisedLeft, false).unwrap();
-    //         let solution_expected =g
-    //             solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Family, false).unwrap();
+            let solution =
+                solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::FamilyOptimisedLeft, false).unwrap();
+            let solution_expected =
+                solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Family, false).unwrap();
 
-    //         debug_assert_eq!(solution[0], solution_expected[0]);
-    //         debug_assert_eq!(solution[1], solution_expected[1]);
-    //     })
-    // }
+            debug_assert_eq!(solution[0], solution_expected[0]);
+            debug_assert_eq!(solution[1], solution_expected[1]);
+        })
+    }
 }
