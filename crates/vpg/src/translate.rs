@@ -6,6 +6,7 @@ use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
+use merc_collections::IndexedSet;
 use merc_io::TimeProgress;
 use merc_lts::LTS;
 use merc_lts::StateIndex;
@@ -18,7 +19,6 @@ use merc_syntax::MultiAction;
 use merc_syntax::RegFrm;
 use merc_syntax::StateFrm;
 use merc_syntax::StateFrmOp;
-use merc_utilities::IndexedSet;
 use merc_utilities::MercError;
 
 use crate::FeatureTransitionSystem;
