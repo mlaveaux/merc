@@ -38,6 +38,7 @@ pub struct SymmetryAlgorithm {
     /// The parameters of the unified SRF PBES.
     parameters: Vec<DataVariable>, 
 
+    /// The indices of all control flow parameters in the PBES.
     all_control_flow_parameters: Vec<usize>,
 
     /// The SRF PBES after unifying parameters.

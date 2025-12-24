@@ -98,16 +98,14 @@ fn main() -> Result<ExitCode, MercError> {
 
         let algorithm = SymmetryAlgorithm::new(&pbes, false)?;
         if let Some(permutation) = &args.permutation {
-            let pi = if permutation.contains("[") {
+            let pi = if permutation.trim_start().starts_with("[") {
                 Permutation::from_mapping_notation(permutation)?
             } else {
                 Permutation::from_cycle_notation(permutation)?
             };
 
             if let Err(x) = algorithm.is_valid_permutation(&pi) {
-                info!("The given permutation is not valid:\n\t - {}",
-                    x
-                );
+                info!("The given permutation is not valid: {x}");
                 return Ok(ExitCode::FAILURE);
             }
 
