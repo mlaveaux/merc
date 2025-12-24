@@ -12,7 +12,7 @@ thread_local! {
 }
 
 /// Defines default symbols and terms for data elements.
-/// 
+///
 /// For now these mirror the mCRL2 definitions since that is convenient.
 pub struct DataSymbols {
     pub sort_id_symbol: ManuallyDrop<Symbol>,

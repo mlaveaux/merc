@@ -110,29 +110,29 @@ pub fn read_lts(
 ///
 /// This format is built on top the ATerm binary format. The structure is as
 /// follows:
-/// 
+///
 ///     lts_marker: ATerm
 ///     data_spec: see [`merc_data::DataSpecification::write`]
-///     parameters: ATermList 
+///     parameters: ATermList
 ///     action_labels: ATermList
 ///
 /// Afterwards we can write the following elements in any order:
-/// 
+///
 /// initial state:
 ///    initial_state_marker: ATerm
 ///    state: ATermInt
-/// 
+///
 /// transition:
 ///     transition_marker: ATerm
 ///     from: ATermInt
 ///     label: ATerm (the multi_action)
 ///     to: ATermInt
-/// 
+///
 /// state_label (index derived from order of appearance):
 ///    state_label: ATermList::<DataExpression>
 pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError>
 where
-    L: LTS<Label = MultiAction>
+    L: LTS<Label = MultiAction>,
 {
     info!("Writing LTS in .lts format...");
 

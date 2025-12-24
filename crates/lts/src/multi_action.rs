@@ -4,7 +4,6 @@ use std::hash::Hash;
 use delegate::delegate;
 
 use itertools::Itertools;
-use merc_aterm::storage::Marker;
 use merc_aterm::ATerm;
 use merc_aterm::ATermArgs;
 use merc_aterm::ATermIndex;
@@ -17,11 +16,12 @@ use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::TermIterator;
 use merc_aterm::Transmutable;
+use merc_aterm::storage::Marker;
 use merc_collections::VecSet;
-use merc_data::is_data_variable;
 use merc_data::DataExpression;
 use merc_data::DataVariable;
 use merc_data::DataVariableRef;
+use merc_data::is_data_variable;
 use merc_macros::merc_derive_terms;
 use merc_macros::merc_term;
 use merc_utilities::MercError;
@@ -121,8 +121,10 @@ impl MultiAction {
 
 #[merc_derive_terms]
 mod inner {
-    use merc_aterm::{ATermStringRef, Symbol};
-    use merc_data::{DataExpression, DataExpressionRef};
+    use merc_aterm::ATermStringRef;
+    use merc_aterm::Symbol;
+    use merc_data::DataExpression;
+    use merc_data::DataExpressionRef;
     use merc_macros::merc_ignore;
 
     use super::*;
@@ -309,17 +311,23 @@ mod tests {
         let action = MultiAction::from_string("a | b(1, 2) | c").unwrap();
 
         assert_eq!(action.actions.len(), 3);
-        assert!(action
-            .actions
-            .iter()
-            .any(|act| act.label == "a" && act.arguments.is_empty()));
-        assert!(action
-            .actions
-            .iter()
-            .any(|act| act.label == "b" && act.arguments == vec!["1", "2"]));
-        assert!(action
-            .actions
-            .iter()
-            .any(|act| act.label == "c" && act.arguments.is_empty()));
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "a" && act.arguments.is_empty())
+        );
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "b" && act.arguments == vec!["1", "2"])
+        );
+        assert!(
+            action
+                .actions
+                .iter()
+                .any(|act| act.label == "c" && act.arguments.is_empty())
+        );
     }
 }

@@ -33,15 +33,15 @@ pub enum IOError {
 /// form of  `BufReader`` internally.
 ///
 /// # Details
-/// 
+///
 /// The Aldebaran format consists of a header: `des (<initial>: Nat,
 ///     <num_of_transitions>: Nat, <num_of_states>: Nat)`
 ///     
-/// And one line for every transition either one of these cases: 
-///  `(<from>: Nat, "<label>": Str, <to>: Nat)` 
+/// And one line for every transition either one of these cases:
+///  `(<from>: Nat, "<label>": Str, <to>: Nat)`
 ///  `(<from>: Nat, <label>: Str, <to>: Nat)`
-/// 
-/// To be fully compatible with the original syntax definition, the labels 
+///
+/// To be fully compatible with the original syntax definition, the labels
 /// of the edges should consist of at most 5000 characters.
 pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
     info!("Reading LTS in .aut format...");

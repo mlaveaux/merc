@@ -29,9 +29,9 @@ pub fn is_empty_list_term<'a, 'b>(t: &'b impl Term<'a, 'b>) -> bool {
 }
 
 /// Represents a list of ATerms of type T.
-/// 
+///
 /// # Details
-/// 
+///
 /// Internally, uses two standard function symbols `cons` and `[]` to represent
 /// lists. The `cons` function symbol has arity 2, where the first argument is
 /// the head of the list and the second argument is the tail of the list. The

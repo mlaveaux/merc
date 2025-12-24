@@ -1,11 +1,11 @@
 use rand::Rng;
 
-use crate::TransitionLabel;
-use crate::product_lts;
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilderFast;
 use crate::StateIndex;
+use crate::TransitionLabel;
+use crate::product_lts;
 
 /// Generates a random LTS with the desired number of states, labels and out
 /// degree by composing three smaller random LTSs using the synchronous product.
@@ -54,9 +54,7 @@ pub fn random_lts_monolithic<L: TransitionLabel>(
     let mut labels: Vec<L> = Vec::new();
     labels.push(L::tau_label()); // The initial hidden label, assumed to be index 0.
     for i in 0..(num_of_labels - 1) {
-        labels.push(
-            L::from_index(i as usize)
-        );
+        labels.push(L::from_index(i as usize));
     }
 
     let mut builder = LtsBuilderFast::with_capacity(labels, Vec::new(), num_of_states);

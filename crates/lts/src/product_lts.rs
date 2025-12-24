@@ -10,11 +10,15 @@ use crate::StateIndex;
 use crate::TransitionLabel;
 
 /// Computes the synchronous product LTS of two given LTSs.
-/// 
+///
 ///  If `synchronized_labels` is `None`, then all common labels (except tau) are
 /// considered synchronized. Otherwise, the provided labels are used for
 /// synchronization.
-pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(left: &L, right: &R, synchronized_labels: Option<Vec<L::Label>>) -> LabelledTransitionSystem<L::Label> {
+pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(
+    left: &L,
+    right: &R,
+    synchronized_labels: Option<Vec<L::Label>>,
+) -> LabelledTransitionSystem<L::Label> {
     // Determine the combination of action labels
     let mut all_labels: IndexedSet<L::Label> = IndexedSet::new();
 

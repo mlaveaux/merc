@@ -152,7 +152,7 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
             LargeFormatter(lts.num_of_states()),
             LargeFormatter(lts.num_of_transitions())
         );
-        
+
         println!("Labels:");
         for label in lts.labels() {
             println!("\t {}", label);

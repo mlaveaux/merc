@@ -1,4 +1,5 @@
-use std::{fmt, slice::Iter};
+use std::fmt;
+use std::slice::Iter;
 
 use itertools::Itertools;
 

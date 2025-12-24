@@ -32,10 +32,9 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
     /// Inserts the given (s, T) pair into the antichain and returns true iff it was
     /// not already present.
     pub fn insert(&mut self, key: K, value: VecSet<V>) -> bool {
-
-
         let mut inserted = false;
-        self.storage.entry(key)
+        self.storage
+            .entry(key)
             .and_modify(|entry| {
                 let mut removed = false;
                 entry.retain(|inner_value| {
@@ -56,7 +55,7 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
             .or_insert_with(|| {
                 self.antichain_misses += 1; // Was not present
                 VecSet::singleton(value)
-        });
+            });
 
         self.antichain_inserts += 1;
         self.max_antichain = self.max_antichain.max(self.storage.len());
@@ -91,7 +90,6 @@ mod tests {
 
     use crate::Antichain;
 
-
     #[test]
     fn test_antichain() {
         let mut antichain: Antichain<u32, u32> = Antichain::new();
@@ -106,7 +104,10 @@ mod tests {
         assert!(inserted, "The pair (1, {{2}}) should overwrite (1, {{2, 3}}.");
 
         let inserted = antichain.insert(1, vecset![5, 6]);
-        assert!(inserted, "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs.");
+        assert!(
+            inserted,
+            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs."
+        );
     }
 
     #[test]
@@ -127,7 +128,7 @@ mod tests {
                 antichain.insert(key, value);
             }
 
-            antichain.check_consistency();            
+            antichain.check_consistency();
         })
     }
 }
