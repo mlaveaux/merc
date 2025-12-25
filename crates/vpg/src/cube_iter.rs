@@ -7,6 +7,8 @@ use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 use oxidd::util::OptBool;
 
+use crate::minus;
+
 /// Iterator over all cubes (satisfying assignments) in a BDD.
 ///
 /// The returned cubes contain don't care values (OptBool::None) for variables
@@ -35,7 +37,7 @@ impl Iterator for CubeIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let cube = self.bdd.pick_cube_dd(|_, _, _| true).unwrap();
 
-        self.bdd = self.bdd.and(&cube.not().unwrap()).ok().unwrap();
+        self.bdd = minus(&self.bdd, &cube).expect("Failed to compute BDD difference");
 
         cube.pick_cube(|_, _, _| true)
     }
