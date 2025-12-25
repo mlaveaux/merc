@@ -76,7 +76,7 @@ rustc-hash = "2.1"
 smallvec = "1.15"
 thiserror = "2.0"
 toml = "0.9"
-oxidd = "0.11"
+oxidd = { version = "0.11", features = ["manager-pointer"] }
 winapi = { version = "0.3", features = ["consoleapi"] }
 
 # Used by the lower level crates

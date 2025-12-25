@@ -117,6 +117,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+dependencies = [
+ "derive_arbitrary",
+]
+
+[[package]]
+name = "arbtest"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a3be567977128c0f71ad1462d9624ccda712193d124e944252f0c5789a06d46"
+dependencies = [
+ "arbitrary",
+]
+
+[[package]]
+name = "arcslab"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67d525761a6913dc2115b17c9c72379de20e9fd7b12ad479bbadbb544b20b32b"
+dependencies = [
+ "crossbeam-utils",
+ "derive-where",
+ "libc",
+ "parking_lot",
+ "sptr",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1445,6 +1476,7 @@ dependencies = [
  "oxidd-derive",
  "oxidd-dump",
  "oxidd-manager-index",
+ "oxidd-manager-pointer",
  "oxidd-reorder",
  "oxidd-rules-bdd",
  "oxidd-rules-mtbdd",
@@ -1516,6 +1548,23 @@ dependencies = [
  "parking_lot",
  "rayon",
  "rustc-hash 1.1.0",
+]
+
+[[package]]
+name = "oxidd-manager-pointer"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad78ecc8d113d3e3a2d06a47299d8a557088f016323f0f22f363622ff239ebb8"
+dependencies = [
+ "arcslab",
+ "derive-where",
+ "fixedbitset 0.5.7",
+ "linear-hashtbl",
+ "oxidd-core",
+ "parking_lot",
+ "rayon",
+ "rustc-hash 1.1.0",
+ "sptr",
 ]
 
 [[package]]
