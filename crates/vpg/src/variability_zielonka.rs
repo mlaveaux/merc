@@ -478,13 +478,18 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                                 != *f_edge
                             {
                                 // 16. A(v) := A(v) \cup a
-                                A.set(
-                                    manager,
+                                let was_empty = *A[v].as_edge(manager) == *f_edge;
+                                let update = BDDFunction::or_edge(manager, A[v].as_edge(manager), &a)?;
+                                let is_empty = update == *f_edge;
+
+                                A.set_internal(
                                     v,
                                     BDDFunction::from_edge(
                                         manager,
-                                        BDDFunction::or_edge(manager, A[v].as_edge(manager), &a)?,
+                                        update
                                     ),
+                                    was_empty,
+                                    is_empty,
                                 );
 
                                 // 17. if v not in Q then Q.push(v)
@@ -600,6 +605,18 @@ impl Submap {
         let was_empty = !self.mapping[*index].satisfiable();
         let is_empty = !func.satisfiable();
 
+        self.mapping[*index] = func;
+
+        // Update the non-empty count invariant.
+        if was_empty && !is_empty {
+            self.non_empty_count += 1;
+        } else if !was_empty && is_empty {
+            self.non_empty_count -= 1;
+        }
+    }
+
+    /// A variant of `set` that assumes the caller already knows whether the previous and new functions are empty.    
+    fn set_internal(&mut self, index: VertexIndex, func: BDDFunction, was_empty: bool, is_empty: bool) {
         self.mapping[*index] = func;
 
         // Update the non-empty count invariant.
