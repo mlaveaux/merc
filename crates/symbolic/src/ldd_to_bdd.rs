@@ -23,9 +23,9 @@ pub fn ldd_to_bdd_simple(
 
 /// Converts an LDD representing a set of vectors into a BDD representing the
 /// same set by bitblasting the vector elements.
-/// 
+///
 /// # Details
-/// 
+///
 /// The bits should be a singleton LDD containing the result of
 /// [`compute_bits`]. The conversion works recursively by processing the LDD
 /// node by node, and introducing bits number of BDD variables for each layer in
@@ -52,7 +52,7 @@ pub fn ldd_to_bdd(
     let DataRef(bits_value, bits_down, _bits_right) = storage.get_ref(bits); // Is singleton so right is ignored.
 
     let right = ldd_to_bdd(storage, manager_ref, &right, bits, first_variable)?;
-    let mut down = ldd_to_bdd(storage, manager_ref, &down, &bits_down, first_variable + 2 * bits_value)?;
+    let mut down = ldd_to_bdd(storage, manager_ref, &down, &bits_down, first_variable + bits_value)?;
 
     // Encode current value
     for i in 0..bits_value {
@@ -61,12 +61,12 @@ pub fn ldd_to_bdd(
         if value & (1 << i) != 0 {
             // bit is 1
             down = manager_ref.with_manager_shared(|manager| {
-                BDDFunction::var(manager, first_variable + 2 * bit)?.ite(&BDDFunction::f(manager), &down)
+                BDDFunction::var(manager, first_variable + bit)?.ite(&BDDFunction::f(manager), &down)
             })?;
         } else {
             // bit is 0
             down = manager_ref.with_manager_shared(|manager| {
-                BDDFunction::var(manager, first_variable + 2 * bit)?.ite(&down, &BDDFunction::f(manager))
+                BDDFunction::var(manager, first_variable + bit)?.ite(&down, &BDDFunction::f(manager))
             })?;
         }
     }
@@ -153,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    // #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_ldd_to_bdd() {
         random_test(100, |rng| {
             let set = random_vector_set(rng, 4, 3, 5);
@@ -170,7 +170,7 @@ mod tests {
 
             let total_bits: u32 = bits.iter().sum();
             println!("Total bits: {}", total_bits);
-            let variables = create_variables(&manager_ref, total_bits).unwrap();
+            let _variables = create_variables(&manager_ref, total_bits).unwrap();
 
             let _bdd = ldd_to_bdd(&mut storage, &manager_ref, &ldd, &bits_dd, 0).unwrap();
         });
