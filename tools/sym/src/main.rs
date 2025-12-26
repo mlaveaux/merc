@@ -38,21 +38,12 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Info(InfoArgs),
-    Convert(ConvertArgs),
 }
 
 #[derive(clap::Args, Debug)]
 #[command(about = "Prints information related to the given LTS")]
 struct InfoArgs {
     filename: String,
-}
-
-#[derive(clap::Args, Debug)]
-#[command(about = "Converts a symbolic LTS into an explicit LTS")]
-struct ConvertArgs {
-    filename: String,
-
-    output_filename: String,
 }
 
 fn main() -> Result<ExitCode, MercError> {

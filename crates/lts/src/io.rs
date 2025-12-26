@@ -14,11 +14,10 @@ use crate::read_lts;
 pub enum LtsFormat {
     Aut,
     Lts,
-    Sym,
 }
 
 /// Guesses the LTS file format from the file extension.
-pub fn guess_format_from_extension(path: &Path, format: Option<LtsFormat>) -> Option<LtsFormat> {
+pub fn guess_lts_format_from_extension(path: &Path, format: Option<LtsFormat>) -> Option<LtsFormat> {
     if let Some(format) = format {
         return Some(format);
     }
@@ -27,8 +26,6 @@ pub fn guess_format_from_extension(path: &Path, format: Option<LtsFormat>) -> Op
         Some(LtsFormat::Aut)
     } else if path.extension() == Some(OsStr::new("lts")) {
         Some(LtsFormat::Lts)
-    } else if path.extension() == Some(OsStr::new("sym")) {
-        Some(LtsFormat::Sym)
     } else {
         None
     }
@@ -41,7 +38,6 @@ pub fn read_explicit_lts(
     hidden_labels: Vec<String>,
     timing: &mut Timing,
 ) -> Result<LabelledTransitionSystem, MercError> {
-    assert!(format != LtsFormat::Sym, "Cannot read symbolic LTS as explicit LTS.");
 
     let file = std::fs::File::open(path)?;
     let mut time_read = timing.start("read_aut");
@@ -49,9 +45,6 @@ pub fn read_explicit_lts(
     let result = match format {
         LtsFormat::Aut => read_aut(&file, hidden_labels),
         LtsFormat::Lts => read_lts(&file, hidden_labels),
-        LtsFormat::Sym => {
-            panic!("Cannot read symbolic LTS as explicit LTS.")
-        }
     };
 
     time_read.finish();
