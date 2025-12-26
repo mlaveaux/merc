@@ -237,6 +237,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         time_read.finish();
 
         let game = if !game.is_total(&manager_ref)? {
+            info!("Making the VPG total...");
             make_vpg_total(&manager_ref, &game)?
         } else {
             game

@@ -1156,6 +1156,7 @@ dependencies = [
  "merc_syntax",
  "merc_utilities",
  "oxidd",
+ "oxidd-core",
  "rand",
  "regex",
  "streaming-iterator",
