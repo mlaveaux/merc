@@ -32,7 +32,7 @@ use crate::StateFrmOp;
 use crate::StateFrmUnaryOp;
 use crate::syntax_tree::SortExpression;
 
-static SORT_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+pub static SORT_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     // Precedence is defined lowest to highest
     PrattParser::new()
         // Sort operators
@@ -91,7 +91,7 @@ pub fn parse_sortexpr(pairs: Pairs<Rule>) -> ParseResult<SortExpression> {
         .parse(pairs)
 }
 
-static DATAEXPR_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+pub static DATAEXPR_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     // Precedence is defined lowest to highest
     PrattParser::new()
         .op(Op::postfix(Rule::DataExprWhr)) // $left 0
@@ -227,7 +227,7 @@ pub fn parse_dataexpr(pairs: Pairs<Rule>) -> ParseResult<DataExpr> {
         .parse(pairs)
 }
 
-static PROCEXPR_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+pub static PROCEXPR_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     // Precedence is defined lowest to highest
     PrattParser::new()
         .op(Op::infix(Rule::ProcExprChoice, Assoc::Left)) // $left 1
@@ -342,7 +342,7 @@ pub fn parse_process_expr(pairs: Pairs<Rule>) -> ParseResult<ProcessExpr> {
 }
 
 /// Defines the operator precedence for action formulas using a Pratt parser.
-static ACTFRM_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+pub static ACTFRM_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     // Precedence is defined lowest to highest
     PrattParser::new()
         .op(Op::prefix(Rule::ActFrmExists) | Op::prefix(Rule::ActFrmForall)) // $right  0
@@ -410,7 +410,7 @@ pub fn parse_actfrm(pairs: Pairs<Rule>) -> ParseResult<ActFrm> {
 }
 
 /// Defines the operator precedence for regular expressions using a Pratt parser.
-static REGFRM_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+pub static REGFRM_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     // Precedence is defined lowest to highest
     PrattParser::new()
         .op(Op::infix(Rule::RegFrmAlternative, Assoc::Left)) // $left 1

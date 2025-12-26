@@ -8,7 +8,7 @@ use merc_data::DataExpressionRef;
 
 use super::ExplicitPosition;
 
-/// A newtype wrapper around ExplicitPosition specifically for data expressions
+/// A newtype wrapper around [ExplicitPosition] specifically for data expressions
 /// This provides type safety and clarity when dealing with positions in data expressions
 #[repr(transparent)]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,7 +58,7 @@ impl fmt::Debug for DataPosition {
     }
 }
 
-/// A specialisation of the [`crate::PositionIndexed`] trait for [DataExpression]. This is used to keep the indexing consistent.
+/// A specialisation of the [super::PositionIndexed] trait for [DataExpression]. This is used to keep the indexing consistent.
 pub trait DataPositionIndexed<'b> {
     type Target<'a>
     where
@@ -103,7 +103,7 @@ impl<'b> DataPositionIndexed<'b> for DataExpressionRef<'b> {
     }
 }
 
-/// An iterator over all (term, position) pairs of the given ATerm.
+/// An iterator over all (term, position) pairs of the given [DataExpression].
 pub struct DataPositionIterator<'a> {
     queue: VecDeque<(DataExpressionRef<'a>, DataPosition)>,
 }

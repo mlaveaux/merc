@@ -26,19 +26,25 @@ use crate::utilities::DataPosition;
 use super::DotFormatter;
 use super::MatchGoal;
 
-// The Set Automaton used to find all matching patterns in a term. Based on the
-// following article. Implemented by Mark Bouwman, and adapted by Maurice
-// Laveaux.
+/// The Set Automaton used to find all matching patterns in a term. Based on the
+/// following article. Implemented by Mark Bouwman, and adapted by Maurice
+/// Laveaux.
 //
-// Erkens, R., Groote, J.F. (2021). A Set Automaton to Locate All Pattern
-// Matches in a Term. In: Cerone, A., Ölveczky, P.C. (eds) Theoretical Aspects
-// of Computing – ICTAC 2021. ICTAC 2021. Lecture Notes in Computer Science(),
-// vol 12819. Springer, Cham. https://doi.org/10.1007/978-3-030-85315-0_5
+/// Erkens, R., Groote, J.F. (2021). A Set Automaton to Locate All Pattern
+/// Matches in a Term. In: Cerone, A., Ölveczky, P.C. (eds) Theoretical Aspects
+/// of Computing – ICTAC 2021. ICTAC 2021. Lecture Notes in Computer Science(),
+/// vol 12819. Springer, Cham. https://doi.org/10.1007/978-3-030-85315-0_5
 pub struct SetAutomaton<T> {
     states: Vec<State>,
     transitions: HashMap<(usize, usize), Transition<T>>,
 }
 
+/// A match announcement contains the rule that can be announced as a match at
+/// the given position.
+/// 
+/// `symbols_seen` is internally used to keep track of how many symbols have
+/// been observed so far. Since these symbols have a unique number this can be
+/// used to speed up certain operations.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MatchAnnouncement {
     pub rule: Rule,
@@ -46,6 +52,7 @@ pub struct MatchAnnouncement {
     pub symbols_seen: usize,
 }
 
+/// Represents a transition in the [SetAutomaton].
 #[derive(Clone)]
 pub struct Transition<T> {
     pub symbol: DataFunctionSymbol,
@@ -53,6 +60,7 @@ pub struct Transition<T> {
     pub destinations: SmallVec<[(DataPosition, usize); 1]>,
 }
 
+/// Represents a match obligation in the [SetAutomaton].
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MatchObligation {
     pub pattern: DataExpression,
@@ -66,6 +74,11 @@ impl MatchObligation {
     }
 }
 
+/// Represents either the initial state or a set of match goals in the
+/// [SetAutomaton].
+/// 
+/// This is only used during construction to avoid craating all the goals for
+/// the initial state.
 #[derive(Debug)]
 enum GoalsOrInitial {
     InitialState,

@@ -11,7 +11,7 @@ use crate::Term;
 use crate::ThreadTermPool;
 
 /// This can be used to construct an [ATerm] from a given input of (inductive) type I
-/// without using recursion, as such avoiding system stack overflows. See [evaluate]
+/// without using recursion, as such avoiding system stack overflows. See [TermBuilder::evaluate]
 /// for more details.
 #[derive(Default)]
 pub struct TermBuilder<I, C> {

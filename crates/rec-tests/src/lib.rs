@@ -1,7 +1,10 @@
-//! This crate offers parsing for REC files and test cases for the rewrite engines.
+//! This crate offers parsing for REC files and test cases for the rewrite
+//! engines.
 //!
-//! REC, short for Rewriting Engine Competition, is a format for specifying rewrite systems.
-//! The parse_rec module contains functions for loading a REC file.
+//! The Rewrite Engine Competition (REC) is a
+//! [competition](https://doi.org/10.1007/978-3-030-17502-3_6) for benchmarking
+//! (first-order) term rewriting systems. This crate is used to perform these
+//! benchmarks with our [`merc_sabre`] rewrite engine.
 //!
 //! This crate does not use any unsafe code.
 

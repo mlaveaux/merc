@@ -8,6 +8,7 @@ use merc_aterm::Term;
 use merc_aterm::is_int_term;
 
 thread_local! {
+    /// Thread local storage that stores various default terms representing data symbols.
     pub static DATA_SYMBOLS: RefCell<DataSymbols> = RefCell::new(DataSymbols::new());
 }
 

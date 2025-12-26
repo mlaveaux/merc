@@ -2,7 +2,7 @@
 //!
 //! An aterm is a first-order term of the following form:
 //!
-//! t := c | f(t1, ..., tn) | u64
+//!     t := c | f(t1, ..., tn) | u64
 //!
 //! where `f` is a function symbol with arity `n > 0` and a unique name, `c` is
 //! a constant and `u64` is a numerical term.

@@ -15,10 +15,14 @@ use crate::set_automaton::SetAutomaton;
 use crate::utilities::DataPositionIndexed;
 
 /// Innermost Adaptive Pattern Matching Automaton (APMA) rewrite engine.
+/// 
+/// # Details
+/// 
 /// Implements the RewriteEngine trait. An APMA uses a modified SetAutomaton.
-/// The SetAutomaton::construct function has an 'apma' parameter. If it is set to true.
-/// An APMA is created. Construction is almost identical with the difference that no fresh goals are created.
-/// It only matches on the root position.
+/// The [SetAutomaton::new] constructor has an 'apma' parameter. If it is set to
+/// true. An APMA is created. Construction is almost identical with the
+/// difference that no fresh goals are created. It only matches on the root
+/// position.
 pub struct NaiveRewriter {
     apma: SetAutomaton<AnnouncementInnermost>,
 }

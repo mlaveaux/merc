@@ -14,15 +14,10 @@ pub const fn encoding_size<T>() -> usize {
     ((std::mem::size_of::<T>() + 1) * 8) / 7
 }
 
-/// Encodes an unsigned variable-length integer using the most significant bit (MSB) algorithm.
-/// This function assumes that the value is stored as little endian.
-///     - value The input value. Any standard integer type is allowed.
-///     - output A pointer to a piece of reserved memory. Must have a minimum size dependent on the input size (32 bit = 5 bytes, 64 bit = 10 bytes).
-///
-/// # Returns
-/// The number of bytes used in the output.
-///
+/// Encodes a given unsigned variable-length integer using the most significant bit (MSB) algorithm.
+/// 
 /// # Details
+/// 
 /// Implementation taken from <https://techoverflow.net/2013/01/25/efficiently-encoding-variable-length-integers-in-cc/>
 pub fn write_u64_variablelength<W: Write, E: Endianness>(
     stream: &mut BitWriter<W, E>,

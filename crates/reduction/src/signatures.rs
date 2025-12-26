@@ -103,7 +103,9 @@ fn tau_hat(lts: &impl LTS) -> LabelIndex {
     LabelIndex::new(lts.num_of_labels())
 }
 
-/// Returns the signature for strong bisimulation sig(s, pi) = { (a, pi(t)) | s -a-> t in T }
+/// Returns the signature for strong bisimulation.
+/// 
+///     sig(s, pi) = { (a, pi(t)) | s -a-> t in T }
 pub fn strong_bisim_signature(
     state_index: StateIndex,
     lts: &impl LTS,
@@ -121,8 +123,9 @@ pub fn strong_bisim_signature(
     builder.dedup();
 }
 
-/// Returns the branching bisimulation signature for branching bisimulation
-/// sig(s, pi) = { (a, pi(t)) | s -tau-> s1 -> ... s_n -a-> t in T && pi(s) = pi(s_i) && ((a != tau) || pi(s) != pi(t)) }
+/// Returns the branching bisimulation signature for branching bisimulation.
+/// 
+///     sig(s, pi) = { (a, pi(t)) | s -tau-> s1 -> ... s_n -a-> t in T && pi(s) = pi(s_i) && ((a != tau) || pi(s) != pi(t)) }
 pub fn branching_bisim_signature(
     state_index: StateIndex,
     lts: &impl LTS,
@@ -166,7 +169,8 @@ pub fn branching_bisim_signature(
     builder.dedup();
 }
 
-/// The input lts must contain no tau-cycles.
+/// The same as [branching_bisim_signature], but assuming that the input LTS is
+/// topological sorted, and contains no tau-cycles.
 pub fn branching_bisim_signature_sorted(
     state_index: StateIndex,
     lts: &impl LTS,
@@ -197,7 +201,8 @@ pub fn branching_bisim_signature_sorted(
     builder.dedup();
 }
 
-/// The input lts must contain no tau-cycles.
+/// The inductive version of [branching_bisim_signature_sorted]. Assumes that
+/// the input LTS has no tau-cycles, and is topologically sorted.
 pub fn branching_bisim_signature_inductive(
     state_index: StateIndex,
     lts: &impl LTS,
@@ -288,7 +293,7 @@ pub fn weak_bisim_signature_sorted_taus(
 }
 
 /// Perform the preprocessing necessary for branching bisimulation with the
-/// sorted signature see `branching_bisim_signature_sorted`.
+/// sorted signature see [branching_bisim_signature_sorted].
 pub fn preprocess_branching(lts: impl LTS) -> LabelledTransitionSystem {
     let scc_partition = tau_scc_decomposition(&lts);
     let tau_loop_free_lts = quotient_lts_naive(&lts, &scc_partition, true);

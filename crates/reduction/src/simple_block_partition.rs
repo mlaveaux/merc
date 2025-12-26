@@ -9,7 +9,8 @@ use crate::BlockIndex;
 use crate::Partition;
 
 /// A partition that explicitly stores a list of blocks and their indexing into
-/// the list of elements.
+/// the list of elements. Similar to [super::BlockPartition] but without taking
+/// the stability of individual elements into account.
 #[derive(Debug)]
 pub struct SimpleBlockPartition {
     elements: Vec<StateIndex>,
@@ -141,9 +142,13 @@ impl Partition for SimpleBlockPartition {
     }
 }
 
-/// A block stores a subset of the elements in a partition. It uses start, and
-/// end to indicate a range start..end of elements in the partition. The stable
-/// flag indicates whether the block is stable.
+/// A [super::Block] that stores a subset of the elements in a partition, but
+/// with individual stable elements.
+/// 
+/// # Details
+/// 
+/// It uses `start` and `end` to indicate a range start..end of elements in the
+/// partition. The stable flag indicates whether the block is stable.
 #[derive(Clone, Copy, Debug)]
 pub struct SimpleBlock {
     begin: usize,

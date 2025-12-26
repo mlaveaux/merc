@@ -42,7 +42,7 @@ pub fn coverage(arguments: Vec<String>) -> Result<(), Box<dyn Error>> {
 
     cmd("cargo", arguments)
         .env("CARGO_INCREMENTAL", "0")
-        .env("RUSTFLAGS", "-Cinstrument-coverage")
+        .env("RUSTFLAGS", "-C instrument-coverage -Z coverage-options=condition")
         .env("LLVM_PROFILE_FILE", prof_directory)
         .run()?;
     println!("ok.");

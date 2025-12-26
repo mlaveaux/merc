@@ -11,11 +11,13 @@ use std::sync::atomic::Ordering;
 
 use crossbeam_utils::CachePadded;
 
-/// A global shared mutex that can be used to protect global data. This is a
-/// wrapper around `BfSharedMutex` that provides a global instance that can be
-/// used to protect global data.
-///
-/// This can only be cloned to obtain mutable access.
+/// A global shared mutex that can be used to protect global data. 
+/// 
+/// # Details
+/// 
+/// This is a wrapper around `BfSharedMutex` that provides a global instance
+/// that can be used to protect global data. Must be cloned to obtain mutable
+/// access.
 pub struct GlobalBfSharedMutex<T> {
     /// The shared mutex that is used to protect the global data.
     pub shared_mutex: BfSharedMutex<T>,
@@ -40,11 +42,14 @@ unsafe impl<T: Send> Send for GlobalBfSharedMutex<T> {}
 unsafe impl<T: Send> Sync for GlobalBfSharedMutex<T> {}
 
 /// A shared mutex (readers-writer lock) implementation based on the so-called
-/// busy-forbidden protocol. Instead of a regular Mutex this class is Send and
-/// not Sync, every thread must acquire a clone of the shared mutex and the
-/// cloned instances of the same shared mutex guarantee shared access through
-/// the `read` operation and exclusive access for the `write` operation of the
-/// given object.
+/// busy-forbidden protocol. 
+/// 
+/// # Details
+/// 
+/// Compared to a regular Mutex this class is Send and not Sync, every thread
+/// must acquire a clone of the shared mutex and the cloned instances of the
+/// same shared mutex guarantee shared access through the `read` operation and
+/// exclusive access for the `write` operation of the given object.
 pub struct BfSharedMutex<T> {
     /// The local control bits of each instance. TODO: Maybe use pin to share the control bits among shared mutexes.
     control: Arc<CachePadded<SharedMutexControl>>,

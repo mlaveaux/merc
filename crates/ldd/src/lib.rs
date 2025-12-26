@@ -14,14 +14,16 @@
 //!
 //! Next, we should explain how LDDs represent a set of vectors. Given an LDD n
 //! then \[n\] is inductively defined as:
-//!   - \[false\]                    = ∅
-//!   - \[true\]                     = { <> }
-//!   - \[node(value, down, right)\] = { value x | x in \[down\] } ∪ \[right\]
+//! 
+//! ```plain
+//! [false]                    = ∅
+//! [true]                     = { <> }
+//! [node(value, down, right)] = { value x | x in [down] } ∪ [right]\
+//! ```
 //!
 //! Node that since 'true' and 'false' are not very insightful and clash with
 //! Rust keywords we use 'empty vector' and 'empty set' for the constants 'true'
-//! and 'false' respectively. This makes sense as they represent the empty
-//! vector and empty set respectively.
+//! and 'false' respectively.
 //!
 //! # Citations
 //!

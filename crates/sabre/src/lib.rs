@@ -1,7 +1,10 @@
 //!
-//! The Set Automaton Based Rewrite Engine (Sabre) implements a rewriter for
-//! conditional first-order non-linear rewrite rules.
-//!
+//! The Set Automaton Based Rewrite Engine (abbreviated Sabre) implements a
+//! rewriter for conditional first-order non-linear rewrite rules, based on the
+//! set automaton construction defined in this paper:
+//! 
+//! > "Term Rewriting Based On Set Automaton Matching". Mark Bouwman, Rick Erkens. [DOI](https://arxiv.org/abs/2202.08687).
+//! 
 //! This crate does not use unsafe code.
 
 mod innermost_rewriter;

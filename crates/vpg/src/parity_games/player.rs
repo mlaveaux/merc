@@ -30,7 +30,7 @@ impl Player {
         }
     }
 
-    /// Returns the index of the player, the inverse of [`from_index`].
+    /// Returns the index of the player, the inverse of [Self::from_index].
     pub fn to_index(&self) -> usize {
         match self {
             Player::Even => 0,

@@ -175,14 +175,14 @@ fn parse_configuration(manager: &BDDManagerRef, config: &str) -> Result<(Vec<BDD
 ///
 /// # Details
 ///
-/// A configuration is represented as a string <entry>+<entry>+..., where each entry is either
+/// A configuration is represented as a string \<entry\>+\<entry\>+..., where each entry is either
 /// a sequence consisting of '-', '0', and '1', representing don't care, false, and true respectively.
 /// The length of the sequence determines the number of boolean variables. So `-1--` represents a boolean
 /// function over 4 variables.
 ///
 /// The variables must be defined beforehand and are assumed to be in order, i.e., the first character
 /// corresponds to variable 0, the second to variable 1, and so on.
-fn parse_configuration_set(
+pub fn parse_configuration_set(
     manager_ref: &BDDManagerRef,
     variables: &[BDDFunction],
     config: &str,
