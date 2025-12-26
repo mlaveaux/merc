@@ -1,21 +1,37 @@
-//! Implementation of the [ATerm] related data structure.
+//! A thread-safe library to manipulate first-order terms (represented by the
+//! main [ATerm] data type).
 //!
-//! An aterm is a first-order term of the following form:
+//! An first-order term is defined by the following grammar:
 //!
 //!     t := c | f(t1, ..., tn) | u64
 //!
 //! where `f` is a function symbol with arity `n > 0` and a unique name, `c` is
 //! a constant and `u64` is a numerical term.
 //!
-//! Terms are stored maximally shared in the global aterm pool, meaning that T1,
-//! Tn are shared between all terms and the term is immutable. This global aterm
-//! pool performs garbage collection to remove terms that are no longer
-//! reachable. This is kept track of by the thread-local aterm pool.
+//! Terms are stored maximally shared in the global aterm pool, meaning that
+//! arguments `t1, ..., tn` are shared between all terms. Terms are generally
+//! immutable, but can be created concurrently in different threads, using
+//! thread-local data structures for their protection. The global aterm pool
+//! performs garbage collection to remove terms that are no longer reachable.
 //!
 //! This crate does use `unsafe` for some of the more intricrate parts of the
 //! ATerm library, but every module that only uses safe Rust is marked with
-//! `#![forbid(unsafe_code)]`.
-
+//! `#![forbid(unsafe_code)]`. This crate is a full reimplementation of the
+//! ATerm library used in the [mCRL2](https://mcrl2.org) toolset.
+//!
+//! # Citations
+//!
+//! Further details on the implementation are explained in the following paper:
+//!
+//! "Using the Parallel ATerm Library for Parallel Model Checking and State
+//! Space Generation". Jan Friso Groote, Kevin H.J. Jilissen, Maurice Laveaux,
+//! Flip van Spaendonck. [DOI](https://doi.org/10.1007/978-3-031-15629-8_16).
+//!
+//! The initial ATerm library was inspired by:
+//!
+//! "Efficient annotated terms". M. G. J. van den Brand, H. A. de Jong, P.
+//! Klint, P. A. Olivier.
+//! [DOI](https://doi.org/10.1002/(SICI)1097-024X(200003)30:3<259::AID-SPE298>3.0.CO;2-Y).
 mod aterm;
 mod aterm_binary_stream;
 mod aterm_builder;

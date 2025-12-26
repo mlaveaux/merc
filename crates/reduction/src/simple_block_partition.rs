@@ -144,9 +144,9 @@ impl Partition for SimpleBlockPartition {
 
 /// A [super::Block] that stores a subset of the elements in a partition, but
 /// with individual stable elements.
-/// 
+///
 /// # Details
-/// 
+///
 /// It uses `start` and `end` to indicate a range start..end of elements in the
 /// partition. The stable flag indicates whether the block is stable.
 #[derive(Clone, Copy, Debug)]

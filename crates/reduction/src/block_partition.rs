@@ -406,10 +406,10 @@ impl fmt::Display for BlockPartition {
     }
 }
 
-/// A block stores a subset of the elements in a partition. 
-/// 
+/// A block stores a subset of the elements in a partition.
+///
 /// # Details
-/// 
+///
 /// A block uses `start`, `middle` and `end` indices to indicate a range
 /// `start`..`end` of elements in the partition. The middle is used such that
 /// `marked_split`..`end` are the marked elements. This is useful to be able to

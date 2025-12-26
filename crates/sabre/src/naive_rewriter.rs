@@ -15,9 +15,9 @@ use crate::set_automaton::SetAutomaton;
 use crate::utilities::DataPositionIndexed;
 
 /// Innermost Adaptive Pattern Matching Automaton (APMA) rewrite engine.
-/// 
+///
 /// # Details
-/// 
+///
 /// Implements the RewriteEngine trait. An APMA uses a modified SetAutomaton.
 /// The [SetAutomaton::new] constructor has an 'apma' parameter. If it is set to
 /// true. An APMA is created. Construction is almost identical with the

@@ -45,9 +45,9 @@ mod inner {
     use super::*;
 
     /// A data expression is an [merc_aterm::ATerm] with additional structure.
-    /// 
+    ///
     /// # Details
-    /// 
+    ///
     /// A data expression can be any of:
     ///     - a variable
     ///     - a function symbol, i.e. f without arguments.

@@ -15,9 +15,9 @@ pub const fn encoding_size<T>() -> usize {
 }
 
 /// Encodes a given unsigned variable-length integer using the most significant bit (MSB) algorithm.
-/// 
+///
 /// # Details
-/// 
+///
 /// Implementation taken from <https://techoverflow.net/2013/01/25/efficiently-encoding-variable-length-integers-in-cc/>
 pub fn write_u64_variablelength<W: Write, E: Endianness>(
     stream: &mut BitWriter<W, E>,

@@ -41,7 +41,7 @@ pub struct SetAutomaton<T> {
 
 /// A match announcement contains the rule that can be announced as a match at
 /// the given position.
-/// 
+///
 /// `symbols_seen` is internally used to keep track of how many symbols have
 /// been observed so far. Since these symbols have a unique number this can be
 /// used to speed up certain operations.
@@ -76,7 +76,7 @@ impl MatchObligation {
 
 /// Represents either the initial state or a set of match goals in the
 /// [SetAutomaton].
-/// 
+///
 /// This is only used during construction to avoid craating all the goals for
 /// the initial state.
 #[derive(Debug)]

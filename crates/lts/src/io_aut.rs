@@ -26,33 +26,9 @@ pub enum IOError {
     InvalidTransition(String),
 }
 
-/// Dedicated function to parse the following transition formats:
-///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
-///     `(<from>: Nat, <label>: Str, <to>: Nat)`
-///
-/// This was generally faster than the regex variant, since that one has to backtrack after
-fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
-    let start_paren = input.find('(')?;
-    let start_comma = input.find(',')?;
-
-    // Find the comma in the second part
-    let start_second_comma = input.rfind(',')?;
-    let end_paren = input.rfind(')')?;
-
-    let from = input.get(start_paren + 1..start_comma)?.trim();
-    let label = input.get(start_comma + 1..start_second_comma)?.trim();
-    let to = input.get(start_second_comma + 1..end_paren)?.trim();
-    // Handle the special case where it has quotes.
-    if label.starts_with('"') && label.ends_with('"') {
-        return Some((from, &label[1..label.len() - 1], to));
-    }
-
-    Some((from, label, to))
-}
-
-/// Loads a labelled transition system in the Aldebaran format from the given
-/// reader. Note that the reader has a buffer in the form of  `BufReader``
-/// internally.
+/// Loads a labelled transition system in the [Aldebaran
+/// format](https://cadp.inria.fr/man/aldebaran.html) from the given reader.
+/// Note that the reader has a buffer in the form of  `BufReader`` internally.
 ///
 /// The Aldebaran format consists of a header: `des (<initial>: Nat,
 ///     <num_of_transitions>: Nat, <num_of_states>: Nat)`
@@ -141,6 +117,34 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
     }
 
     Ok(())
+}
+
+/// Dedicated function to parse the transition format.
+///
+/// # Details
+///
+/// Line can be any of the following forms:
+///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
+///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+///
+/// This was generally faster than the regex variant, since that one has to backtrack after
+fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
+    let start_paren = input.find('(')?;
+    let start_comma = input.find(',')?;
+
+    // Find the comma in the second part
+    let start_second_comma = input.rfind(',')?;
+    let end_paren = input.rfind(')')?;
+
+    let from = input.get(start_paren + 1..start_comma)?.trim();
+    let label = input.get(start_comma + 1..start_second_comma)?.trim();
+    let to = input.get(start_second_comma + 1..end_paren)?.trim();
+    // Handle the special case where it has quotes.
+    if label.starts_with('"') && label.ends_with('"') {
+        return Some((from, &label[1..label.len() - 1], to));
+    }
+
+    Some((from, label, to))
 }
 
 #[cfg(test)]

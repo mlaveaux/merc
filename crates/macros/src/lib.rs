@@ -14,9 +14,9 @@ use merc_derive_terms::merc_derive_terms_impl;
 
 /// This proc macro can be used to automatically generate the boilerplate code
 /// for structs to behave as a term.
-/// 
+///
 /// # Details
-/// 
+///
 /// For example `DataExpression`, `DataApplication` and `DataVariable` from the
 /// `merc_data` crate are terms with additional functionality. This is achieved
 /// by adding the proc macro to a module that contains both the declaration and

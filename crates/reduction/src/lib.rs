@@ -1,4 +1,4 @@
-//! 
+//!
 //! This crate provides various functionalities for reducing labeled transition
 //! systems (LTS), see [merc_lts]. The module includes different partitioning
 //! strategies, quotienting mechanisms, and other techniques to reduce and

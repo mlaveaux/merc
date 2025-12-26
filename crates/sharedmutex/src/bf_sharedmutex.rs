@@ -11,10 +11,10 @@ use std::sync::atomic::Ordering;
 
 use crossbeam_utils::CachePadded;
 
-/// A global shared mutex that can be used to protect global data. 
-/// 
+/// A global shared mutex that can be used to protect global data.
+///
 /// # Details
-/// 
+///
 /// This is a wrapper around `BfSharedMutex` that provides a global instance
 /// that can be used to protect global data. Must be cloned to obtain mutable
 /// access.
@@ -42,10 +42,10 @@ unsafe impl<T: Send> Send for GlobalBfSharedMutex<T> {}
 unsafe impl<T: Send> Sync for GlobalBfSharedMutex<T> {}
 
 /// A shared mutex (readers-writer lock) implementation based on the so-called
-/// busy-forbidden protocol. 
-/// 
+/// busy-forbidden protocol.
+///
 /// # Details
-/// 
+///
 /// Compared to a regular Mutex this class is Send and not Sync, every thread
 /// must acquire a clone of the shared mutex and the cloned instances of the
 /// same shared mutex guarantee shared access through the `read` operation and

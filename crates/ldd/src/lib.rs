@@ -14,7 +14,7 @@
 //!
 //! Next, we should explain how LDDs represent a set of vectors. Given an LDD n
 //! then \[n\] is inductively defined as:
-//! 
+//!
 //! ```plain
 //! [false]                    = ∅
 //! [true]                     = { <> }
