@@ -6,9 +6,8 @@ mod naive_rewriter;
 mod rewrite_specification;
 mod sabre_rewriter;
 mod set_automaton;
-pub mod utilities;
 
-#[cfg(test)]
+pub mod utilities;
 pub mod test_utility;
 
 pub use innermost_rewriter::*;

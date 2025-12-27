@@ -703,7 +703,7 @@ mod tests {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
             let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
 
-            write_vpg(&mut std::io::stdout(), &vpg).unwrap();
+            // write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
             let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Family, false).unwrap();
             verify_variability_product_zielonka_solution(&vpg, &solution).unwrap();
@@ -717,7 +717,7 @@ mod tests {
             let manager_ref = oxidd::bdd::new_manager(2048, 1024, 1);
             let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
 
-            write_vpg(&mut std::io::stdout(), &vpg).unwrap();
+            // write_vpg(&mut std::io::stdout(), &vpg).unwrap();
 
             let solution =
                 solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::FamilyOptimisedLeft, false).unwrap();

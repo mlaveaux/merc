@@ -23,6 +23,7 @@ This crate also demonstrates the use of `merc_syntax` for defining higher-level
 structure on top of first-order terms.
 
 ```rust
+use ahash::AHashSet;
 
 use merc_aterm::ATerm;
 use merc_data::to_untyped_data_expression;
@@ -30,7 +31,7 @@ use merc_data::to_untyped_data_expression;
 let term = ATerm::from_string("f(a, g(x))").unwrap();
 
 // Consider 'x' as a variable, and everything else as function applications (or constants)
-let data_expr = to_untyped_data_expression(&term, &AHashSet::from_iter("x".to_string())).unwrap();
+let data_expr = to_untyped_data_expression(term, Some(&AHashSet::from_iter(["x".to_string()])));
 ```
 
 ## Safety

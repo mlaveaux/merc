@@ -3,7 +3,9 @@
 A thread-safe library to manipulate first-order terms. An first-order term is
 defined by the following grammar:
 
+```plain
     t := c | f(t1, ..., tn) | u64
+```
 
 where `f` is a function symbol with arity `n > 0` and a name, `c` is a function
 symbol with arity zero and `u64` is a numerical term. As such `f(a, g(b))` is an
@@ -34,14 +36,14 @@ after they are no longer protected, and as such avoid use-after-free errors.
 In general terms can simply be created by using their constructors
 
 ```rust
-use merc_aterm::{ATerm, Symbol};
+use merc_aterm::{ATerm, Term, Symbol, Symb};
 
 let a = ATerm::constant(&Symbol::new("a", 0));
 let f = ATerm::with_args(&Symbol::new("f", 2), &[a.clone(), a]); // Creates f(a, a)
 
 let g = ATerm::from_string("f(a, g(b))").unwrap(); // Parses the term from a string
 
-assert!(g(0).get_head_symbol().name() == "a"); // Access first argument of g
+assert!(g.arg(0).get_head_symbol().name() == "a"); // Access first argument of g
 ```
 
 ## Details

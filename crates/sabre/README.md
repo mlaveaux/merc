@@ -13,22 +13,32 @@ or the Rewrite Engine Competition (REC) format, but it can also be constructed
 programmatically for demonstration purposes, or for testing.
 
 ```rust
+use merc_aterm::ATerm;
+
 use merc_sabre::test_utility::create_rewrite_rule;
 use merc_sabre::RewriteSpecification;
 use merc_sabre::SabreRewriter;
+use merc_sabre::RewriteEngine;
+
+use merc_data::to_untyped_data_expression;
 
 // Peano arithmetic rewrite rules
-let rule_zero = create_rewrite_rule("plus(x, 0) -> x");
-let rule_succ = create_rewrite_rule("plus(x, S(y)) -> S(plus(x, y))");
+let rule_zero = create_rewrite_rule("plus(x, 0)", "x", &["x"]).unwrap();
+let rule_succ = create_rewrite_rule("plus(x, S(y))", "S(plus(x, y))", &["x", "y"]).unwrap();
 
 let spec = RewriteSpecification::new(vec![rule_zero, rule_succ]);
 
-let rewriter = SabreRewriter::new(spec);
-let term = parse_term("plus(S(S(0)), S(0))");
+let mut rewriter = SabreRewriter::new(&spec);
+let term = to_untyped_data_expression(ATerm::from_string("plus(S(S(0)), S(0))").unwrap(), None);
 
 let rewritten_term = rewriter.rewrite(&term);
 assert_eq!(rewritten_term.to_string(), "S(S(S(0)))");
 ```
+
+This crate implements a `NaiveRewriter` for reference testing, an
+`InnermostRewriter` that is strictly innermost and uses Adaptive Pattern
+Matching, and the full `SabreRewriter` that uses the Set Automaton construction
+for matching.
 
 ## Safety
 
