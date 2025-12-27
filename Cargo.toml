@@ -115,7 +115,7 @@ merc_io = { path = "crates/io" }
 merc_ldd = { path = "crates/ldd" }
 merc_lts = { path = "crates/lts" }
 merc_macros = { path = "crates/macros" }
-merc_number = { path = "crates/number" }
+merc_number = { version = "1.0", path = "crates/number" }
 merc_rec-tests = { path = "crates/rec-tests" }
 merc_reduction = { path = "crates/reduction" }
 merc_sabre = { path = "crates/sabre" }
