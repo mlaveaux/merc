@@ -1,7 +1,8 @@
-use merc_utilities::MercError;
 use pest::Parser;
-use pest_consume::Error;
 use pest_derive::Parser;
+
+use merc_pest_consume::Error;
+use merc_utilities::MercError;
 
 use crate::DataExpr;
 use crate::DataExprBinaryOp;

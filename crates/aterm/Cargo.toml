@@ -1,7 +1,7 @@
 [package]
 name = "merc_aterm"
 description = "A thread-safe library to manipulate and store first-order terms."
-keywords = ["concurrency"]
+keywords = ["concurrency", "term"]
 categories = ["concurrency", "data structures"]
 readme = "README.md"
 edition.workspace = true
@@ -22,7 +22,8 @@ merc_number.workspace = true
 merc_sharedmutex.workspace = true
 merc_unsafety.workspace = true
 merc_utilities.workspace = true
-pest_consume.workspace = true
+
+merc_pest_consume.workspace = true
 
 ahash.workspace = true
 allocator-api2.workspace = true

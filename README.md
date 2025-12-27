@@ -21,7 +21,7 @@ Various tools have been implemented so far:
 
 ## License
 
-The work is licensed under the Boost Software License, see the `LICENSE` for details.
+The work is licensed under the Boost Software License, see the `LICENSE` for details. Third party dependencies have additional license terms, which are included in the `3rd-party` directory. Furthermore, a `deny.toml` file is included to ensure that no `crates.io` dependencies with incompatible licenses are added.
 
 ## Related Work
 

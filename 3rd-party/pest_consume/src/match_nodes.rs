@@ -122,7 +122,7 @@ macro_rules! match_nodes {
         $crate::match_nodes_!($($x)*)
     };
 }
-pub use pest_consume_macros::match_nodes as match_nodes_;
+pub use merc_pest_consume_macros::match_nodes as match_nodes_;
 
 // Reexport
 pub use itertools::Itertools;

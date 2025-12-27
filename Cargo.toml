@@ -125,5 +125,7 @@ merc_tools = { path = "crates/tools" }
 merc_unsafety = { version = "1.0", path = "crates/unsafety" }
 merc_utilities = { version = "1.0", path = "crates/utilities" }
 merc_vpg = { path = "crates/vpg" }
-pest_consume  = { path = "3rd-party/pest_consume" }
-pest_consume_macros  = { path = "3rd-party/pest_consume_macros" }
+
+# Vendored libraries
+merc_pest_consume  = { version = "2.0.0", path = "3rd-party/pest_consume" }
+merc_pest_consume_macros  = { version = "2.0.0", path = "3rd-party/pest_consume_macros" }

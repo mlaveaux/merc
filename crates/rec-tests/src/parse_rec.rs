@@ -2,14 +2,15 @@ use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use pest::Parser;
+use pest_derive::Parser;
+
 use merc_aterm::ATerm;
 use merc_aterm::THREAD_TERM_POOL;
+use merc_pest_consume::Error;
+use merc_pest_consume::match_nodes;
+use merc_pest_consume::Node;
 use merc_utilities::MercError;
-use pest::Parser;
-use pest_consume::Error;
-use pest_consume::Node;
-use pest_consume::match_nodes;
-use pest_derive::Parser;
 
 use crate::syntax::ConditionSyntax;
 use crate::syntax::RewriteRuleSyntax;
@@ -108,7 +109,7 @@ fn parse_rec(contents: &str, path: Option<PathBuf>) -> Result<(RewriteSpecificat
     Ok((rewrite_spec, terms))
 }
 
-#[pest_consume::parser]
+#[merc_pest_consume::parser]
 impl RecParser {
     /// Parse a REC specification, returns structured result with all components
     fn rec_spec(spec: ParseNode) -> ParseResult<RecSpecResult> {

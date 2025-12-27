@@ -179,7 +179,7 @@ fn traverse_pattern(
             let matches_node = matches_pat(pat, quote!(node));
             let this_slice = process_item(pat, quote!(matched));
             steps.push(quote!(
-                let matched = <_ as ::pest_consume::Itertools>::peeking_take_while(&mut #i_iter, |node| #matches_node);
+                let matched = <_ as ::merc_pest_consume::Itertools>::peeking_take_while(&mut #i_iter, |node| #matches_node);
                 #this_slice;
             ))
         }
@@ -206,8 +206,8 @@ fn make_alternative(
     parser: &Type,
 ) -> TokenStream {
     let i_nodes_iter = Ident::new("___nodes_iter", Span::call_site());
-    let name_enum = quote!(<#parser as ::pest_consume::NodeMatcher>::NodeName);
-    let node_namer_ty = quote!(<_ as ::pest_consume::NodeNamer<#parser>>);
+    let name_enum = quote!(<#parser as ::merc_pest_consume::NodeMatcher>::NodeName);
+    let node_namer_ty = quote!(<_ as ::merc_pest_consume::NodeNamer<#parser>>);
     let patterns: Vec<_> = alternative.patterns.into_iter().collect();
 
     // Function to generate code for checking if a pattern matches a node
@@ -328,8 +328,8 @@ pub fn match_nodes(input: proc_macro::TokenStream) -> Result<proc_macro2::TokenS
 
     debug_assert!(!branches.is_empty(), "Must generate at least one branch");
 
-    let node_list_ty = quote!(<_ as ::pest_consume::NodeList<#parser>>);
-    let node_namer_ty = quote!(<_ as ::pest_consume::NodeNamer<#parser>>);
+    let node_list_ty = quote!(<_ as ::merc_pest_consume::NodeList<#parser>>);
+    let node_namer_ty = quote!(<_ as ::merc_pest_consume::NodeNamer<#parser>>);
     Ok(quote!({
         let (#i_nodes, #i_node_namer) = #node_list_ty::consume(#input_expr);
 

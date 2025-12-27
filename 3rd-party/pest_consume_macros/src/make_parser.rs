@@ -193,7 +193,7 @@ fn apply_special_attrs(f: &mut ParsedFn, rule_enum: &Path) -> Result<()> {
     // f.alias_srcs has always at least 1 element because it has an entry pointing from itself.
     let aliases = f.alias_srcs.iter().map(|src| &src.ident).filter(|i| i != &fn_name);
     let block = &function.block;
-    let self_ty = quote!(<Self as ::pest_consume::Parser>);
+    let self_ty = quote!(<Self as ::merc_pest_consume::Parser>);
 
     // Modify function block to handle shortcuts and aliases
     function.block = parse_quote!({
@@ -215,7 +215,7 @@ fn apply_special_attrs(f: &mut ParsedFn, rule_enum: &Path) -> Result<()> {
             #(#rule_enum::#aliases => Self::#aliases(#input_arg),)*
             #rule_enum::#fn_name => #block,
             r => panic!(
-                "pest_consume::parser: called the `{}` method on a node with rule `{:?}`",
+                "merc_pest_consume::parser: called the `{}` method on a node with rule `{:?}`",
                 stringify!(#fn_name),
                 r
             )
@@ -298,11 +298,11 @@ pub fn make_parser(attrs: proc_macro::TokenStream, input: proc_macro::TokenStrea
                         // identifier.
                         r if &format!("{:?}", r) == stringify!(#tgt) =>
                             return ::std::result::Result::Err(#input_arg.error(format!(
-                                "pest_consume::parser: missing method for rule {}",
+                                "merc_pest_consume::parser: missing method for rule {}",
                                 stringify!(#tgt),
                             ))),
                         r => return ::std::result::Result::Err(#input_arg.error(format!(
-                            "pest_consume::parser: called method `{}` on a node with rule `{:?}`",
+                            "merc_pest_consume::parser: called method `{}` on a node with rule `{:?}`",
                             stringify!(#tgt),
                             r
                         ))),
@@ -329,7 +329,7 @@ pub fn make_parser(attrs: proc_macro::TokenStream, input: proc_macro::TokenStrea
             #(#aliased_rule_variants,)*
         }
 
-        impl #impl_generics ::pest_consume::Parser for #ty #where_clause {
+        impl #impl_generics ::merc_pest_consume::Parser for #ty #where_clause {
             type Rule = #rule_enum;
             type AliasedRule = AliasedRule;
             type Parser = #parser;

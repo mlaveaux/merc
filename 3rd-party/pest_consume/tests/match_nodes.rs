@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case)]
 #![allow(dead_code)]
 
-use pest_consume::match_nodes;
+use merc_pest_consume::match_nodes;
 
 // Define a simple matcher based on an enum. Each variant of the enum gives a node name, and the
 // corresponding matcher function extracts the contained value. The contructed node type stores the
@@ -57,7 +57,7 @@ macro_rules! simple_matcher {
 
         struct $matcher;
 
-        impl pest_consume::NodeMatcher for $matcher {
+        impl merc_pest_consume::NodeMatcher for $matcher {
             type NodeName = $name;
         }
 
@@ -73,7 +73,7 @@ macro_rules! simple_matcher {
             )*
         }
 
-        impl pest_consume::NodeList<$matcher> for Vec<$node> {
+        impl merc_pest_consume::NodeList<$matcher> for Vec<$node> {
             type Node = $node;
             type NodeNamer = Namer;
 
@@ -83,7 +83,7 @@ macro_rules! simple_matcher {
         }
 
         struct Namer;
-        impl pest_consume::NodeNamer<$matcher> for Namer {
+        impl merc_pest_consume::NodeNamer<$matcher> for Namer {
             type Node = $node;
             type Error = ();
 

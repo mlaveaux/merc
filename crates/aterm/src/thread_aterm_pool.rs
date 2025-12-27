@@ -6,9 +6,14 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use log::debug;
+
+use merc_pest_consume::Parser;
+use merc_sharedmutex::RecursiveLock;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
-use pest_consume::Parser;
+use merc_utilities::debug_trace;
+use merc_utilities::MercError;
+use merc_utilities::ProtectionIndex;
 
 use crate::AGRESSIVE_GC;
 use crate::GlobalTermPool;
@@ -26,10 +31,6 @@ use crate::aterm::ATerm;
 use crate::aterm::ATermRef;
 use crate::global_aterm_pool::GLOBAL_TERM_POOL;
 
-use merc_sharedmutex::RecursiveLock;
-use merc_utilities::MercError;
-use merc_utilities::ProtectionIndex;
-use merc_utilities::debug_trace;
 
 thread_local! {
     /// Thread-specific term pool that manages protection sets.

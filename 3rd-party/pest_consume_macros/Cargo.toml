@@ -1,14 +1,13 @@
 [package]
-name = "pest_consume_macros"
+name = "merc_pest_consume_macros"
 version = "2.0.0"
-authors = ["Nadrieril <nadrieril@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 description = "Macros for pest_consume"
 readme = "../README.md"
-repository = "https://github.com/Nadrieril/pest_consume"
 keywords = ["pest", "parser", "peg", "grammar", "proc_macro"]
 categories = ["parsing"]
 edition.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true

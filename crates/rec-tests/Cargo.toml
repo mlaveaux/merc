@@ -5,19 +5,17 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-pest_consume.workspace = true
-pest_derive.workspace = true
-pest.workspace = true
-ahash.workspace = true
-
 merc_aterm.workspace = true
 merc_data.workspace = true
 merc_sabre.workspace = true
 merc_utilities.workspace = true
 
+merc_pest_consume.workspace = true
+
+pest_derive.workspace = true
+pest.workspace = true
+ahash.workspace = true
 
 [dev-dependencies]
 test-case.workspace = true

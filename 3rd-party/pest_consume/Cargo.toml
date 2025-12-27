@@ -1,17 +1,17 @@
 [package]
-name = "pest_consume"
+name = "merc_pest_consume"
 version = "2.0.0"
-authors = ["Nadrieril <nadrieril@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 description = "A framework for processing the output of a pest-generated parser"
 readme = "../README.md"
-repository = "https://github.com/Nadrieril/pest_consume"
 keywords = ["pest", "parser", "peg", "grammar"]
 categories = ["parsing"]
+repository.workspace = true
 edition.workspace = true
 
 [dependencies]
+merc_pest_consume_macros.workspace = true
+
 itertools.workspace = true
 pest.workspace = true
 pest_derive.workspace = true
-pest_consume_macros.workspace = true

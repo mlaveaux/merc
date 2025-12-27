@@ -6,12 +6,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+merc_pest_consume.workspace = true
 merc_utilities.workspace = true
 
 arbitrary.workspace = true
 itertools.workspace = true
 log.workspace = true
-pest_consume.workspace = true
 pest_derive.workspace = true
 pest.workspace = true
 

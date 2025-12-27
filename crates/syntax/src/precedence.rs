@@ -7,7 +7,8 @@ use pest::pratt_parser::Assoc::Left;
 use pest::pratt_parser::Assoc::Right;
 use pest::pratt_parser::Op;
 use pest::pratt_parser::PrattParser;
-use pest_consume::Node;
+
+use merc_pest_consume::Node;
 
 use crate::ActFrm;
 use crate::ActFrmBinaryOp;
@@ -194,7 +195,7 @@ pub fn parse_dataexpr(pairs: Pairs<Rule>) -> ParseResult<DataExpr> {
             _ => unimplemented!("Unexpected postfix operator: {:?}", postfix.as_rule()),
         })
         .map_prefix(
-            |prefix, expr: Result<DataExpr, pest_consume::Error<Rule>>| match prefix.as_rule() {
+            |prefix, expr| match prefix.as_rule() {
                 Rule::DataExprForall => Ok(DataExpr::Quantifier {
                     op: Quantifier::Forall,
                     variables: Mcrl2Parser::DataExprForall(Node::new(prefix))?,

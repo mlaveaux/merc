@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::result_large_err)]
 
-use pest_consume::Error;
-use pest_consume::match_nodes;
 use pest_derive::Parser;
+
+use merc_pest_consume::Error;
+use merc_pest_consume::match_nodes;
 
 use crate::ATerm;
 use crate::Symbol;
@@ -13,14 +14,14 @@ use crate::Symbol;
 pub struct TermParser;
 
 type ParseResult<T> = std::result::Result<T, Error<Rule>>;
-type ParseNode<'i> = pest_consume::Node<'i, Rule, ()>;
+type ParseNode<'i> = merc_pest_consume::Node<'i, Rule, ()>;
 
 /// Parse a term from a string.
 ///
 /// TODO: Parse integer terms and aterm list as in the mCRL2 toolset.
 ///
 /// Grammar:  f(t_1, ..., t_n) | c
-#[pest_consume::parser]
+#[merc_pest_consume::parser]
 impl TermParser {
     pub fn TermSpec(spec: ParseNode) -> ParseResult<ATerm> {
         TermParser::Term(spec.children().next().unwrap())
