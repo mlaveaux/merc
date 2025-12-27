@@ -2490,6 +2490,7 @@ dependencies = [
 name = "xtask"
 version = "1.0.0"
 dependencies = [
+ "clap",
  "duct",
  "glob",
  "regex",

@@ -1,13 +1,13 @@
 [package]
 name = "merc_utilities"
 description = "Internal MERC toolset package containing various utility functions"
-homepage = "https://mercorg.github.io/merc/"
-repository = "https://github.com/MERCorg/merc"
 readme = "README.md"
-version.workspace = true
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [features]
 # Disable logging when miri is enabled since that does not work with isolation mode.
