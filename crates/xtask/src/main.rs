@@ -8,7 +8,8 @@ use std::error::Error;
 use std::process::ExitCode;
 
 use benchmark::Rewriter;
-use clap::{Parser, Subcommand};
+use clap::Parser;
+use clap::Subcommand;
 use std::path::PathBuf;
 
 mod benchmark;
@@ -28,27 +29,35 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Runs merc-rewrite benchmarks and outputs the results to the given file in JSON.
     Benchmark {
         rewriter: String,
         output: PathBuf,
     },
+    /// Creates a markdown table from the benchmark results JSON file.
     CreateTable {
         input: PathBuf,
     },
+    /// Generates a code coverage report using grcov.
     Coverage {
         #[clap(trailing_var_arg = true)]
         args: Vec<String>,
     },
+    /// Runs the given cargo command with AddressSanitizer enabled.
     AddressSanitizer {
         #[clap(trailing_var_arg = true)]
         args: Vec<String>,
     },
+    /// Runs the given cargo command with ThreadSanitizer enabled.
     ThreadSanitizer {
         #[clap(trailing_var_arg = true)]
         args: Vec<String>,
     },
+    /// Discovers tests from the examples folder, and prints them as a `#[test_case]` annotation.
     DiscoverTests,
+    /// Builds and packages the binaries for release.
     Package,
+    /// Publishes the crates to crates.io.
     Publish,
     TestTools {
         directory: PathBuf,
