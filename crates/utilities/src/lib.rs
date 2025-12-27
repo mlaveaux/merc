@@ -1,6 +1,4 @@
-//! Utility types and functions for the Merc toolset.
-//!
-//! Forbid unsafe code in this crate. If unsafe code is needed it should be in the `merc_unsafety` crate.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
 #[macro_use]
