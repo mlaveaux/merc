@@ -2,10 +2,18 @@ use duct::cmd;
 
 /// Runs `cargo publish --dry-run` for all crates to verify they can be published.
 pub fn publish_crates() {
-    let crates = ["utilities", "unsafety"];
+
+    // The list of crates to publish, the order is important due to dependencies.
+    let crates = ["merc_utilities", 
+        "merc_unsafety",
+        "merc_number",
+        "merc_io",
+        "merc_sharedmutex",];
 
     for library in &crates {
-        cmd!("cargo", "publish", "--dry-run", format!("-p {}", library))
+
+        // First do a dry run of the publish command to check that everything is fine.
+        cmd!("cargo", "publish", "--dry-run", "-p", library)
             .run()
             .expect(&format!("Failed to publish crate {}", library));
     }
