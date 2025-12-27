@@ -30,10 +30,11 @@ use super::MatchGoal;
 /// following article. Implemented by Mark Bouwman, and adapted by Maurice
 /// Laveaux.
 //
-/// Erkens, R., Groote, J.F. (2021). A Set Automaton to Locate All Pattern
-/// Matches in a Term. In: Cerone, A., Ölveczky, P.C. (eds) Theoretical Aspects
-/// of Computing – ICTAC 2021. ICTAC 2021. Lecture Notes in Computer Science(),
-/// vol 12819. Springer, Cham. https://doi.org/10.1007/978-3-030-85315-0_5
+/// > Erkens, R., Groote, J.F. (2021). A Set Automaton to Locate All Pattern
+/// > Matches in a Term. In: Cerone, A., Ölveczky, P.C. (eds) Theoretical
+/// > Aspects of Computing – ICTAC 2021. ICTAC 2021. Lecture Notes in Computer
+/// > Science(), vol 12819. Springer, Cham.
+/// > [DOI](https://doi.org/10.1007/978-3-030-85315-0_5)
 pub struct SetAutomaton<T> {
     states: Vec<State>,
     transitions: HashMap<(usize, usize), Transition<T>>,
