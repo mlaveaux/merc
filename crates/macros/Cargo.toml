@@ -1,9 +1,13 @@
 [package]
 name = "merc_macros"
-version.workspace = true
+description = "Internal MERC crate containing procedural macros for code generation."
+readme = "README.md"
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [lib]
 proc-macro = true

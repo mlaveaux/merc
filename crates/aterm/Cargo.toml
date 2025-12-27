@@ -16,6 +16,7 @@ merc_number.workspace = true
 merc_sharedmutex.workspace = true
 merc_unsafety.workspace = true
 merc_utilities.workspace = true
+pest_consume.workspace = true
 
 ahash.workspace = true
 allocator-api2.workspace = true
@@ -27,7 +28,6 @@ equivalent.workspace = true
 itertools.workspace = true
 log.workspace = true
 parking_lot.workspace = true
-pest_consume.workspace = true
 pest_derive.workspace = true
 pest.workspace = true
 rand.workspace = true
