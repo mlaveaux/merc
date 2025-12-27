@@ -1,6 +1,4 @@
-//! This crate provides the syntax definition of mCRL2.
-//!
-//! This crate contains no unsafe code.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
 mod consume;

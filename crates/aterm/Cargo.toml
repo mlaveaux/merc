@@ -27,8 +27,6 @@ merc_pest_consume.workspace = true
 
 ahash.workspace = true
 allocator-api2.workspace = true
-arbitrary.workspace = true
-arbtest.workspace = true
 dashmap.workspace = true
 delegate.workspace = true
 equivalent.workspace = true

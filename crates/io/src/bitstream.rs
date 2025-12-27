@@ -7,8 +7,8 @@ use bitstream_io::BitRead;
 use bitstream_io::BitReader;
 use bitstream_io::BitWrite;
 use bitstream_io::BitWriter;
-
 use log::error;
+
 use merc_number::read_u64_variablelength;
 use merc_number::write_u64_variablelength;
 use merc_utilities::MercError;
@@ -136,10 +136,9 @@ impl<R: Read> BitStreamRead for BitStreamReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use arbitrary::Unstructured;
-    use arbtest::arbitrary::Arbitrary;
     use log::debug;
-    use merc_utilities::test_logger;
+    use merc_utilities::random_test;
+    use rand::{distr::Alphanumeric, Rng};
 
     use super::*;
 
@@ -162,26 +161,23 @@ mod tests {
         }
     }
 
-    impl Arbitrary<'_> for Instruction {
-        fn arbitrary(u: &mut Unstructured<'_>) -> arbitrary::Result<Self> {
-            match u.int_in_range(0..=2)? {
-                0 => Ok(Instruction::String(u.arbitrary()?)),
-                1 => Ok(Instruction::Integer(u.arbitrary()?)),
-                2 => {
-                    let value: u64 = u.arbitrary()?;
-                    Ok(Instruction::Bits(value, required_bits(value)))
-                }
-                _ => unreachable!("The range is from 0 to 2"),
-            }
-        }
-    }
-
     #[test]
     fn test_arbitrary_bitstream() {
-        let _ = test_logger();
-
-        arbtest::arbtest(|u| {
-            let instructions: Vec<Instruction> = u.arbitrary()?;
+        random_test(100, |rng| {
+            let instructions: Vec<Instruction> = (0..100)
+                .map(|_| match rng.random_range(0..2) {
+                    0 => {
+                        let string = rng.sample_iter(&Alphanumeric).take(7).map(char::from).collect();
+                        Instruction::String(string)
+                    }
+                    1 => Instruction::Integer(rng.random()),
+                    2 => {
+                        let value: u64 = rng.random();
+                        Instruction::Bits(value, required_bits(value))
+                    }
+                    _ => unreachable!("The range is from 0 to 2"),
+                })
+                .collect();
 
             let mut buffer = Vec::new();
             {
@@ -233,8 +229,6 @@ mod tests {
                     }
                 }
             }
-
-            Ok(())
         });
     }
 }

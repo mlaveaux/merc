@@ -9,7 +9,10 @@ pub fn publish_crates() {
         "merc_number",
         "merc_io",
         "merc_sharedmutex",
-        "merc_macros"];
+        "merc_macros",
+        "merc_data",
+        "merc_sabre", 
+        "merc_lts"];
 
     for library in &crates {
 

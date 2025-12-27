@@ -1,9 +1,16 @@
 [package]
 name = "merc_reduction"
-version.workspace = true
+description = "Crate for reducing and comparing labelled transition systems modulo various bisimulation equivalences"
+keywords = ["reduction", "transition-systems"]
+categories = ["algorithms", "science"]
+readme = "README.md"
+
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 merc_io.workspace = true

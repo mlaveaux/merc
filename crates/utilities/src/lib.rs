@@ -4,7 +4,6 @@
 #[macro_use]
 mod cast_macro;
 
-mod arbitrary_utility;
 mod compressed_vec;
 mod debug_trace;
 mod error;
@@ -22,7 +21,6 @@ mod tagged_index;
 mod test_logger;
 mod timing;
 
-pub use arbitrary_utility::*;
 pub use compressed_vec::*;
 pub use error::*;
 pub use format::*;

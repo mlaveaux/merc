@@ -101,10 +101,6 @@ test-case  = "3.3"
 test-log = "0.2"
 trybuild = "1.0"
 
-# Used for fuzzing
-arbitrary = { version = "1.4", features = ["derive"] }
-arbtest = "0.3"
-
 # Used for benchmarks
 criterion = "0.8"
 

@@ -117,24 +117,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
-]
-
-[[package]]
-name = "arbtest"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a3be567977128c0f71ad1462d9624ccda712193d124e944252f0c5789a06d46"
-dependencies = [
- "arbitrary",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -457,17 +439,6 @@ name = "derive-where"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef941ded77d15ca19b40374869ac6000af1c9f2a4c0f3d4c70926287e6364a8f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -898,8 +869,6 @@ version = "1.0.0"
 dependencies = [
  "ahash",
  "allocator-api2 0.4.0",
- "arbitrary",
- "arbtest",
  "dashmap",
  "delegate",
  "equivalent",
@@ -939,12 +908,11 @@ dependencies = [
 name = "merc_io"
 version = "1.0.0"
 dependencies = [
- "arbitrary",
- "arbtest",
  "bitstream-io",
  "log",
  "merc_number",
  "merc_utilities",
+ "rand",
  "regex",
  "streaming-iterator",
  "thiserror",
@@ -1090,7 +1058,6 @@ dependencies = [
 name = "merc_syntax"
 version = "1.0.0"
 dependencies = [
- "arbitrary",
  "env_logger",
  "indoc",
  "itertools 0.14.0",
@@ -1133,7 +1100,6 @@ name = "merc_utilities"
 version = "1.0.0"
 dependencies = [
  "ahash",
- "arbitrary",
  "backtrace",
  "bitvec",
  "delegate",

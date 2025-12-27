@@ -1,11 +1,16 @@
 [package]
 name = "merc_vpg"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-rust-version.workspace = true
+description = "Crate for manipulating (variability) parity games, including I/O in the PGSolver format"
+keywords = ["parity-games"]
+categories = ["algorithms", "data-structures", "science"]
+readme = "README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 merc_io.workspace = true

@@ -1,7 +1,7 @@
 [package]
 name = "merc_lts"
 description = "Implements labelled transition systems for various I/O formats using a general LTS trait."
-keywords = ["automata", "labelled-transition-systems"]
+keywords = ["automata", "transition-systems"]
 categories = ["data-structures", "science"]
 readme = "README.md"
 

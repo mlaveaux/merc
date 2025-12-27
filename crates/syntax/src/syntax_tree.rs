@@ -1,8 +1,6 @@
 use std::hash::Hash;
 
-use arbitrary::Arbitrary;
-
-/// An mCRL2 specification containing declarations.
+/// A complete mCRL2 process specification.
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedProcessSpecification {
     pub data_specification: UntypedDataSpecification,
@@ -12,6 +10,7 @@ pub struct UntypedProcessSpecification {
     pub init: Option<ProcessExpr>,
 }
 
+/// An mCRL2 data specification.
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedDataSpecification {
     pub sort_declarations: Vec<SortDecl>,
@@ -30,6 +29,7 @@ impl UntypedDataSpecification {
     }
 }
 
+/// An mCRL2 parameterised boolean equation system (PBES).
 #[derive(Debug, Default, Eq, PartialEq, Hash)]
 pub struct UntypedPbes {
     pub data_specification: UntypedDataSpecification,
@@ -63,7 +63,7 @@ pub struct IdDecl {
 }
 
 /// Expression representing a sort (type).
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum SortExpression {
     /// Product of two sorts (A # B)
     Product {
@@ -87,7 +87,7 @@ pub enum SortExpression {
 }
 
 /// Constructor declaration
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ConstructorDecl {
     pub name: String,
     pub args: Vec<(Option<String>, SortExpression)>,
@@ -95,7 +95,7 @@ pub struct ConstructorDecl {
 }
 
 /// Built-in simple sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Sort {
     Bool,
     Pos,
@@ -105,7 +105,7 @@ pub enum Sort {
 }
 
 /// Complex (parameterized) sorts.
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum ComplexSort {
     List,
     Set,
@@ -126,7 +126,7 @@ pub struct SortDecl {
 }
 
 /// Variable declaration
-#[derive(Arbitrary, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VarDecl {
     pub identifier: String,
     pub sort: SortExpression,
@@ -165,14 +165,14 @@ pub struct ProcDecl {
     pub span: Span,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprUnaryOp {
     Negation,
     Minus,
     Size,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprBinaryOp {
     Conj,
     Disj,
@@ -197,7 +197,7 @@ pub enum DataExprBinaryOp {
 }
 
 /// Data expression
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExpr {
     Id(String),
     Number(String), // Is string because the number can be any size.
@@ -244,19 +244,19 @@ pub enum DataExpr {
     },
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct BagElement {
     pub expr: DataExpr,
     pub multiplicity: DataExpr,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct DataExprUpdate {
     pub expr: DataExpr,
     pub update: DataExpr,
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Assignment {
     pub identifier: String,
     pub expr: DataExpr,
@@ -465,7 +465,7 @@ impl Hash for MultiAction {
     }
 }
 
-#[derive(Arbitrary, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Quantifier {
     Exists,
     Forall,
@@ -637,12 +637,6 @@ pub enum ActionRHS {
 pub struct Span {
     pub start: usize,
     pub end: usize,
-}
-
-impl Arbitrary<'_> for Span {
-    fn arbitrary(_u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-        Ok(Span { start: 0, end: 0 })
-    }
 }
 
 impl From<pest::Span<'_>> for Span {

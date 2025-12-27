@@ -6,11 +6,9 @@ use std::hash::Hasher;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use arbitrary::Arbitrary;
 use delegate::delegate;
 use merc_unsafety::StablePointer;
 use merc_utilities::ProtectionIndex;
-use merc_utilities::readable_string;
 
 use crate::Markable;
 use crate::SharedSymbol;
@@ -275,26 +273,3 @@ impl Borrow<SymbolRef<'static>> for Symbol {
 }
 
 impl Eq for Symbol {}
-
-impl Arbitrary<'_> for Symbol {
-    /// Generates a random symbol with a name and arity up to and including 4.
-    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-        let name = readable_string(u, 1)?;
-        let arity = u.int_in_range(0..=4)?;
-        Ok(Symbol::new(name, arity))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_arbitrary_symbol_creation() {
-        arbtest::arbtest(|u| {
-            let symbol = Symbol::arbitrary(u)?;
-            assert!(symbol.arity() <= 4);
-            Ok(())
-        });
-    }
-}
