@@ -53,12 +53,12 @@ pub fn benchmark(output_path: impl AsRef<Path>, rewriter: Rewriter) -> Result<()
 
     let mcrl2_rewrite_path = if rewriter == Rewriter::Innermost || rewriter == Rewriter::Sabre {
         // Build the tool with the correct settings
-        cmd!("cargo", "build", "--profile", "bench", "--bin", "mercrewrite").run()?;
+        cmd!("cargo", "build", "--profile", "bench", "--bin", "merc-rewrite").run()?;
 
         // Using which is a bit unnecessary, but it deals nicely with .exe on Windows and can also be used to do other searching.
-        which::which_in("mercrewrite", Some("target/release/"), cwd)?
+        which::which_in("merc-rewrite", Some("target/release/"), cwd)?
     } else {
-        which::which("mercrewrite")?
+        which::which("merc-rewrite")?
     };
 
     let mcrl2_rewrite_timing = match rewriter {
@@ -74,70 +74,63 @@ pub fn benchmark(output_path: impl AsRef<Path>, rewriter: Rewriter) -> Result<()
     let mut result_file = File::create(output_path)?;
 
     // Consider all the specifications in the example directory.
-    for file in fs::read_dir("examples/REC/mcrl2")? {
+    for file in fs::read_dir("examples/REC/rec")? {
         let path = file?.path();
 
-        // We take the dataspec file, and append the expressions ourselves.
-        if path.extension().is_some_and(|ext| ext == "dataspec") {
-            let data_spec = path.clone();
-            let expressions = path.with_extension("expressions");
+        let benchmark_name = path.file_stem().unwrap().to_string_lossy();
+        println!("Benchmarking {benchmark_name}");
 
-            let benchmark_name = path.file_stem().unwrap().to_string_lossy();
-            println!("Benchmarking {benchmark_name}");
+        let mut arguments = vec!["600".to_string(), mcrl2_rewrite_path.to_string_lossy().to_string()];
 
-            let mut arguments = vec!["600".to_string(), mcrl2_rewrite_path.to_string_lossy().to_string()];
-
-            match rewriter {
-                Rewriter::Innermost => {
-                    arguments.push("rewrite".to_string());
-                    arguments.push("innermost".to_string());
-                }
-                Rewriter::Sabre => {
-                    arguments.push("rewrite".to_string());
-                    arguments.push("sabre".to_string());
-                }
+        match rewriter {
+            Rewriter::Innermost => {
+                arguments.push("rewrite".to_string());
+                arguments.push("innermost".to_string());
             }
+            Rewriter::Sabre => {
+                arguments.push("rewrite".to_string());
+                arguments.push("sabre".to_string());
+            }
+        }
 
-            arguments.push(data_spec.to_string_lossy().to_string());
-            arguments.push(expressions.to_string_lossy().to_string());
+        arguments.push(path.to_string_lossy().to_string());
 
-            let mut measurements = MeasurementEntry {
-                rewriter: rewriter.to_string(),
-                benchmark_name: benchmark_name.to_string(),
-                timings: Vec::new(),
-            };
+        let mut measurements = MeasurementEntry {
+            rewriter: rewriter.to_string(),
+            benchmark_name: benchmark_name.to_string(),
+            timings: Vec::new(),
+        };
 
-            // Run the benchmarks several times until one of them fails
-            for _ in 0..5 {
-                match cmd("timeout", &arguments).stdout_capture().stderr_capture().run() {
-                    Ok(result) => {
-                        // Parse the standard output to read the rewriting time and insert it into results.
-                        for line in result.stdout.lines().chain(result.stderr.lines()) {
-                            let line = line?;
+        // Run the benchmarks several times until one of them fails
+        for _ in 0..5 {
+            match cmd("timeout", &arguments).stdout_capture().stderr_capture().run() {
+                Ok(result) => {
+                    // Parse the standard output to read the rewriting time and insert it into results.
+                    for line in result.stdout.lines().chain(result.stderr.lines()) {
+                        let line = line?;
 
-                            if let Some(result) = mcrl2_rewrite_timing.captures(&line) {
-                                let (_, [grp1]) = result.extract();
-                                let timing: f32 = grp1.parse()?;
+                        if let Some(result) = mcrl2_rewrite_timing.captures(&line) {
+                            let (_, [grp1]) = result.extract();
+                            let timing: f32 = grp1.parse()?;
 
-                                println!("Benchmark {benchmark_name} timing {timing} milliseconds");
+                            println!("Benchmark {benchmark_name} timing {timing} milliseconds");
 
-                                // Write the output to the file and include a newline.
-                                measurements.timings.push(timing / 1000.0);
-                            }
+                            // Write the output to the file and include a newline.
+                            measurements.timings.push(timing / 1000.0);
                         }
                     }
-                    Err(err) => {
-                        println!("Benchmark {benchmark_name} timed out or crashed");
-                        println!("Command failed {err:?}");
-                        break;
-                    }
-                };
-            }
-
-            serde_json::to_writer(&mut result_file, &measurements)?;
-
-            writeln!(&result_file)?;
+                }
+                Err(err) => {
+                    println!("Benchmark {benchmark_name} timed out or crashed");
+                    println!("Command failed {err:?}");
+                    break;
+                }
+            };
         }
+
+        serde_json::to_writer(&mut result_file, &measurements)?;
+
+        writeln!(&result_file)?;
     }
 
     Ok(())
