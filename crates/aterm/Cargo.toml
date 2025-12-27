@@ -1,9 +1,15 @@
 [package]
 name = "merc_aterm"
-version.workspace = true
+description = "A thread-safe library to manipulate and store first-order terms."
+keywords = ["concurrency"]
+categories = ["concurrency", "data structures"]
+readme = "README.md"
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [features]
 # The `merc_debug` feature is used to enable additional run-time checks.

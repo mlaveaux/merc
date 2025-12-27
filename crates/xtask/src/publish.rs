@@ -3,12 +3,13 @@ use duct::cmd;
 /// Runs `cargo publish --dry-run` for all crates to verify they can be published.
 pub fn publish_crates() {
 
-    // The list of crates to publish, the order is important due to dependencies.
+    // The list of crates to publish, they must be published in order of dependencies, i.e., downstream first.
     let crates = ["merc_utilities", 
         "merc_unsafety",
         "merc_number",
         "merc_io",
-        "merc_sharedmutex",];
+        "merc_sharedmutex",
+        "merc_macros"];
 
     for library in &crates {
 

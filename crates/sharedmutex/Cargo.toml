@@ -1,6 +1,6 @@
 [package]
 name = "merc_sharedmutex"
-description = "An implementation of a read efficient readers-writer lock based on the busy-forbidden protocol."
+description = "A read efficient readers-writer lock based on the busy-forbidden protocol."
 keywords = ["mutex", "thread", "rwlock"]
 categories = ["concurrency"]
 readme = "README.md"
