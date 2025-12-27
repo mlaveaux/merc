@@ -44,6 +44,11 @@ jobs:
       env:        
         RUSTC_WRAPPER: sccache
 
+    - name: Run tool tests
+      run: cargo xtask test-tools package/
+      env:        
+        RUSTC_WRAPPER: sccache
+
     - name: Upload package artifact
       uses: actions/upload-artifact@v5
       with:
