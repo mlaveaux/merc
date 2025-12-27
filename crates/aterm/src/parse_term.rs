@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![allow(clippy::result_large_err)]
 
 use pest_consume::Error;
 use pest_consume::match_nodes;
@@ -16,7 +17,7 @@ type ParseNode<'i> = pest_consume::Node<'i, Rule, ()>;
 
 /// Parse a term from a string.
 ///
-/// TODO: Parse integer terms and aterm list as in the old toolset.
+/// TODO: Parse integer terms and aterm list as in the mCRL2 toolset.
 ///
 /// Grammar:  f(t_1, ..., t_n) | c
 #[pest_consume::parser]
