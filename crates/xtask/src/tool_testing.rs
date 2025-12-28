@@ -1,6 +1,6 @@
 use std::env;
 use std::error::Error;
-use std::fs::File;
+use std::fs::create_dir;
 use std::path::Path;
 
 use duct::cmd;
@@ -11,7 +11,9 @@ use which::which_in;
 pub fn test_tools(directory: &Path) -> Result<(), Box<dyn Error>> {
     // Create a temporary directory to perform the tests in.
     let tmp_path = Path::new("tmp/");
-    let _temp_dir = File::create(tmp_path)?;
+    if !tmp_path.exists() {
+        create_dir(tmp_path)?;
+    }
 
     // Find the binaries
     let cwd = env::current_dir()?;
@@ -23,7 +25,9 @@ pub fn test_tools(directory: &Path) -> Result<(), Box<dyn Error>> {
         tmp_path.join("abp.aut")
     )?;
 
-    cmd!(merc_lts, "reduce", "strong-bisim", "abp.aut", "abp.bisim.aut").dir(tmp_path).run()?;
+    for algorithm in ["strong-bisim", "branching-bisim", "weak-bisim"] {
+        cmd!(&merc_lts, "reduce", algorithm, "abp.aut", format!("abp.{}.aut", algorithm)).dir(tmp_path).run()?;
+    }
 
     Ok(())
 }
