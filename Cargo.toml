@@ -3,7 +3,7 @@ edition = "2024"
 homepage = "https://mercorg.github.io/merc-website/"
 repository = "https://github.com/mlaveaux/merc.git"
 license = "BSL-1.0"
-rust-version = "1.85.0"
+rust-version = "1.86.0"
 version = "1.0.0"
 
 # Add debug information to the release binaries.
