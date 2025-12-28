@@ -988,6 +988,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "merc_pest_consume"
+version = "2.0.0"
+dependencies = [
+ "itertools 0.14.0",
+ "merc_pest_consume_macros",
+ "pest",
+ "pest_derive",
+]
+
+[[package]]
+name = "merc_pest_consume_macros"
+version = "2.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "merc_preorder"
 version = "1.0.0"
 dependencies = [

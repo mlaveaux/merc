@@ -6,6 +6,7 @@
 //!  Write state labels (state_label_lts) in their order such that writing the i-th state label belongs to state with index i.
 //!  Write the initial state.
 
+use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
@@ -30,10 +31,11 @@ use merc_utilities::MercError;
 use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
+use crate::MultiAction;
 use crate::StateIndex;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
-pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
+pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<MultiAction>, MercError> {
     info!("Reading LTS in .lts format...");
 
     let mut reader = BinaryATermReader::new(BufReader::new(reader))?;
@@ -47,8 +49,8 @@ pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     let _parameters = reader.read_aterm()?;
     let _actions = reader.read_aterm()?;
 
-    // An indexed set to keep track of indices for multi-actions
-    let _multi_actions: IndexedSet<ATerm> = IndexedSet::new();
+    // Use a cache to avoid translating the same multi-action multiple times.
+    let multi_actions: HashMap<ATerm, MultiAction> = HashMap::new();
 
     // The initial state is not known yet.
     let mut initial_state: Option<StateIndex> = None;
@@ -70,11 +72,18 @@ pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
                     let label = reader.read_aterm()?.ok_or("Missing transition label")?;
                     let to: ATermInt = reader.read_aterm()?.ok_or("Missing to state")?.into();
 
-                    builder.add_transition(
-                        StateIndex::new(from.value()),
-                        &label.to_string(), // TODO: This should consider multi-actions properly.
-                        StateIndex::new(to.value()),
-                    );
+                    if let Some(multi_action) = multi_actions.get(&label) {
+                        // Multi-action already exists in the cache.
+                        builder.add_transition(
+                            StateIndex::new(from.value()),
+                            multi_action,
+                            StateIndex::new(to.value()),
+                        );
+                    } else {
+                        // New multi-action found, add it to the builder.
+                        let multi_action = MultiAction::from_mcrl2_aterm(label);
+                        builder.add_label(multi_action);
+                    }
 
                     progress.print(builder.num_of_transitions());
                 } else if t == probabilistic_transition_mark() {
@@ -95,9 +104,16 @@ pub fn read_lts(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     Ok(builder.finish(initial_state.ok_or("Missing initial state")?))
 }
 
-///  Note that the writer is buffered internally using a
-/// `BufWriter`.
-pub fn write_lts(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercError> {
+/// Write a labelled transition system in binary 'lts' format to the given
+/// writer. Requires that the labels are ATerm streamable.
+/// 
+/// # Details
+/// 
+/// Note that the writer is buffered internally using a `BufWriter`.
+pub fn write_lts<L>(writer: &mut impl Write, lts: &L) -> Result<(), MercError> 
+    where L: LTS,
+        L::Label: ATermStreamable,
+{
     info!("Writing LTS in .lts format...");
 
     let mut writer = BinaryATermWriter::new(BufWriter::new(writer))?;
@@ -117,7 +133,7 @@ pub fn write_lts(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
         for transition in lts.outgoing_transitions(state) {
             writer.write_aterm(&transition_marker())?;
             writer.write_aterm(&ATermInt::new(*state))?;
-            writer.write_aterm(&ATerm::from_string(&lts.labels()[transition.label])?)?;
+            lts.labels()[transition.label.value()].write(&mut writer)?;
             writer.write_aterm(&ATermInt::new(*transition.to))?;
         }
     }
@@ -179,7 +195,7 @@ mod tests {
                 .labels()
                 .iter()
                 .enumerate()
-                .filter_map(|(_i, label)| lts_read.labels().iter().position(|l| l == label))
+                .filter_map(|(_i, label)| lts_read.labels().iter().position(|l| l.to_string() == *label))
                 .collect::<Vec<_>>();
 
             assert!(lts.num_of_states() == lts_read.num_of_states());

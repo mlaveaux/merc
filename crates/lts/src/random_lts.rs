@@ -23,6 +23,8 @@ pub fn random_lts(
         .expect("At least one component should be present")
 }
 
+
+
 /// Generates a monolithic LTS with the desired number of states, labels, out
 /// degree and in degree for all the states.
 pub fn random_lts_monolithic(
@@ -30,7 +32,7 @@ pub fn random_lts_monolithic(
     num_of_states: usize,
     num_of_labels: u32,
     outdegree: usize,
-) -> LabelledTransitionSystem {
+) -> LabelledTransitionSystem<String> {
     assert!(
         num_of_labels < 26,
         "Too many labels requested, we only support alphabetic labels."

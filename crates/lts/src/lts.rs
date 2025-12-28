@@ -5,6 +5,8 @@ use std::hash::Hash;
 
 use merc_utilities::TagIndex;
 
+use crate::LabelledTransitionSystem;
+
 /// A unique type for the labels.
 pub struct LabelTag;
 
@@ -55,10 +57,14 @@ pub trait LTS
     /// Consumes the current LTS and merges it with another one, returning the
     /// disjoint merged LTS and the initial state of the other LTS in the merged
     /// LTS.
-    fn merge_disjoint(self, other: &Self) -> (Self, StateIndex);
+    /// 
+    /// TODO: Can this be generalised to returning `Self`?
+    fn merge_disjoint<L: LTS<Label = Self::Label>>(self, other: &L) -> (LabelledTransitionSystem<Self::Label>, StateIndex);
 }
 
-/// A common trait for all transition labels. Ensuring that they are orderable, comparable, and hashable.
+/// A common trait for all transition labels. For various algorithms on LTSs we
+/// require that  they are orderable, comparable, and hashable. So we require that here
+/// instead of specifying these bounds on usage.
 pub trait TransitionLabel: Ord + Hash + Eq + Clone + fmt::Display + fmt::Debug {
     /// Returns the tau label for this transition label type.
     fn tau_label() -> Self;
@@ -67,6 +73,9 @@ pub trait TransitionLabel: Ord + Hash + Eq + Clone + fmt::Display + fmt::Debug {
     fn is_tau_label(&self) -> bool {
         self == &Self::tau_label()
     }
+
+    /// Returns true iff this label matches the given string label.
+    fn matches_label(&self, label: &String) -> bool;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

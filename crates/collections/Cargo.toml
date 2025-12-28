@@ -1,13 +1,10 @@
 [package]
-name = "merc_utilities"
-description = "Internal MERC crate containing various utility functions."
-readme = "README.md"
-edition.workspace = true
-homepage.workspace = true
-license.workspace = true
-repository.workspace = true
-rust-version.workspace = true
+name = "merc_collections"
 version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
 
 [features]
 # Disable logging when miri is enabled since that does not work with isolation mode.
@@ -18,6 +15,7 @@ merc_debug-trace = []
 
 [dependencies]
 ahash.workspace = true
+arbitrary.workspace = true
 backtrace.workspace = true
 bitvec.workspace = true
 delegate.workspace = true

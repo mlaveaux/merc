@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 merc_lts.workspace = true
+merc_preorder.workspace = true
 merc_reduction.workspace = true
 merc_tools.workspace = true
 merc_unsafety.workspace = true

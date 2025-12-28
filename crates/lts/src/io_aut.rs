@@ -16,6 +16,7 @@ use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
 use crate::StateIndex;
+use crate::TransitionLabel;
 
 #[derive(Error, Debug)]
 pub enum IOError {
@@ -35,7 +36,7 @@ pub enum IOError {
 ///     
 /// And one line for every transition: `(<from>: Nat, "<label>": Str, <to>:
 ///     Nat)` `(<from>: Nat, <label>: Str, <to>: Nat)`
-pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem, MercError> {
+pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
     info!("Reading LTS in .aut format...");
 
     let mut lines = LineIterator::new(reader);
@@ -103,11 +104,7 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
                 writer,
                 "({}, \"{}\", {})",
                 state_index,
-                if lts.is_hidden_label(transition.label) {
-                    "tau"
-                } else {
-                    &lts.labels()[transition.label.value()]
-                },
+                lts.labels()[transition.label.value()],
                 transition.to
             )?;
 
@@ -145,6 +142,21 @@ fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
     }
 
     Some((from, label, to))
+}
+
+/// A trait for labels that can be used in transitions.
+impl TransitionLabel for String {
+    fn is_tau_label(&self) -> bool {
+        self == "tau"
+    }
+
+    fn tau_label() -> Self {
+        "tau".to_string()
+    }
+
+    fn matches_label(&self, label: &String) -> bool {
+        self == label
+    }
 }
 
 #[cfg(test)]

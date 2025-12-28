@@ -7,12 +7,16 @@ use delegate::delegate;
 use merc_macros::merc_derive_terms;
 use merc_macros::merc_ignore;
 use merc_macros::merc_term;
+use merc_utilities::MercError;
 
 use crate::ATerm;
 
 use crate::ATermArgs;
 use crate::ATermIndex;
+use crate::ATermRead;
 use crate::ATermRef;
+use crate::ATermStreamable;
+use crate::ATermWrite;
 use crate::Markable;
 use crate::Marker;
 use crate::Symb;
@@ -76,6 +80,21 @@ impl PartialEq<str> for ATermString {
 impl PartialEq<&str> for ATermStringRef<'_> {
     fn eq(&self, other: &&str) -> bool {
         self.value() == *other
+    }
+}
+
+// Helper to write a string immediately.
+impl ATermStreamable for String {
+    fn write<W: ATermWrite>(&self, writer: &mut W) -> Result<(), MercError> {
+        writer.write_aterm(&ATermString::new(self.clone()))
+    }
+
+    fn read<R: ATermRead>(reader: &mut R) -> Result<Self, MercError>
+    where
+        Self: Sized 
+    {
+        let term: ATermString = reader.read_aterm()?.ok_or("Expected a string ATerm")?.into();
+        Ok(term.value().to_string())
     }
 }
 

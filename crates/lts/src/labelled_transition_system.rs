@@ -250,8 +250,8 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
     }
 }
 
-impl<Label> LTS for LabelledTransitionSystem<Label> {
-    type Label = Label;
+impl<L: TransitionLabel> LTS for LabelledTransitionSystem<L> {
+    type Label = L;
 
     fn initial_state_index(&self) -> StateIndex {
         self.initial_state
@@ -267,7 +267,7 @@ impl<Label> LTS for LabelledTransitionSystem<Label> {
         })
     }
 
-    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<> {
+    fn iter_states(&self) -> impl Iterator<Item = StateIndex> + use<L> {
         (0..self.num_of_states()).map(StateIndex::new)
     }
 
@@ -284,7 +284,7 @@ impl<Label> LTS for LabelledTransitionSystem<Label> {
         self.transition_labels.len()
     }
 
-    fn labels(&self) -> &[Label] {
+    fn labels(&self) -> &[Self::Label] {
         &self.labels[0..]
     }
 
@@ -292,7 +292,7 @@ impl<Label> LTS for LabelledTransitionSystem<Label> {
         label_index.value() == 0
     }
 
-    fn merge_disjoint(self, other: &Self) -> (Self, StateIndex) {
+    fn merge_disjoint<T: LTS<Label = Self::Label>>(self, other: &T) -> (Self, StateIndex) {
         self.merge_disjoint_impl(other)
     }
 }
@@ -328,7 +328,7 @@ impl fmt::Display for LtsMetrics {
     }
 }
 
-impl<Label: fmt::Debug> fmt::Debug for LabelledTransitionSystem<Label> {
+impl<L: TransitionLabel> fmt::Debug for LabelledTransitionSystem<L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,

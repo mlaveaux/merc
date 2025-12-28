@@ -1,9 +1,14 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
+
+use rand::seq::index;
 
 use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::StateIndex;
+use crate::TransitionLabel;
 
 /// This is the same as [`crate::LtsBuilder`], but optimized for speed rather than memory usage.
 /// So it does not use the byte compression for the transitions since somehow permuting and
@@ -11,41 +16,51 @@ use crate::StateIndex;
 ///
 /// Perhaps that implementation can be made more efficient in the future, but for now
 /// this works well enough.
-pub struct LtsBuilderFast {
+pub struct LtsBuilderFast<L> {
     transitions: Vec<(StateIndex, LabelIndex, StateIndex)>,
 
     // This is used to keep track of the label to index mapping.
-    labels_index: HashMap<String, LabelIndex>,
-    labels: Vec<String>,
+    labels_index: HashMap<L, LabelIndex>,
+    labels: Vec<L>,
 
     /// The number of states (derived from the transitions).
     num_of_states: usize,
 }
 
-impl LtsBuilderFast {
+impl<L: TransitionLabel> LtsBuilderFast<L> {
     /// Initializes a new empty builder.
-    pub fn new(labels: Vec<String>, hidden_labels: Vec<String>) -> Self {
-        Self::with_capacity(labels, hidden_labels, 0)
+    pub fn new(labels: Vec<L>, hidden_labels: Vec<String>) -> Self {
+        Self::with_capacity(labels, hidden_labels, 0, 0, 0)
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(mut labels: Vec<String>, hidden_labels: Vec<String>, num_of_transitions: usize) -> Self {
+    pub fn with_capacity(
+        mut labels: Vec<L>,
+        hidden_labels: Vec<String>,
+        _num_of_states: usize,
+        _num_of_labels: usize,
+        num_of_transitions: usize,
+    ) -> Self {
         // Remove duplicates from the labels.
         labels.sort();
         labels.dedup();
 
         // Introduce the fixed 0 indexed tau label.
-        if let Some(tau_pos) = labels.iter().position(|l| l == "tau") {
+        if let Some(tau_pos) = labels.iter().position(|l| l.is_tau_label()) {
             labels.swap(0, tau_pos);
         } else {
-            labels.insert(0, "tau".to_string());
+            labels.insert(0, L::tau_label());
         }
 
         // Ensure that all hidden labels are mapped to the tau action.
         let mut labels_index = HashMap::new();
-        labels_index.insert("tau".to_string(), LabelIndex::new(0));
-        for label in hidden_labels.iter() {
-            labels_index.insert(label.clone(), LabelIndex::new(0)); // Map hidden labels to tau
+        labels_index.insert(L::tau_label(), LabelIndex::new(0));
+        for (index, label) in labels.iter().enumerate() {
+            if hidden_labels.iter().any(|l| label.matches_label(l)) {
+                labels_index.insert(label.clone(), LabelIndex::new(0)); // Map hidden labels to tau
+            } else {
+                labels_index.insert(label.clone(), LabelIndex::new(index));
+            }
         }
 
         Self {
@@ -57,13 +72,17 @@ impl LtsBuilderFast {
     }
 
     /// Adds a transition to the builder.
-    pub fn add_transition(&mut self, from: StateIndex, label: &str, to: StateIndex) {
-        let label_index = if let Some(&index) = self.labels_index.get(label) {
+    pub fn add_transition<Q>(&mut self, from: StateIndex, label: Q, to: StateIndex) 
+        where 
+            L: Borrow<Q>,
+            Q: ToOwned<Owned = L> + Eq + Hash,
+    {
+        let label_index = if let Some(&index) = self.labels_index.get(&label) {
             index
         } else {
             let index = LabelIndex::new(self.labels.len());
-            self.labels_index.insert(label.to_string(), index);
-            self.labels.push(label.to_string());
+            self.labels_index.insert(label.to_owned(), index);
+            self.labels.push(label.to_owned());
             index
         };
 
@@ -74,7 +93,7 @@ impl LtsBuilderFast {
     }
 
     /// Finalizes the builder and returns the constructed labelled transition system.
-    pub fn finish(&mut self, initial_state: StateIndex, remove_duplicates: bool) -> LabelledTransitionSystem {
+    pub fn finish(&mut self, initial_state: StateIndex, remove_duplicates: bool) -> LabelledTransitionSystem<L> {
         if remove_duplicates {
             self.remove_duplicates();
         }
@@ -117,7 +136,7 @@ impl LtsBuilderFast {
     }
 }
 
-impl fmt::Debug for LtsBuilderFast {
+impl<Label: TransitionLabel> fmt::Debug for LtsBuilderFast<Label> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Transitions:")?;
         for (from, label, to) in self.iter() {
