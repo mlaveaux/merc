@@ -31,17 +31,17 @@ let lts = read_aut(b"des(0, 6, 7)
 " as &[u8], Vec::new()).unwrap();
 
 let mut timings = Timing::new();
-assert_eq!(lts.num_of_states(), 7); // The original has 6 states
+assert_eq!(lts.num_of_states(), 7); // The original has 7 states
 let reduced = reduce_lts(lts, Equivalence::StrongBisim, &mut timings);
 assert_eq!(reduced.num_of_states(), 3);
 ```
 
 ## Authors
 
-This crate was developed by Jan J. Martens and Maurice Laveaux. The main
+This crate was developed by Maurice Laveaux and Jan J. Martens. The main
 signature based branching bisimulation algorithm is described in the paper:
 
-> "Faster Signature Refinement for Branching Bisimilarity Minimization". Jan J. Martens, Maurice Laveaux. TACAS 2026.
+> "Faster Signature Refinement for Branching Bisimilarity Minimization". Maurice Laveaux and Jan J. Martens. TACAS 2026.
 
 ## Safety
 

@@ -7,12 +7,13 @@ This includes reading and writing for parity games in the
 variability parity games this format is extended with feature configurations
 encoded as BDDs on the edges, with a corresponding `.vpg` format. These games
 can be solved using Zielonka's recursive algorithm, displayed in
-[GraphViz](https://graphviz.org/) `DOT` format and generated from modal
+[Graphviz](https://graphviz.org/) `DOT` format and generated from modal
 mu-calculus formulas.
 
 A central `PG` or parity game trait is used to allow writing generic algoritms
 for parity games. Various helpers are introduced for working with `strong` types
-for priorities, explicitly representing the even and odd players etc.
+for priorities, explicitly representing the even and odd players etc. This crate
+uses [OxiDD](https://oxidd.net/) for the binary decision diagrams.
 
 ## Usage
 
