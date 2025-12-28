@@ -1,8 +1,15 @@
 [package]
 name = "merc_preorder"
+description = "Algorithms to compare labelled transition systems with respect to various preorders."
+keywords = ["comparison", "transition-systems"]
+categories = ["algorithms", "science"]
+readme = "README.md"
 version.workspace = true
+
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
