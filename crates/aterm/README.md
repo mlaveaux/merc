@@ -70,11 +70,11 @@ library used in the [mCRL2](https://mcrl2.org) toolset.
 
 Further details on the implementation are explained in the following paper:
 
-  > Using the Parallel ATerm Library for Parallel Model Checking and State Space Generation. Jan Friso Groote, Kevin H.J. Jilissen, Maurice Laveaux, Flip van Spaendonck. [DOI](https://doi.org/10.1007/978-3-031-15629-8_16).
+  > "Using the Parallel ATerm Library for Parallel Model Checking and State Space Generation". Jan Friso Groote, Kevin H.J. Jilissen, Maurice Laveaux, Flip van Spaendonck. [DOI](https://doi.org/10.1007/978-3-031-15629-8_16).
 
 The initial ATerm library was presented by the following article:
 
-  > Efficient annotated terms. M. G. J. van den Brand, H. A. de Jong, P. Klint, P. A. Olivier. [DOI](https://doi.org/10.1002/(SICI)1097-024X(200003)30:3<259::AID-SPE298>3.0.CO;2-Y).
+  > "Efficient annotated terms". M. G. J. van den Brand, H. A. de Jong, P. Klint, P. A. Olivier. [DOI](https://doi.org/10.1002/(SICI)1097-024X(200003)30:3<259::AID-SPE298>3.0.CO;2-Y).
  
 ## Authors
 

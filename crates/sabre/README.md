@@ -42,7 +42,8 @@ for matching.
 
 ## Safety
 
-This crate does not use unsafe code.
+This crate contains minimal `unsafe` code, but modules that don't use `unsafe` code
+are clearly marked as such.
 
 ## Related work
 

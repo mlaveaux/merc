@@ -6,17 +6,17 @@ tuple (s0, S, Act, T) where `s0` is the initial state, `S` is a set of states,
 `Act` is a set of action labels, and T is a set of transitions T ⊆ S × Act × S.
 The main concept of this crate is the central `LTS` trait that encapsulates
 labelled transition systems with generic action label types. This trait uses
-`strong types` for the various indices used (states, actions, etc) to avoid
+`strong` types for the various indices used (states, actions, etc) to avoid
 mixing them up at compile time. This is implemented using the `TagIndex` type of
 the `merc_utilities` crate.
 
 The crate supports reading and writing LTSs in both the mCRL2 binary
 [`.lts`](https://www.mcrl2.org/web/user_manual/tools/lts.html) format and the
-Aldebaran [`.aut`](https://cadp.inria.fr/man/aldebaran.html) format. For the
-mCRL2 format the action label is a `MultiAction` to account for multi-actions.
-Furthermore, the crate also contains an `LtsBuilder` that can be used to
-generate LTSs programmatically. Internally, the crate also uses compressed
-vectors to store transitions memory efficiently.
+**AUT**omaton [`.aut`](https://cadp.inria.fr/man/aut.html) (also called ALDEBARAN)
+format. For the mCRL2 format the action label is a `MultiAction` to account for
+multi-actions. Furthermore, the crate also contains an `LtsBuilder` that can be
+used to generate LTSs programmatically. Internally, the crate also uses
+compressed vectors to store transitions memory efficiently.
 
 ```rust
 use merc_lts::LTS;

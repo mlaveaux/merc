@@ -521,8 +521,8 @@ mod tests {
     use merc_utilities::Timing;
     use merc_utilities::random_test;
 
-    /// Returns true iff the partitions are equal, runs in O(n^2). Should only be used in debug builds.
-    pub fn equal_partitions(left: &impl Partition, right: &impl Partition) -> bool {
+    /// Returns true iff the partitions are equal, runs in O(n^2).
+    fn equal_partitions(left: &impl Partition, right: &impl Partition) -> bool {
         // Check that states in the same block, have a single (unique) number in
         // the other partition.
         for block_index in (0..left.num_of_blocks()).map(BlockIndex::new) {

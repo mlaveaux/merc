@@ -105,7 +105,9 @@ fn tau_hat(lts: &impl LTS) -> LabelIndex {
 
 /// Returns the signature for strong bisimulation.
 ///
+/// ```plain
 ///     sig(s, pi) = { (a, pi(t)) | s -a-> t in T }
+/// ```
 pub fn strong_bisim_signature(
     state_index: StateIndex,
     lts: &impl LTS,
@@ -125,7 +127,9 @@ pub fn strong_bisim_signature(
 
 /// Returns the branching bisimulation signature for branching bisimulation.
 ///
+/// ```plain
 ///     sig(s, pi) = { (a, pi(t)) | s -tau-> s1 -> ... s_n -a-> t in T && pi(s) = pi(s_i) && ((a != tau) || pi(s) != pi(t)) }
+/// ```
 pub fn branching_bisim_signature(
     state_index: StateIndex,
     lts: &impl LTS,

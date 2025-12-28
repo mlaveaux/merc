@@ -27,6 +27,6 @@ The work is licensed under the Boost Software License, see the [`LICENSE`](./LIC
 
 ## Related Work
 
-This tool set is inspired by the work on [mCRL2](https://github.com/mCRL2org/mCRL2), and the work on [ltsmin](https://ltsmin.utwente.nl/).
+This tool set is inspired by the work on the [mCRL2](https://github.com/mCRL2org/mCRL2) toolset, the work on a specification language agnostic toolset [ltsmin](https://ltsmin.utwente.nl/) and the work on [CADP](https://cadp.inria.fr/).
 
-The project is developed at the department of Mathematics and Computer Science of the [Technische Universiteit Eindhoven](https://fsa.win.tue.nl/).
+This project is developed at the department of Mathematics and Computer Science of the [Technische Universiteit Eindhoven](https://fsa.win.tue.nl/).

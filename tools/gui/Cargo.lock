@@ -287,18 +287,6 @@ name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
-]
-
-[[package]]
-name = "arbtest"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a3be567977128c0f71ad1462d9624ccda712193d124e944252f0c5789a06d46"
-dependencies = [
- "arbitrary",
-]
 
 [[package]]
 name = "arg_enum_proc_macro"
@@ -1432,17 +1420,6 @@ name = "delegate"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "780eb241654bf097afb00fc5f054a09b687dad862e485fdcf8399bb056565370"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3266,8 +3243,6 @@ version = "1.0.0"
 dependencies = [
  "ahash",
  "allocator-api2 0.4.0",
- "arbitrary",
- "arbtest",
  "dashmap",
  "delegate",
  "equivalent",
@@ -3276,12 +3251,12 @@ dependencies = [
  "merc_io",
  "merc_macros",
  "merc_number",
+ "merc_pest_consume",
  "merc_sharedmutex",
  "merc_unsafety",
  "merc_utilities",
  "parking_lot",
  "pest",
- "pest_consume",
  "pest_derive",
  "rand",
  "rayon",
@@ -3298,7 +3273,6 @@ dependencies = [
  "indoc",
  "merc_aterm",
  "merc_macros",
- "merc_syntax",
  "merc_utilities",
  "thiserror 2.0.17",
 ]
@@ -3307,12 +3281,11 @@ dependencies = [
 name = "merc_io"
 version = "1.0.0"
 dependencies = [
- "arbitrary",
- "arbtest",
  "bitstream-io",
  "log",
  "merc_number",
  "merc_utilities",
+ "rand",
  "regex",
  "streaming-iterator",
  "thiserror 2.0.17",
@@ -3372,25 +3345,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "merc_pest_consume"
+version = "2.0.0"
+dependencies = [
+ "itertools 0.14.0",
+ "merc_pest_consume_macros",
+ "pest",
+ "pest_derive",
+]
+
+[[package]]
+name = "merc_pest_consume_macros"
+version = "2.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "merc_sharedmutex"
 version = "1.0.0"
 dependencies = [
  "crossbeam-utils",
  "delegate",
  "merc_utilities",
-]
-
-[[package]]
-name = "merc_syntax"
-version = "1.0.0"
-dependencies = [
- "arbitrary",
- "itertools 0.14.0",
- "log",
- "merc_utilities",
- "pest",
- "pest_consume",
- "pest_derive",
 ]
 
 [[package]]
@@ -3422,7 +3401,6 @@ name = "merc_utilities"
 version = "1.0.0"
 dependencies = [
  "ahash",
- "arbitrary",
  "backtrace",
  "bitvec",
  "delegate",
@@ -4218,25 +4196,6 @@ checksum = "cbcfd20a6d4eeba40179f05735784ad32bdaef05ce8e8af05f180d45bb3e7e22"
 dependencies = [
  "memchr",
  "ucd-trie",
-]
-
-[[package]]
-name = "pest_consume"
-version = "2.0.0"
-dependencies = [
- "itertools 0.14.0",
- "pest",
- "pest_consume_macros",
- "pest_derive",
-]
-
-[[package]]
-name = "pest_consume_macros"
-version = "2.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
