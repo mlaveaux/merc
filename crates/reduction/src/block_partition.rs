@@ -1,4 +1,4 @@
-//! Authors: Maurice Laveaux and Jan J. Martens
+#![forbid(unsafe_code)]
 
 use std::fmt;
 

@@ -1,6 +1,7 @@
 //! Authors: Maurice Laveaux, Eduardo Costa Martins
 //!
 //! Implements the weak bisimulation algorithm by Eduardo Costa Martins.
+#![forbid(unsafe_code)]
 
 use bitvec::bitvec;
 use bitvec::order::Lsb0;

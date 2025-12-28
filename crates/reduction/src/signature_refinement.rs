@@ -1,5 +1,3 @@
-//! Authors: Maurice Laveaux and Jan J. Martens
-
 use std::mem::swap;
 
 use bumpalo::Bump;
