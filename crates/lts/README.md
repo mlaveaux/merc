@@ -2,21 +2,26 @@
 
 This crate contains functionality for manipulating labelled transition systems,
 including writing and reading LTSs from files. A labelled transition system is a
-tuple (s0, S, Act, T) where `s0` is the initial state, `S` is a set of states,
-`Act` is a set of action labels, and T is a set of transitions T ⊆ S × Act × S.
+tuple:
+
+> (s0, S, Act, T), where `s0` is the initial state, `S` is a set of states, `Act` is a set of action labels, and T is a set of transitions T ⊆ S × Act × S.
+
 The main concept of this crate is the central `LTS` trait that encapsulates
-labelled transition systems with generic action label types. This trait uses
-`strong` types for the various indices used (states, actions, etc) to avoid
-mixing them up at compile time. This is implemented using the `TagIndex` type of
-the `merc_utilities` crate.
+labelled transition systems with generic action label types. We use `strong`
+types for the various indices (states, actions, etc) to avoid mixing them up at
+compile time. This is implemented using the `TagIndex` type of the
+`merc_utilities` crate. This crate also deals with the special `τ` (or `tau`)
+action that is used to model internal actions.
 
 The crate supports reading and writing LTSs in both the mCRL2 binary
 [`.lts`](https://www.mcrl2.org/web/user_manual/tools/lts.html) format and the
 **AUT**omaton [`.aut`](https://cadp.inria.fr/man/aut.html) (also called ALDEBARAN)
 format. For the mCRL2 format the action label is a `MultiAction` to account for
 multi-actions. Furthermore, the crate also contains an `LtsBuilder` that can be
-used to generate LTSs programmatically. Internally, the crate also uses
-compressed vectors to store transitions memory efficiently.
+used to generate LTSs programmatically. The crate also uses
+compressed vectors internally to store transitions memory efficiently.
+
+An example for using the `LtsBuilder` to create a simple LTS is shown below:
 
 ```rust
 use merc_lts::LTS;
@@ -32,10 +37,15 @@ assert_eq!(lts.num_of_states(), 2);
 assert_eq!(lts.num_of_transitions(), 2);
 ```
 
-The central `LTS` trait allows one to implement various algorithms on LTSs in a
-generic way.
-
 ## Changelog
+
+### Current
+
+Introduce a proper `MultiAction` type to represent multi-actions as they are
+present in mCRL2. A multi-action is a multi-set of action labels that are
+executed simultaneously, i.e., an action `a|b` is a multi-action consisting of
+the actions `a` and `b`. Note that `a|b` is equivalent to `b|a` in this
+formalism, and `τ` simply denotes the empty set.
 
 ### v1.1.0
 

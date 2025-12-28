@@ -2,7 +2,7 @@
 
 The goal of the `MERC` project is to provide a generic set of libraries and tools for (specification language-agnostic) model checking, written in the Rust language. The name is an acronym for "[**m**CRL2](https://www.mcrl2.org/web/index.html) **e**xcept **R**eliable & **C**oncurrent", which should not be taken literally. 
 
-We aim to demonstrate efficient and correct implementations using (safe) Rust. The main focus is on clean interfaces to allow the libraries to be reused as well. The toolset supports and is tested on all major platforms: Linux, macOS and Windows.
+We aim to demonstrate efficient and correct implementations using Rust. The main focus is on clean interfaces to allow the libraries to be reused as well. The toolset supports and is tested on all major platforms: Linux, macOS and Windows.
 
 ## Contributing
 
@@ -19,11 +19,11 @@ Various tools have been implemented so far:
  - `merc-pbes` can identify symmetries in paramerised boolean equation systems [PBES](https://doi.org/10.1016%2Fj.tcs.2005.06.016), located in the `tools/mcrl2` workspace.
  - `merc-ltsgraph` is a GUI tool to visualize LTSs, located in the `tools/GUI` workspace.
 
-Various crates are also published on [crates.io](https://crates.io/), see the [crates](./crates) directory for an overview.
+Various crates are also published on [crates.io](https://crates.io/users/mlaveaux), see the [crates](./crates) directory for an overview.
 
 ## License
 
-The work is licensed under the Boost Software License, see the [`LICENSE`](./LICENSE) for details. Third party dependencies have additional license terms, which are included in the `3rd-party` directory. Furthermore, a `deny.toml` file is included to ensure that no `crates.io` dependencies with incompatible licenses are added.
+The work is licensed under the Boost Software License, see the [`LICENSE`](./LICENSE) for details. Third party dependencies have additional license terms, which are included in the `3rd-party` directory. Furthermore, `cargo deny` is used to ensure that no `crates.io` dependencies with incompatible licenses are added.
 
 ## Related Work
 

@@ -7,12 +7,10 @@
 use std::error::Error;
 use std::process::ExitCode;
 
-use benchmark::Rewriter;
 use clap::Parser;
 use clap::Subcommand;
 use std::path::PathBuf;
 
-mod benchmark;
 mod coverage;
 mod discover_tests;
 mod package;
@@ -29,15 +27,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Runs merc-rewrite benchmarks and outputs the results to the given file in JSON.
-    Benchmark {
-        rewriter: String,
-        output: PathBuf,
-    },
-    /// Creates a markdown table from the benchmark results JSON file.
-    CreateTable {
-        input: PathBuf,
-    },
     /// Generates a code coverage report using grcov.
     Coverage {
         #[clap(trailing_var_arg = true)]
@@ -68,13 +57,6 @@ fn main() -> Result<ExitCode, Box<dyn Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Benchmark { rewriter, output } => {
-            let rewriter = rewriter.parse::<Rewriter>()?;
-            benchmark::benchmark(output.to_string_lossy().into_owned(), rewriter)?;
-        }
-        Commands::CreateTable { input } => {
-            benchmark::create_table(input.to_string_lossy().into_owned())?;
-        }
         Commands::Coverage { args } => coverage::coverage(args)?,
         Commands::AddressSanitizer { args } => sanitizer::address_sanitizer(args)?,
         Commands::ThreadSanitizer { args } => sanitizer::thread_sanitizer(args)?,
