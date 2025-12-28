@@ -1,0 +1,62 @@
+name: Minimal Supported Rust Version (MSRV) Test
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    
+env:
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: on
+
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:      
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Install Ubuntu Dependencies
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: libfontconfig1-dev, libfreetype6-dev
+        version: 1.0
+      if: matrix.os == 'ubuntu-latest'
+      
+    - name: Install stable rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Setup sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Checkout the repository
+      uses: actions/checkout@v6
+      with:
+        submodules: true
+
+    - name: Install cargo msrv
+      run: cargo install cargo-msrv --locked
+
+    - name: Test MSRV
+      run: cargo msrv verify --rust-version 1.87.0
+      env:        
+        RUSTC_WRAPPER: sccache
+
+    - name: Test mCRL2 MSRV
+      run: cargo msrv verify --rust-version 1.87.0
+      env:        
+        RUSTC_WRAPPER: sccache        
+      working-directory: tools/mcrl2
+
+    - name: Test GUI MSRV
+      run: cargo msrv verify --rust-version 1.87.0
+      env:        
+        RUSTC_WRAPPER: sccache        
+      working-directory: tools/gui

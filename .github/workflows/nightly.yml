@@ -1,11 +1,14 @@
 name: Nightly Build
+
 permissions:
   contents: read
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    
 env:
   CARGO_TERM_COLOR: always
   SCCACHE_GHA_ENABLED: on
