@@ -122,31 +122,31 @@ mod tests {
     use crate::RefinementType;
     use crate::is_failures_refinement;
 
-    // #[test]
-    // #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
-    // fn test_random_trace_refinement() {
-    //     random_test(100, |rng| {
-    //         let spec_lts = random_lts(rng, 10, 20, 5);
+    #[test]
+    #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
+    fn test_random_trace_refinement() {
+        random_test(100, |rng| {
+            let spec_lts = random_lts(rng, 10, 20, 5);
 
-    //         let mut timing = Timing::default();
-    //         let impl_lts = reduce_lts(spec_lts.clone(), Equivalence::StrongBisim, &mut timing);
+            let mut timing = Timing::default();
+            let impl_lts = reduce_lts(spec_lts.clone(), Equivalence::StrongBisim, &mut timing);
 
-    //         println!("Impl lts:");
-    //         write_aut(&mut std::io::stdout(), &impl_lts).unwrap();
-    //         println!("Spec lts:");
-    //         write_aut(&mut std::io::stdout(), &spec_lts).unwrap();
+            println!("Impl lts:");
+            write_aut(&mut std::io::stdout(), &impl_lts).unwrap();
+            println!("Spec lts:");
+            write_aut(&mut std::io::stdout(), &spec_lts).unwrap();
 
-    //         assert!(
-    //             is_failures_refinement::<_, false>(
-    //                 impl_lts,
-    //                 spec_lts,
-    //                 RefinementType::Trace,
-    //                 ExplorationStrategy::BFS,
-    //                 false,
-    //                 &mut timing
-    //             ),
-    //             "Strong bisimulation implies trace refinement."
-    //         );
-    //     });
-    // }
+            assert!(
+                is_failures_refinement::<_, false>(
+                    impl_lts,
+                    spec_lts,
+                    RefinementType::Trace,
+                    ExplorationStrategy::BFS,
+                    false,
+                    &mut timing
+                ),
+                "Strong bisimulation implies trace refinement."
+            );
+        });
+    }
 }

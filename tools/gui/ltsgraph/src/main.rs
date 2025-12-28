@@ -41,7 +41,7 @@ use merc_ltsgraph_lib::Viewer;
 use merc_tools::Version;
 use merc_tools::console;
 use merc_tools::verbosity::VerbosityFlag;
-use merc_utilities::LargeFormatter;
+use merc_io::LargeFormatter;
 use merc_utilities::MercError;
 
 use merc_ltsgraph::PauseableThread;
@@ -89,7 +89,7 @@ struct State {
     graph_layout: Mutex<Option<GraphLayout>>,
     viewer: Mutex<Option<Viewer>>,
     canvas: Mutex<SharedPixelBuffer<Rgba8Pixel>>,
-    lts: Mutex<Option<Arc<LabelledTransitionSystem>>>,
+    lts: Mutex<Option<Arc<LabelledTransitionSystem<String>>>>,
     reload_lts: AtomicBool,
 }
 

@@ -71,6 +71,7 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
 
 impl<K, V: fmt::Debug + Ord> Antichain<K, V> {
     /// Checks the internal consistency of the antichain invariant.
+    #[cfg(test)]
     fn check_consistency(&self) {
         for (_key, values) in &self.storage {
             for i in values.iter() {
