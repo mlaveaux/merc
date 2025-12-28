@@ -34,8 +34,7 @@ pub struct RewritingStatistics {
     pub recursions: usize,
 }
 
-/// A set automaton based rewrite engine described in  Mark Bouwman, Rick Erkens:
-/// Term Rewriting Based On Set Automaton Matching. CoRR abs/2202.08687 (2022)
+/// The Set Automaton based Rewrite Engine implementation.
 pub struct SabreRewriter {
     automaton: SetAutomaton<AnnouncementSabre>,
 }
