@@ -867,7 +867,6 @@ dependencies = [
 name = "merc_aterm"
 version = "1.0.0"
 dependencies = [
- "ahash",
  "allocator-api2 0.4.0",
  "dashmap",
  "delegate",
@@ -885,7 +884,6 @@ dependencies = [
  "pest",
  "pest_derive",
  "rand",
- "rayon",
  "rustc-hash 2.1.1",
  "thiserror",
  "trybuild",

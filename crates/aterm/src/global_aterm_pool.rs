@@ -467,10 +467,7 @@ mod tests {
     use std::collections::HashMap;
 
     use merc_utilities::random_test;
-    use rayon::iter::IntoParallelRefIterator;
-    use rayon::iter::ParallelIterator;
 
-    use crate::Term;
     use crate::random_term;
 
     #[test]
@@ -490,21 +487,5 @@ mod tests {
                 }
             }
         });
-    }
-
-    #[test]
-    // Test uses crossbeam, which is not supported by miri
-    #[cfg_attr(miri, ignore)]
-    fn test_parallel_iterator() {
-        let mut rng = rand::rng();
-
-        let mut terms = Vec::new();
-        terms.resize_with(100, || {
-            random_term(&mut rng, &[("f".into(), 2), ("g".into(), 1)], &["a".to_string()], 10)
-        });
-
-        let total: usize = terms.par_iter().fold(|| 0, |value, t| value + t.iter().count()).sum();
-
-        println!("{:?}", total);
     }
 }

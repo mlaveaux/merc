@@ -25,7 +25,6 @@ merc_utilities.workspace = true
 
 merc_pest_consume.workspace = true
 
-ahash.workspace = true
 allocator-api2.workspace = true
 dashmap.workspace = true
 delegate.workspace = true
@@ -36,7 +35,6 @@ parking_lot.workspace = true
 pest_derive.workspace = true
 pest.workspace = true
 rand.workspace = true
-rayon.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
 

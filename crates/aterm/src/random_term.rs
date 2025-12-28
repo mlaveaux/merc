@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use ahash::AHashSet;
 use rand::Rng;
+use rustc_hash::FxHashSet;
 
 use crate::ATerm;
 use crate::Symbol;
@@ -17,7 +17,7 @@ pub fn random_term(rng: &mut impl Rng, symbols: &[(String, usize)], constants: &
     debug_assert!(!constants.is_empty(), "We need constants to be able to create a term");
 
     let mut subterms = THREAD_TERM_POOL.with_borrow(|tp| {
-        AHashSet::<ATerm>::from_iter(constants.iter().map(|name| {
+        FxHashSet::<ATerm>::from_iter(constants.iter().map(|name| {
             let symbol = tp.create_symbol(name, 0);
             let a: &[ATerm] = &[];
             tp.create_term(&symbol, a).protect()

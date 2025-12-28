@@ -116,7 +116,7 @@ merc_rec-tests = { path = "crates/rec-tests" }
 merc_reduction = { path = "crates/reduction" }
 merc_sabre = { path = "crates/sabre" }
 merc_sharedmutex = { version = "1.0", path = "crates/sharedmutex" }
-merc_syntax = { path = "crates/syntax" }
+merc_syntax = { version = "1.0", path = "crates/syntax" }
 merc_tools = { path = "crates/tools" }
 merc_unsafety = { version = "1.0", path = "crates/unsafety" }
 merc_utilities = { version = "1.0", path = "crates/utilities" }
