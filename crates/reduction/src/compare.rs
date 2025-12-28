@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use merc_lts::LTS;
 use merc_utilities::Timing;
 
