@@ -14,19 +14,17 @@ pub struct RewriteSpecification {
 impl RewriteSpecification {
     /// Create a new, empty rewrite specification.
     pub fn new(rewrite_rules: Vec<Rule>) -> RewriteSpecification {
-        RewriteSpecification {
-            rewrite_rules,
-        }
+        RewriteSpecification { rewrite_rules }
     }
 
     /// Returns the rewrite rules of this specification.
     pub fn rewrite_rules(&self) -> &[Rule] {
         &self.rewrite_rules
-    }   
+    }
 }
 
 /// A condition of a conditional rewrite rule.
-/// 
+///
 /// Either `lhs == rhs` or `lhs != rhs` depending on equality being true.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct Condition {

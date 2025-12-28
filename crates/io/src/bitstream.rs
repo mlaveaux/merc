@@ -138,7 +138,8 @@ impl<R: Read> BitStreamRead for BitStreamReader<R> {
 mod tests {
     use log::debug;
     use merc_utilities::random_test;
-    use rand::{distr::Alphanumeric, Rng};
+    use rand::Rng;
+    use rand::distr::Alphanumeric;
 
     use super::*;
 

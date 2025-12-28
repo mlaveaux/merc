@@ -4,7 +4,6 @@ use rand::rngs::StdRng;
 
 use crate::test_logger;
 
-
 /// Constructs a random number generator that should be used in random tests. Prints its seed to the console for reproducibility.
 pub fn random_test<F>(iterations: usize, mut test_function: F)
 where

@@ -82,7 +82,7 @@ impl<M> SetAutomaton<M> {
     /// Creates a new SetAutomaton from the given rewrite specification. If
     /// `apma` is true an Adaptive Pattern Matching Automaton is created,
     /// meaning that it only finds matches at the root position.
-    /// 
+    ///
     /// The `annotate` function is used to create the annotation for each match
     /// announcement. This is used to accomondate different types of annotations
     /// for the different rewrite engines.

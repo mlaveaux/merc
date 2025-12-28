@@ -75,10 +75,9 @@ pub fn read_lts(
                         );
                     } else {
                         // New multi-action found, add it to the builder.
-                        let label_index = builder.add_label(MultiAction::from_mcrl2_aterm(label)?);
-                        builder.add_transition_index(
+                        builder.add_transition(
                             StateIndex::new(from.value()),
-                            label_index,
+                            &MultiAction::from_mcrl2_aterm(label)?,
                             StateIndex::new(to.value()),
                         );
                     }

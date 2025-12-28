@@ -27,48 +27,10 @@ pub enum IOError {
     InvalidTransition(String),
 }
 
-/// Dedicated function to parse the following transition formats:
-///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
-///     `(<from>: Nat, <label>: Str, <to>: Nat)`
+/// Loads a labelled transition system in the [Aldebaran
+/// format](https://cadp.inria.fr/man/aldebaran.html) from the given reader.
 ///
-/// This was generally faster than the regex variant, since that one has to backtrack after
-fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
-    let start_paren = input.find('(')?;
-    let start_comma = input.find(',')?;
-
-    // Find the comma in the second part
-    let start_second_comma = input.rfind(',')?;
-    let end_paren = input.rfind(')')?;
-
-    let from = input.get(start_paren + 1..start_comma)?.trim();
-    let label = input.get(start_comma + 1..start_second_comma)?.trim();
-    let to = input.get(start_second_comma + 1..end_paren)?.trim();
-    // Handle the special case where it has quotes.
-    if label.starts_with('"') && label.ends_with('"') {
-        return Some((from, &label[1..label.len() - 1], to));
-    }
-
-    Some((from, label, to))
-}
-
-/// A trait for labels that can be used in transitions.
-impl TransitionLabel for String {
-    fn is_tau_label(&self) -> bool {
-        self == "tau"
-    }
-
-    fn tau_label() -> Self {
-        "tau".to_string()
-    }
-
-    fn matches_label(&self, label: &String) -> bool {
-        self == label
-    }
-}
-
-/// Loads a labelled transition system in the Aldebaran format from the given
-/// reader. Note that the reader has a buffer in the form of  `BufReader``
-/// internally.
+/// Note that the reader has a buffer in the form of  `BufReader`` internally.
 ///
 /// The Aldebaran format consists of a header: `des (<initial>: Nat,
 ///     <num_of_transitions>: Nat, <num_of_states>: Nat)`
@@ -76,9 +38,6 @@ impl TransitionLabel for String {
 /// And one line for every transition either one of these cases:
 ///  `(<from>: Nat, "<label>": Str, <to>: Nat)`
 ///  `(<from>: Nat, <label>: Str, <to>: Nat)`
-///
-/// To be fully compatible with the original syntax definition, the labels
-/// of the edges should consist of at most 5000 characters.
 pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
     info!("Reading LTS in .aut format...");
 
@@ -127,8 +86,9 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
 }
 
 /// Write a labelled transition system in plain text in Aldebaran format to the
-/// given writer. Note that the writer is buffered internally using a
-/// `BufWriter`.
+/// given writer, see [read_aut].
+///
+/// Note that the writer is buffered internally using a `BufWriter`.
 pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercError> {
     let mut writer = BufWriter::new(writer);
     writeln!(
@@ -160,11 +120,14 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
 }
 
 /// Dedicated function to parse the following transition formats:
+///
+/// # Details
+///
+/// One of the following formats:
 ///     `(<from>: Nat, "<label>": Str, <to>: Nat)`
 ///     `(<from>: Nat, <label>: Str, <to>: Nat)`
 ///
-/// This was generally faster than the regex variant, since that one has to backtrack to handle both
-/// the quoted and unquoted label variants.
+/// This was generally faster than the regex variant, since that one has to backtrack after
 fn read_transition(input: &str) -> Option<(&str, &str, &str)> {
     let start_paren = input.find('(')?;
     let start_comma = input.find(',')?;
@@ -197,7 +160,7 @@ impl TransitionLabel for String {
     fn matches_label(&self, label: &String) -> bool {
         self == label
     }
-    
+
     fn from_index(i: usize) -> Self {
         char::from_digit(i as u32, 36)
             .expect("Radix is less than 37, so should not panic")

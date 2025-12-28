@@ -24,8 +24,8 @@ use crossbeam_utils::CachePadded;
 /// through the `read` operation and exclusive access for the `write` operation
 /// of the given object.
 pub struct BfSharedMutex<T> {
-    /// The local control bits of each instance. 
-    /// 
+    /// The local control bits of each instance.
+    ///
     /// TODO: Maybe use pin to share the control bits among shared mutexes.
     control: Arc<CachePadded<SharedMutexControl>>,
 
@@ -320,7 +320,6 @@ impl<T> GlobalBfSharedMutex<T> {
 // Can be Send and Sync, because it cannot be mutated anyway.
 unsafe impl<T: Send> Send for GlobalBfSharedMutex<T> {}
 unsafe impl<T: Send> Sync for GlobalBfSharedMutex<T> {}
-
 
 #[cfg(test)]
 mod tests {

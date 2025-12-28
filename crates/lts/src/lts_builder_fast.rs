@@ -32,11 +32,7 @@ impl<L: TransitionLabel> LtsBuilderFast<L> {
     }
 
     /// Initializes the builder with pre-allocated capacity for states and transitions.
-    pub fn with_capacity(
-        mut labels: Vec<L>,
-        hidden_labels: Vec<String>,
-        num_of_transitions: usize,
-    ) -> Self {
+    pub fn with_capacity(mut labels: Vec<L>, hidden_labels: Vec<String>, num_of_transitions: usize) -> Self {
         // Remove duplicates from the labels.
         labels.sort();
         labels.dedup();

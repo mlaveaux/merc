@@ -194,37 +194,35 @@ pub fn parse_dataexpr(pairs: Pairs<Rule>) -> ParseResult<DataExpr> {
             }),
             _ => unimplemented!("Unexpected postfix operator: {:?}", postfix.as_rule()),
         })
-        .map_prefix(
-            |prefix, expr| match prefix.as_rule() {
-                Rule::DataExprForall => Ok(DataExpr::Quantifier {
-                    op: Quantifier::Forall,
-                    variables: Mcrl2Parser::DataExprForall(Node::new(prefix))?,
-                    body: Box::new(expr?),
-                }),
-                Rule::DataExprExists => Ok(DataExpr::Quantifier {
-                    op: Quantifier::Exists,
-                    variables: Mcrl2Parser::DataExprExists(Node::new(prefix))?,
-                    body: Box::new(expr?),
-                }),
-                Rule::DataExprLambda => Ok(DataExpr::Lambda {
-                    variables: Mcrl2Parser::DataExprLambda(Node::new(prefix))?,
-                    body: Box::new(expr?),
-                }),
-                Rule::DataExprNegation => Ok(DataExpr::Unary {
-                    op: DataExprUnaryOp::Negation,
-                    expr: Box::new(expr?),
-                }),
-                Rule::DataExprMinus => Ok(DataExpr::Unary {
-                    op: DataExprUnaryOp::Minus,
-                    expr: Box::new(expr?),
-                }),
-                Rule::DataExprSize => Ok(DataExpr::Unary {
-                    op: DataExprUnaryOp::Size,
-                    expr: Box::new(expr?),
-                }),
-                _ => unimplemented!("Unexpected prefix operator: {:?}", prefix.as_rule()),
-            },
-        )
+        .map_prefix(|prefix, expr| match prefix.as_rule() {
+            Rule::DataExprForall => Ok(DataExpr::Quantifier {
+                op: Quantifier::Forall,
+                variables: Mcrl2Parser::DataExprForall(Node::new(prefix))?,
+                body: Box::new(expr?),
+            }),
+            Rule::DataExprExists => Ok(DataExpr::Quantifier {
+                op: Quantifier::Exists,
+                variables: Mcrl2Parser::DataExprExists(Node::new(prefix))?,
+                body: Box::new(expr?),
+            }),
+            Rule::DataExprLambda => Ok(DataExpr::Lambda {
+                variables: Mcrl2Parser::DataExprLambda(Node::new(prefix))?,
+                body: Box::new(expr?),
+            }),
+            Rule::DataExprNegation => Ok(DataExpr::Unary {
+                op: DataExprUnaryOp::Negation,
+                expr: Box::new(expr?),
+            }),
+            Rule::DataExprMinus => Ok(DataExpr::Unary {
+                op: DataExprUnaryOp::Minus,
+                expr: Box::new(expr?),
+            }),
+            Rule::DataExprSize => Ok(DataExpr::Unary {
+                op: DataExprUnaryOp::Size,
+                expr: Box::new(expr?),
+            }),
+            _ => unimplemented!("Unexpected prefix operator: {:?}", prefix.as_rule()),
+        })
         .parse(pairs)
 }
 

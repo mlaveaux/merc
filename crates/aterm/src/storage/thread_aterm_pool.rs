@@ -12,8 +12,8 @@ use merc_pest_consume::Parser;
 use merc_sharedmutex::RecursiveLock;
 use merc_sharedmutex::RecursiveLockReadGuard;
 use merc_unsafety::StablePointer;
-use merc_utilities::debug_trace;
 use merc_utilities::MercError;
+use merc_utilities::debug_trace;
 
 use crate::Markable;
 use crate::Return;
@@ -30,7 +30,6 @@ use crate::storage::GlobalTermPool;
 use crate::storage::SharedTerm;
 use crate::storage::SharedTermProtection;
 use crate::storage::global_aterm_pool::GLOBAL_TERM_POOL;
-
 
 thread_local! {
     /// Thread-specific term pool that manages protection sets.

@@ -120,15 +120,24 @@ mod tests {
         println!("{:?}", antichain);
 
         let inserted = antichain.insert(1, vecset![2, 3, 6]);
-        assert!(!inserted, "The pair (1, {{2,3,6}}) should not be inserted in {:?}.", antichain);
+        assert!(
+            !inserted,
+            "The pair (1, {{2,3,6}}) should not be inserted in {:?}.",
+            antichain
+        );
 
         let inserted = antichain.insert(1, vecset![2]);
-        assert!(inserted, "The pair (1, {{2}}) should overwrite (1, {{2, 3}}) in {:?}.", antichain);
+        assert!(
+            inserted,
+            "The pair (1, {{2}}) should overwrite (1, {{2, 3}}) in {:?}.",
+            antichain
+        );
 
         let inserted = antichain.insert(1, vecset![5, 6]);
         assert!(
             inserted,
-            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs in {:?}.", antichain
+            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs in {:?}.",
+            antichain
         );
     }
 

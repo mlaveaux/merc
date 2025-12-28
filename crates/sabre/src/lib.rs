@@ -7,8 +7,8 @@ mod rewrite_specification;
 mod sabre_rewriter;
 mod set_automaton;
 
-pub mod utilities;
 pub mod test_utility;
+pub mod utilities;
 
 pub use innermost_rewriter::*;
 pub use naive_rewriter::*;

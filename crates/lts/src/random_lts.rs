@@ -1,6 +1,5 @@
 use rand::Rng;
 
-use crate::LabelIndex;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilderFast;
 use crate::StateIndex;

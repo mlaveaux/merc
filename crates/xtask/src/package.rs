@@ -88,7 +88,6 @@ pub fn package() -> Result<(), Box<dyn Error>> {
 
     // Add the LICENSE to the package
 
-
     Ok(())
 }
 

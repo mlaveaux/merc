@@ -108,18 +108,6 @@ impl<L: TransitionLabel> LtsBuilder<L> {
         self.num_of_states = self.num_of_states.max(from.value() + 1).max(to.value() + 1);
     }
 
-    /// Introduce a new label to the LTS that is being build.
-    pub fn add_label(&mut self, label: L) -> LabelIndex {
-        if let Some(&index) = self.labels_index.get(&label) {
-            index
-        } else {
-            let index = LabelIndex::new(self.labels.len());
-            self.labels_index.insert(label.clone(), index);
-            self.labels.push(label);
-            index
-        }
-    }
-
     /// Finalizes the builder and returns the constructed labelled transition system.
     pub fn finish(&mut self, initial_state: StateIndex) -> LabelledTransitionSystem<L> {
         LabelledTransitionSystem::new(

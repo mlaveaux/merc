@@ -41,7 +41,6 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
 ) -> bool {
     let reduction = match refinement {
         RefinementType::Trace => Equivalence::StrongBisim,
-        _ => unimplemented!()
     };
 
     // For the preprocessing/quotienting step it makes sense to merge both LTSs
@@ -66,7 +65,7 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
                     // After partitioning the block becomes the state in the reduced_lts.
                     (reduced_lts, StateIndex::new(*initial_spec))
                 }
-                _ => unimplemented!()
+                _ => unimplemented!(),
             }
         }
     } else {

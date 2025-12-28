@@ -5,6 +5,7 @@ use clap::ValueEnum;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
 
+use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::MultiAction;
 use crate::read_aut;

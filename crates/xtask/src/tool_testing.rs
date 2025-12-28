@@ -20,13 +20,18 @@ pub fn test_tools(directory: &Path) -> Result<(), Box<dyn Error>> {
     let merc_lts = which_in("merc-lts", Some(directory), cwd)?;
 
     // Copy some test files to the temporary directory.
-    std::fs::copy(
-        directory.join("../examples/lts/abp.aut"),
-        tmp_path.join("abp.aut")
-    )?;
+    std::fs::copy(directory.join("../examples/lts/abp.aut"), tmp_path.join("abp.aut"))?;
 
     for algorithm in ["strong-bisim", "branching-bisim", "weak-bisim"] {
-        cmd!(&merc_lts, "reduce", algorithm, "abp.aut", format!("abp.{}.aut", algorithm)).dir(tmp_path).run()?;
+        cmd!(
+            &merc_lts,
+            "reduce",
+            algorithm,
+            "abp.aut",
+            format!("abp.{}.aut", algorithm)
+        )
+        .dir(tmp_path)
+        .run()?;
     }
 
     Ok(())

@@ -45,7 +45,6 @@ impl RewriteEngine for InnermostRewriter {
 }
 
 impl InnermostRewriter {
-
     /// Creates a new InnermostRewriter from the given rewrite specification.
     pub fn new(spec: &RewriteSpecification) -> InnermostRewriter {
         let apma = SetAutomaton::new(spec, AnnouncementInnermost::new, true);
