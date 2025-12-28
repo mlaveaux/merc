@@ -2,7 +2,7 @@
 # Overview
 
 This crate provides functionality for working with variability parity games.
-This includes I/O for parity games in the
+This includes reading and writing for parity games in the
 [PGSolver](https://github.com/tcsprojects/pgsolver) `.pg` format. For
 variability parity games this format is extended with feature configurations
 encoded as BDDs on the edges, with a corresponding `.vpg` format. These games
