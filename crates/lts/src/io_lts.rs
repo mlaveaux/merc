@@ -44,7 +44,7 @@ pub fn read_lts(
     let _actions = reader.read_aterm()?;
 
     // Use a cache to avoid translating the same multi-action multiple times.
-    let multi_actions: HashMap<ATerm, MultiAction> = HashMap::new();
+    let mut multi_actions: HashMap<ATerm, MultiAction> = HashMap::new();
 
     // The initial state is not known yet.
     let mut initial_state: Option<StateIndex> = None;
@@ -75,9 +75,11 @@ pub fn read_lts(
                         );
                     } else {
                         // New multi-action found, add it to the builder.
+                        let multi_action = MultiAction::from_mcrl2_aterm(label.clone())?;
+                        multi_actions.insert(label.clone(), multi_action.clone());
                         builder.add_transition(
                             StateIndex::new(from.value()),
-                            &MultiAction::from_mcrl2_aterm(label)?,
+                            &multi_action,
                             StateIndex::new(to.value()),
                         );
                     }
