@@ -65,7 +65,7 @@ pub struct SummandGroup {
     read_parameters: Vec<ATerm>,
     write_parameters: Vec<ATerm>,
 
-    /// The transition relation T -> U for this summand group, such that T are the original parameters projected on the read_parameters and U the ones projected on the write_parameters.
+    /// The transition relation T' -> U' for this summand group.
     relation: Ldd,
 }
 

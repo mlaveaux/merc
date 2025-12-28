@@ -820,7 +820,6 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
- "merc_ldd",
  "merc_lts",
  "merc_reduction",
  "merc_tools",
@@ -840,6 +839,20 @@ dependencies = [
  "merc_data",
  "merc_rec-tests",
  "merc_sabre",
+ "merc_tools",
+ "merc_unsafety",
+ "merc_utilities",
+]
+
+[[package]]
+name = "merc-sym"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "log",
+ "merc_ldd",
+ "merc_symbolic",
  "merc_tools",
  "merc_unsafety",
  "merc_utilities",

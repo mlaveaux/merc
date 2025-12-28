@@ -24,7 +24,7 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
         return Err("Expected symbolic labelled transition system stream".into());
     }
 
-    let _data_spec = DataSpecification::read(&mut stream)?;
+    let data_spec = DataSpecification::read(&mut stream)?;
     let process_parameters: ATermList<ATerm> = stream.read_aterm()?.ok_or("Expected process parameters")?.into();
 
     let initial_state = stream.read_ldd(storage)?;
@@ -57,7 +57,7 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
         summand_groups.push(SummandGroup::new(read_parameters, write_parameters, relation));
     }
 
-    Ok(SymbolicLts::new(_data_spec, states, initial_state, summand_groups))
+    Ok(SymbolicLts::new(data_spec, states, initial_state, summand_groups))
 }
 
 /// Returns the ATerm mark for symbolic labelled transition systems.
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    fn test_wms_sym() {
+    fn test_read_symbolic_lts_wms_sym() {
         let input = include_bytes!("../../../examples/lts/WMS.sym");
 
         let mut storage = Storage::new();
