@@ -16,7 +16,7 @@ use crate::text_cache::TextCache;
 /// Handles the rendering of LTS graphs using Skia
 pub struct SkiaRenderer {
     /// The underlying LTS being displayed
-    lts: Arc<LabelledTransitionSystem>,
+    lts: Arc<LabelledTransitionSystem<String>>,
 
     /// A cache used to cache strings and font information
     text_cache: TextCache,
@@ -27,7 +27,7 @@ pub struct SkiaRenderer {
 
 impl SkiaRenderer {
     /// Creates a new renderer for the given LTS
-    pub fn new(lts: Arc<LabelledTransitionSystem>) -> Self {
+    pub fn new(lts: Arc<LabelledTransitionSystem<String>>) -> Self {
         let mut text_cache = TextCache::new();
         let mut labels_cache = vec![];
 

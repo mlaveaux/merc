@@ -15,11 +15,11 @@ use crate::Viewer;
 
 pub struct FemtovgRenderer {
     /// Reference to the LTS being rendered
-    lts: Arc<LabelledTransitionSystem>,
+    lts: Arc<LabelledTransitionSystem<String>>,
 }
 
 impl FemtovgRenderer {
-    pub fn new(lts: Arc<LabelledTransitionSystem>) -> Self {
+    pub fn new(lts: Arc<LabelledTransitionSystem<String>>) -> Self {
         Self { lts }
     }
 

@@ -11,7 +11,7 @@ use merc_unsafety::index_edge;
 
 pub struct GraphLayout {
     // Store the underlying LTS to get the edges.
-    pub lts: Arc<LabelledTransitionSystem>,
+    pub lts: Arc<LabelledTransitionSystem<String>>,
 
     // For every state store layout information.
     pub layout_states: Vec<StateLayout>,
@@ -25,7 +25,7 @@ pub struct StateLayout {
 
 impl GraphLayout {
     /// Construct a new layout for the given LTS.
-    pub fn new(lts: Arc<LabelledTransitionSystem>) -> GraphLayout {
+    pub fn new(lts: Arc<LabelledTransitionSystem<String>>) -> GraphLayout {
         // Keep track of state layout information.
         let mut states_simulation = vec![StateLayout::default(); lts.num_of_states()];
 

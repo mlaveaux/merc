@@ -11,7 +11,7 @@ use crate::graph_layout::GraphLayout;
 
 pub struct Viewer {
     /// The underlying LTS being displayed
-    lts: Arc<LabelledTransitionSystem>,
+    lts: Arc<LabelledTransitionSystem<String>>,
 
     /// Stores a local copy of the state positions
     view_states: Vec<StateView>,
@@ -31,7 +31,7 @@ pub struct TransitionView {
 
 impl Viewer {
     /// Creates a new viewer for the given LTS
-    pub fn new(lts: Arc<LabelledTransitionSystem>) -> Viewer {
+    pub fn new(lts: Arc<LabelledTransitionSystem<String>>) -> Viewer {
         // Initialize the view information for the states
         let mut view_states = vec![StateView::default(); lts.num_of_states()];
 
@@ -115,7 +115,7 @@ impl Viewer {
     }
 
     /// Gets a reference to the LTS that is being displayed
-    pub fn lts(&self) -> &LabelledTransitionSystem {
+    pub fn lts(&self) -> &LabelledTransitionSystem<String> {
         &self.lts
     }
 }
