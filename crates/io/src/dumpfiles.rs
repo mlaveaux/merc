@@ -1,8 +1,7 @@
-use std::{fs::File, path::PathBuf};
+use std::{fs::File, path::{Path, PathBuf}};
 
+use log::info;
 use merc_utilities::MercError;
-
-
 
 /// A utility for dumping files, mostly used for testing and debugging
 /// 
@@ -15,14 +14,25 @@ use merc_utilities::MercError;
 /// to disk, to avoid unnecessary writes during normal runs. In combination with
 /// `MERC_SEED` we can reproduce specific tests cases for random runs.
 pub struct DumpFiles {
-    directory: String,
+    // None when dumping is disabled.
+    directory: Option<PathBuf>,
 }
 
 impl DumpFiles {
     /// Creates a new `DumpFiles` instance with the given directory as output.
-    pub fn new(directory: impl Into<String>) -> Self {
-        Self {
-            directory: directory.into(),
+    pub fn new(directory: &str) -> Self {
+        if let Ok(dump_dir) = std::env::var("MERC_DUMP") {
+            // Check if the directory is an absolute path
+            if !Path::new(dump_dir.as_str()).is_absolute() {
+                panic!("MERC_DUMP must be an absolute path, because tests write relative to their source file.");
+            }
+
+            Self {
+                directory: Some(Path::new(&dump_dir).join(directory)),
+            }
+        } else {
+            // Dumping disabled.
+            Self { directory: None }
         }
     }
 
@@ -32,19 +42,18 @@ impl DumpFiles {
     where
         F: FnMut(&mut File) -> Result<(), MercError>,
     {
-        if std::env::var("MERC_DUMP").is_err() {
-            // Not defined so we skip dumping files.
-            return Ok(());
+        if let Some(directory) = &self.directory {
+            // Ensure the dump directory exists.
+            let _ = std::fs::create_dir_all(&directory);
+
+            let path = Path::new(&directory).join(filename);
+            let mut file = File::create(&path)?;
+            write(&mut file)?;
+
+            info!("Dumped file: {}", path.to_string_lossy());
+        } else {
+            info!("No MERC_DUMP set, skipping dump: {}", filename);
         }
-
-        // Ensure the dump directory exists.
-        let _ = std::fs::create_dir_all(&self.directory);
-
-        let path = PathBuf::new().join(&self.directory).join(filename);
-        let mut file = File::create(&path)?;
-        write(&mut file)?;
-
-        println!("Dumped file: {}", path.to_string_lossy());
         Ok(())
     }
 }
