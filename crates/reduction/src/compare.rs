@@ -9,6 +9,7 @@ use crate::branching_bisim_sigref;
 use crate::branching_bisim_sigref_naive;
 use crate::strong_bisim_sigref;
 use crate::strong_bisim_sigref_naive;
+use crate::weak_bisim_sigref_inductive_naive;
 use crate::weak_bisim_sigref_naive;
 use crate::weak_bisimulation;
 
@@ -26,6 +27,10 @@ pub fn compare_lts<L: LTS>(equivalence: Equivalence, left: L, right: L, timing: 
             partition.block_number(lts.initial_state_index()) == partition.block_number(rhs_initial)
         }
         Equivalence::WeakBisimSigref => {
+            let (lts, partition) = weak_bisim_sigref_inductive_naive(merged, timing);
+            partition.block_number(lts.initial_state_index()) == partition.block_number(rhs_initial)
+        }
+        Equivalence::WeakBisimSigrefNaive => {
             let (lts, partition) = weak_bisim_sigref_naive(merged, timing);
             partition.block_number(lts.initial_state_index()) == partition.block_number(rhs_initial)
         }

@@ -175,7 +175,7 @@ pub fn branching_bisim_sigref_naive<L: LTS>(
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn weak_bisim_sigref_naive<L: LTS>(
+pub fn weak_bisim_sigref_inductive_naive<L: LTS>(
     lts: L,
     timing: &mut Timing,
 ) -> (LabelledTransitionSystem<L::Label>, IndexedPartition) {
@@ -187,6 +187,25 @@ pub fn weak_bisim_sigref_naive<L: LTS>(
 
     let partition = signature_refinement_weak(
         &preprocessed_lts);
+    time.finish();
+
+    (preprocessed_lts, partition)
+}
+
+/// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
+pub fn weak_bisim_sigref_naive(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition) {
+    let mut timepre = timing.start("preprocess");
+    let preprocessed_lts = preprocess_branching(lts);
+    timepre.finish();
+
+    let mut time = timing.start("reduction");
+
+    let partition = signature_refinement_naive::<_, _, true>(
+        &preprocessed_lts,
+        |state_index, partition, state_to_signature, builder| {
+            weak_bisim_signature_sorted(state_index, &preprocessed_lts, partition, state_to_signature, builder)
+        },
+    );
     time.finish();
 
     (preprocessed_lts, partition)
@@ -370,7 +389,7 @@ where {
     let mut old_count = 1;
     let mut iteration = 0;
 
-    let mut progress = TimeProgress::new(
+    let progress = TimeProgress::new(
         |(iteration, blocks)| {
             debug!("Iteration {iteration}, found {blocks} blocks...",);
         },
@@ -752,6 +771,20 @@ mod tests {
         });
     }
 
+    #[test]
+    fn test_random_weak_bisim_sigref() {
+        random_test(100, |rng| {
+            let lts = random_lts(rng, 10, 3, 3);
+            let mut timing = Timing::new();
+
+            let (_result_lts, result_partition) = weak_bisim_sigref_naive(lts.clone(), &mut timing);
+            let (_expected_lts, expected_partition) = weak_bisim_sigref_inductive_naive(lts, &mut timing);
+
+            // There is no preprocessing so this works.
+            assert!(equal_partitions(&result_partition, &expected_partition));
+        });
+    }
+
     /// Checks that the branching bisimulation partition is a refinement of the strong bisimulation partition.
     fn is_refinement(lts: &impl LTS, strong_partition: &impl Partition, branching_partition: &impl Partition) {
         for state_index in lts.iter_states() {
@@ -790,8 +823,8 @@ mod tests {
             let mut timing = Timing::new();
 
             let (preprocessed_lts, weak_partition) = weak_bisim_sigref_naive(lts, &mut timing);
-            let strong_partition = strong_bisim_sigref_naive(preprocessed_lts.clone(), &mut timing).1;
-            is_refinement(&preprocessed_lts, &strong_partition, &weak_partition);
+            let branching_partition = branching_bisim_sigref_naive(preprocessed_lts.clone(), &mut timing).1;
+            is_refinement(&preprocessed_lts, &branching_partition, &weak_partition);
         });
     }
 }

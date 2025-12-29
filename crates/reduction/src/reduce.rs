@@ -11,6 +11,7 @@ use crate::quotient_lts_block;
 use crate::quotient_lts_naive;
 use crate::strong_bisim_sigref;
 use crate::strong_bisim_sigref_naive;
+use crate::weak_bisim_sigref_inductive_naive;
 use crate::weak_bisim_sigref_naive;
 use crate::weak_bisimulation;
 
@@ -20,6 +21,7 @@ pub enum Equivalence {
     WeakBisim,
     /// Various signature based reduction algorithms.
     WeakBisimSigref,
+    WeakBisimSigrefNaive,
     StrongBisim,
     StrongBisimNaive,
     BranchingBisim,
@@ -35,6 +37,11 @@ pub fn reduce_lts<L: LTS>(lts: L, equivalence: Equivalence, timing: &mut Timing)
             (quotient_lts_naive(&lts, &partition, true), quotient_time)
         }
         Equivalence::WeakBisimSigref => {
+            let (lts, partition) = weak_bisim_sigref_inductive_naive(lts, timing);
+            let quotient_time = timing.start("quotient");
+            (quotient_lts_naive(&lts, &partition, true), quotient_time)
+        }
+        Equivalence::WeakBisimSigrefNaive => {
             let (lts, partition) = weak_bisim_sigref_naive(lts, timing);
             let quotient_time = timing.start("quotient");
             (quotient_lts_naive(&lts, &partition, true), quotient_time)
