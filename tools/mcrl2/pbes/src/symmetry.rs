@@ -308,7 +308,7 @@ impl SymmetryAlgorithm {
                 permutation_group(control_flow_parameter_indices)
                     .cartesian_product(all_data_groups)
                     .filter(move |(a, b)| {
-                        let pi = a.concat(b);
+                        let pi = a.clone().concat(b);
 
                         // Print progress messages.
                         self.num_of_checked_candidates
