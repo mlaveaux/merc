@@ -37,6 +37,8 @@ pub enum IOError {
 /// `parity <num_of_vertices>;`
 /// `<index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;`
 pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
+    info!("Reading parity game in .pg format...");
+
     let mut lines = LineIterator::new(reader);
     lines.advance();
     let header = lines
@@ -52,7 +54,7 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         .extract();
 
     let num_of_vertices: usize = num_of_vertices_txt.parse()?;
-    let progress = TimeProgress::new(|percentage: usize| info!("Reading vertices {}%...", percentage), 1);
+    let progress = TimeProgress::new(|(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total), 1);
 
     // Collect that data into the parity game structure
     let mut owner: Vec<Player> = vec![Player::Even; num_of_vertices];
@@ -100,7 +102,7 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
             }
         }
 
-        progress.print(vertex_count * 100 / num_of_vertices);
+        progress.print((vertex_count + 1, num_of_vertices));
         vertex_count += 1;
     }
 

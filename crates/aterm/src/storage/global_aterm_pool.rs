@@ -33,7 +33,7 @@ pub static GLOBAL_TERM_POOL: LazyLock<GlobalBfSharedMutex<GlobalTermPool>> =
     LazyLock::new(|| GlobalBfSharedMutex::new(GlobalTermPool::new()));
 
 /// Enables aggressive garbage collection, which is used for testing.
-pub(crate) const AGRESSIVE_GC: bool = false;
+pub(crate) const AGGRESSIVE_GC: bool = false;
 
 /// A type alias for the global term pool guard
 pub(crate) type GlobalTermPoolGuard<'a> = RecursiveLockReadGuard<'a, GlobalTermPool>;
@@ -193,7 +193,7 @@ impl GlobalTermPool {
     pub(crate) fn trigger_garbage_collection(&mut self) -> usize {
         self.collect_garbage();
 
-        if AGRESSIVE_GC {
+        if AGGRESSIVE_GC {
             return 1;
         }
 

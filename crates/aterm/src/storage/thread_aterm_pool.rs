@@ -25,7 +25,7 @@ use crate::Term;
 use crate::TermParser;
 use crate::aterm::ATerm;
 use crate::aterm::ATermRef;
-use crate::storage::AGRESSIVE_GC;
+use crate::storage::AGGRESSIVE_GC;
 use crate::storage::GlobalTermPool;
 use crate::storage::SharedTerm;
 use crate::storage::SharedTermProtection;
@@ -73,7 +73,7 @@ impl ThreadTermPool {
         // Arbitrary value to trigger garbage collection
         Self {
             protection_set,
-            garbage_collection_counter: Cell::new(if AGRESSIVE_GC { 1 } else { 1000 }),
+            garbage_collection_counter: Cell::new(if AGGRESSIVE_GC { 1 } else { 1000 }),
             tmp_arguments: RefCell::new(Vec::new()),
             int_symbol,
             empty_list_symbol,

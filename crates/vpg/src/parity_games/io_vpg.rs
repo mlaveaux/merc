@@ -40,6 +40,8 @@ use crate::minus;
 /// Each outgoing edge is represented as `<to>|<configuration_set>`. For the
 /// format of the configuration set see [parse_configuration_set]
 pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<VariabilityParityGame, MercError> {
+    info!("Reading variability parity game in .vpg format...");
+
     manager.with_manager_exclusive(|manager| {
         debug_assert_eq!(
             manager.num_vars(),
@@ -86,7 +88,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     let mut edges_configuration: Vec<BDDFunction> = Vec::with_capacity(num_of_vertices);
 
     // Print progress messages
-    let progress = TimeProgress::new(|percentage: usize| info!("Reading vertices {}%...", percentage), 1);
+    let progress = TimeProgress::new(|(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total), 1);
     let mut vertex_count = 0;
     while let Some(line) = lines.next() {
         // Parse the line: <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
@@ -136,7 +138,7 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
             }
         }
 
-        progress.print(vertex_count * 100 / num_of_vertices);
+        progress.print((vertex_count + 1, num_of_vertices));
         vertex_count += 1;
     }
 
@@ -222,7 +224,7 @@ pub fn write_vpg(writer: &mut impl Write, game: &VariabilityParityGame) -> Resul
     writeln!(writer, "parity {};", game.num_of_vertices())?;
 
     let progress = TimeProgress::new(
-        |(index, total): (usize, usize)| info!("Wrote vertices {} ({}%)...", index, index * 100 / total),
+        |(index, total): (usize, usize)| info!("Wrote {} vertices ({}%)...", index, index * 100 / total),
         1,
     );
     for v in game.iter_vertices() {
