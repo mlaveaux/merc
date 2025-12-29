@@ -1,4 +1,4 @@
-name: Minimal Supported Rust Version (MSRV) Test
+name: Minimal Supported Rust Version
 
 permissions:
   contents: read
