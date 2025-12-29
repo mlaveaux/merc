@@ -192,7 +192,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_binary_ldd_stream() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let mut storage = Storage::new();
 
             let input: Vec<_> = (0..20)

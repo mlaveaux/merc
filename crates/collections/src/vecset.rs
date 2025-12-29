@@ -69,6 +69,7 @@ impl<T: Ord> VecSet<T> {
         let mut self_iter = self.sorted_array.iter();
         let mut other_iter = other.sorted_array.iter();
 
+        // Traverse both sets in order, checking that all elements of self are in other.
         let mut self_next = self_iter.next();
         let mut other_next = other_iter.next();
 

@@ -574,7 +574,7 @@ mod tests {
 
     #[test]
     fn test_random_binary_stream() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let input: Vec<_> = (0..20)
                 .map(|_| random_term(rng, &[("f".into(), 2), ("g".into(), 1)], &["a".into(), "b".into()], 1))
                 .collect();
@@ -602,7 +602,7 @@ mod tests {
 
     #[test]
     fn test_random_binary_stream_iter() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let input: Vec<_> = (0..20)
                 .map(|_| random_term(rng, &[("f".into(), 2), ("g".into(), 1)], &["a".into(), "b".into()], 1))
                 .collect();

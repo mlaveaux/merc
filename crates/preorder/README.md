@@ -3,9 +3,34 @@
 This crate provides algorithms to check various preorder relations between labelled transition systems (LTSs). The main functionality is checking whether an implementation LTS is refined by a specification LTS with respect to the failures-divergence preorder, which the preorder widely used by the [FDR4](https://cocotec.io/fdr/); the CSP refinement checker.
 
 ```rust
+use merc_lts::read_aut;
+use merc_utilities::Timing;
 
+use merc_preorder::refines;
+use merc_preorder::RefinementType;
 
+let impl_lts = read_aut(b"des (0,8,6)                                        
+(0,newday,1)
+(1,tau,2)
+(1,tau,3)
+(2,teach,4)
+(3,lindyhop,0)
+(3,tau,5)
+(4,newday,2)
+(5,teach,0)
+" as &[u8], Vec::new()).unwrap();
 
+let spec_lts = read_aut(b"des (0,5,4)                                        
+(0,newday,1)
+(1,tau,2)
+(1,tau,3)
+(2,teach,0)
+(3,lindyhop,0)
+" as &[u8], Vec::new()).unwrap();
+
+// Note that this is trace refinement, not weak trace.
+let result = refines(impl_lts, spec_lts, RefinementType::Trace, &mut Timing::new());
+assert!(!result);
 ```
 
 ## Related Work

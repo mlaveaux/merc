@@ -112,13 +112,16 @@ pub fn read_lts(
 /// This format is built on top the ATerm binary format. The structure is as
 /// follows:
 ///
+/// ```plain
 ///     lts_marker: ATerm
 ///     data_spec: see [`merc_data::DataSpecification::write`]
 ///     parameters: ATermList
 ///     action_labels: ATermList
-///
+/// ```
+/// 
 /// Afterwards we can write the following elements in any order:
 ///
+/// ```plain
 /// initial state:
 ///    initial_state_marker: ATerm
 ///    state: ATermInt
@@ -128,6 +131,7 @@ pub fn read_lts(
 ///     from: ATermInt
 ///     label: ATerm (the multi_action)
 ///     to: ATermInt
+/// ```
 ///
 /// state_label (index derived from order of appearance):
 ///    state_label: ATermList::<DataExpression>
