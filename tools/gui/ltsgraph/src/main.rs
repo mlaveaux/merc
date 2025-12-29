@@ -20,7 +20,7 @@ use log::debug;
 use log::info;
 use log::warn;
 use merc_lts::LtsFormat;
-use merc_lts::guess_format_from_extension;
+use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_explicit_lts;
 use merc_utilities::Timing;
 use slint::Image;
@@ -487,7 +487,7 @@ async fn main() -> Result<ExitCode, MercError> {
             debug!("Loading LTS {} ...", path.to_string_lossy());
 
             let mut timing = Timing::new();
-            let format = guess_format_from_extension(path, format).ok_or("Unknown LTS file format.")?;
+            let format = guess_lts_format_from_extension(path, format).ok_or("Unknown LTS file format.")?;
             match read_explicit_lts(&path, format, vec![], &mut timing) {
                 Ok(lts) => {
                     let lts = Arc::new(lts);
