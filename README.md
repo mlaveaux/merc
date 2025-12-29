@@ -1,6 +1,6 @@
 # Overview
 
-The goal of the `MERC` project is to provide a generic set of libraries and tools for (specification language-agnostic) model checking, written in the Rust language. The name is an acronym for "[**m**CRL2](https://www.mcrl2.org/web/index.html) **e**xcept **R**eliable & **C**oncurrent", which should not be taken literally. 
+The goal of the `MERC` project is to provide a generic set of libraries and tools for (specification language-agnostic) model checking, written in the [Rust](https://rust-lang.org/) language. The name is an acronym for "[**m**CRL2](https://www.mcrl2.org/web/index.html) **e**xcept **R**eliable & **C**oncurrent", which should not be taken literally. 
 
 We aim to demonstrate efficient and correct implementations using Rust. The main focus is on clean interfaces to allow the libraries to be reused as well. The toolset supports and is tested on all major platforms: Linux, macOS and Windows.
 

@@ -21,6 +21,6 @@ pub fn publish_crates() {
         // First do a dry run of the publish command to check that everything is fine.
         cmd!("cargo", "publish", "--dry-run", "-p", library)
             .run()
-            .unwrap_or_else(|_| panic!("Failed to publish crate {}", library));
+            .unwrap_or_else(|err| panic!("Failed to publish crate {}: {}", library, err));
     }
 }

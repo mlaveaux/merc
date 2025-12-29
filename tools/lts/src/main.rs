@@ -15,6 +15,8 @@ use merc_lts::apply_lts_pair;
 use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
+use merc_preorder::RefinementType;
+use merc_preorder::is_refinement;
 use merc_reduction::Equivalence;
 use merc_reduction::reduce_lts;
 use merc_tools::Version;
@@ -49,6 +51,7 @@ enum Commands {
     Info(InfoArgs),
     Reduce(ReduceArgs),
     Compare(CompareArgs),
+    Refines(RefinesArgs),
 }
 
 #[derive(clap::Args, Debug)]
@@ -59,7 +62,7 @@ struct InfoArgs {
 }
 
 #[derive(clap::Args, Debug)]
-#[command(about = "Reduces the given explicit LTS modulo an equivalent relation")]
+#[command(about = "Reduces the given LTS modulo an equivalent relation")]
 struct ReduceArgs {
     equivalence: Equivalence,
 
@@ -81,7 +84,7 @@ struct ReduceArgs {
 }
 
 #[derive(clap::Args, Debug)]
-#[command(about = "Reduces the given explicit LTS modulo an equivalent relation")]
+#[command(about = "Reduces the given LTS modulo an equivalent relation")]
 struct CompareArgs {
     equivalence: Equivalence,
 
@@ -101,6 +104,19 @@ struct CompareArgs {
         value_delimiter = ','
     )]
     tau: Option<Vec<String>>,
+}
+
+#[derive(clap::Args, Debug)]
+#[command(about = "Checks whether the given implementation LTS refines the given specification LTS modulo various preorders.")]
+struct RefinesArgs {
+    /// Selects the preorder to check for refinement.
+    refinement: RefinementType,
+
+    /// Specify the implementation LTS.
+    implementation_filename: String,
+
+    /// Specify the specification LTS.
+    specification_filename: String,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -128,6 +144,9 @@ fn main() -> Result<ExitCode, MercError> {
             }
             Commands::Compare(args) => {
                 handle_compare(args, &mut timing)?;
+            }
+            Commands::Refines(args) => {
+                handle_refinement(args, &mut timing)?;
             }
         }
     }
@@ -200,6 +219,42 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
         })?;
     } else {
         return Err("Unsupported file format for reduction.".into());
+    }
+
+    Ok(())
+}
+
+fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), MercError> {
+    let impl_path = Path::new(&args.implementation_filename);
+    let spec_path = Path::new(&args.specification_filename);
+    let format = guess_format_from_extension(impl_path, None).ok_or("Unknown LTS file format.")?;
+
+    if format != LtsFormat::Sym {
+        let impl_lts = read_explicit_lts(impl_path, format, Vec::new(), timing)?;
+        let spec_lts = read_explicit_lts(spec_path, format, Vec::new(), timing)?;
+
+        info!(
+            "Implementation LTS has {} states and {} transitions.",
+            LargeFormatter(impl_lts.num_of_states()),
+            LargeFormatter(impl_lts.num_of_transitions())
+        );
+        info!(
+            "Specification LTS has {} states and {} transitions.",
+            LargeFormatter(spec_lts.num_of_states()),
+            LargeFormatter(spec_lts.num_of_transitions())
+        );
+        
+        let refines = apply_lts_pair!(impl_lts, spec_lts, timing, |left, right, timing| {
+            is_refinement(left, right, args.refinement, timing)
+        });
+
+        if refines {
+            println!("true");
+        } else {
+            println!("false");
+        }
+
+        print_allocator_metrics();
     }
 
     Ok(())

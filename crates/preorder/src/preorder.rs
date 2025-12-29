@@ -5,7 +5,7 @@ use merc_utilities::Timing;
 use crate::ExplorationStrategy;
 use crate::is_failures_refinement;
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum RefinementType {
     Trace,
 }

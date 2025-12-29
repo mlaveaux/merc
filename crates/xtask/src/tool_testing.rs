@@ -16,8 +16,7 @@ pub fn test_tools(directory: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     // Find the binaries
-    let cwd = env::current_dir()?;
-    let merc_lts = which_in("merc-lts", Some(directory), cwd)?;
+    let merc_lts = which_in("merc-lts", Some(directory), env::current_dir()?)?;
 
     // Copy some test files to the temporary directory.
     std::fs::copy(directory.join("../examples/lts/abp.aut"), tmp_path.join("abp.aut"))?;
