@@ -327,44 +327,27 @@ impl fmt::Display for LtsMetrics {
     }
 }
 
-impl<L: TransitionLabel> fmt::Debug for LabelledTransitionSystem<L> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Initial state: {} (total: {})",
-            self.initial_state,
-            self.num_of_states()
-        )?;
-
-        for state_index in self.iter_states() {
-            for transition in self.outgoing_transitions(state_index) {
-                let label_name = &self.labels[transition.label.value()];
-
-                writeln!(f, "{state_index} --[{label_name}]-> {}", transition.to)?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use merc_io::DumpFiles;
     use merc_utilities::random_test;
 
-    use crate::random_lts;
+    use crate::{random_lts, write_aut};
 
     #[test]
     fn test_labelled_transition_system_merge() {
-        random_test(1, |rng| {
+        random_test(100, |rng| {
+            let mut files = DumpFiles::new("test_labelled_transition_system_merge");
+
             let left = random_lts(rng, 5, 5, 10);
             let right = random_lts(rng, 5, 10, 10);
 
-            println!("Left LTS:\n{:?}", left);
-            println!("Right LTS:\n{:?}", right);
+            files.dump("left.aut", |f| write_aut(f, &left)).unwrap();
+            files.dump("right.aut", |f| write_aut(f, &right)).unwrap();
+
             let (merged, _offset) = left.clone().merge_disjoint_impl(&right);
 
-            println!("Merged LTS:\n{:?}", merged);
+            files.dump("merged.aut", |f| write_aut(f, &merged)).unwrap();
         })
     }
 }

@@ -1,7 +1,5 @@
 #![forbid(unsafe_code)]
 
-use std::fmt;
-
 use log::debug;
 use log::trace;
 use merc_io::LargeFormatter;
@@ -172,17 +170,19 @@ fn strongly_connect<F>(
 /// Returns true iff the labelled transition system has tau-loops.
 pub fn has_tau_loop<L>(lts: &L) -> bool
 where
-    L: LTS + fmt::Debug,
+    L: LTS,
 {
     sort_topological(lts, |label_index, _| lts.is_hidden_label(label_index), false).is_err()
 }
 
 #[cfg(test)]
 mod tests {
+    use merc_io::DumpFiles;
     use merc_lts::LabelIndex;
     use merc_lts::LabelledTransitionSystem;
     use merc_lts::StateIndex;
     use merc_lts::random_lts;
+    use merc_lts::write_aut;
     use merc_utilities::random_test;
     use test_log::test;
 
@@ -222,12 +222,16 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_random_tau_scc_decomposition() {
         random_test(100, |rng| {
+            let mut files = DumpFiles::new("test_random_tau_scc_decomposition");
+
             let lts = random_lts(rng, 10, 3, 3);
-            println!("LTS: {:?}", lts);
+            files.dump("input.aut", |f| write_aut(f, &lts)).unwrap();
 
             let partitioning = tau_scc_decomposition(&lts);
             let reduction = quotient_lts_naive(&lts, &partitioning, true);
             assert!(!has_tau_loop(&reduction), "The SCC decomposition contains tau-loops");
+
+            files.dump("tau_scc_decomposition.aut", |f| write_aut(f, &reduction)).unwrap();
 
             // Check that states in a strongly connected component are reachable from each other.
             for state_index in lts.iter_states() {

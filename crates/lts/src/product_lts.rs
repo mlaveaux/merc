@@ -129,26 +129,30 @@ pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(
 
 #[cfg(test)]
 mod tests {
-    use crate::random_lts;
+    use crate::{random_lts, write_aut};
 
     use super::*;
 
-    use log::trace;
+    use merc_io::DumpFiles;
     use test_log::test;
 
     use merc_utilities::random_test;
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    fn random_lts_product_test() {
+    fn test_random_lts_product() {
         random_test(100, |rng| {
+            let mut files = DumpFiles::new("test_random_lts_product");
+
             // This test only checks the assertions of an LTS internally.
             let left = random_lts(rng, 10, 3, 3);
             let right = random_lts(rng, 10, 3, 3);
 
-            trace!("{left:?}");
-            trace!("{right:?}");
-            let _product = product_lts(&left, &right, None);
+            files.dump("left.aut", |f| write_aut(f, &left)).unwrap();
+            files.dump("right.aut", |f| write_aut(f, &right)).unwrap();
+            let product = product_lts(&left, &right, None);
+
+            files.dump("product.aut", |f| write_aut(f, &product)).unwrap();
         });
     }
 }

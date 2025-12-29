@@ -1,7 +1,5 @@
 #![forbid(unsafe_code)]
 
-use std::fmt;
-
 use log::trace;
 
 use merc_lts::LTS;
@@ -18,7 +16,7 @@ use merc_utilities::is_valid_permutation;
 pub fn sort_topological<F, L>(lts: &L, filter: F, reverse: bool) -> Result<Vec<StateIndex>, MercError>
 where
     F: Fn(LabelIndex, StateIndex) -> bool,
-    L: LTS + fmt::Debug,
+    L: LTS,
 {
     // The resulting order of states.
     let mut stack = Vec::new();
@@ -57,7 +55,7 @@ where
 
     debug_assert!(
         is_topologically_sorted(lts, filter, |i| reorder[i], reverse),
-        "The permutation {reorder:?} is not a valid topological ordering of the states of the given LTS: {lts:?}"
+        "The permutation {reorder:?} is not a valid topological ordering for the states of the given LTS"
     );
 
     Ok(reorder)
@@ -152,8 +150,10 @@ where
 #[cfg(test)]
 mod tests {
 
+    use merc_io::DumpFiles;
     use merc_lts::LabelledTransitionSystem;
     use merc_lts::random_lts;
+    use merc_lts::write_aut;
     use merc_utilities::random_test;
     use rand::seq::SliceRandom;
     use test_log::test;
@@ -173,7 +173,10 @@ mod tests {
     #[test]
     fn test_random_reorder_states() {
         random_test(100, |rng| {
+            let mut files = DumpFiles::new("test_random_reorder_states");
+
             let lts = random_lts(rng, 10, 3, 2);
+            files.dump("input.aut", |f| write_aut(f, &lts)).unwrap();
 
             // Generate a random permutation.
             let mut rng = rand::rng();
@@ -184,9 +187,7 @@ mod tests {
             };
 
             let new_lts = LabelledTransitionSystem::new_from_permutation(lts.clone(), |i| order[i]);
-
-            trace!("{:?}", lts);
-            trace!("{:?}", new_lts);
+            files.dump("reordered.aut", |f| write_aut(f, &new_lts)).unwrap();
 
             assert_eq!(new_lts.num_of_labels(), lts.num_of_labels());
         });
