@@ -99,7 +99,7 @@ pub fn is_failures_refinement<L: LTS, const COUNTER_EXAMPLE: bool>(
                 return false; //    return false;
             }
 
-            if !antichain.insert(impl_transition.to, spec_prime.clone()) {
+            if antichain.insert(impl_transition.to, spec_prime.clone()) {
                 // if antichain_insert(impl,spec') then
                 working.push((impl_transition.to, spec_prime));
             }
@@ -127,7 +127,7 @@ mod tests {
     #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
     fn test_random_trace_refinement() {
 
-        random_test(1, |rng| {
+        random_test(100, |rng| {
             let mut files = DumpFiles::new("test_random_trace_refinement");
 
             let spec_lts = random_lts(rng, 10, 20, 5);

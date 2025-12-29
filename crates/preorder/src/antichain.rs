@@ -52,6 +52,7 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
                 });
 
                 if !contains {
+                    self.antichain_misses += 1; // Was not present
                     entry.insert(value.clone());
                     inserted = true;
                 }

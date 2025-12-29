@@ -269,18 +269,19 @@ impl SymmetryAlgorithm {
                 );
 
                 // Compute the product of the current data group with the already concatenated ones.
+                let number_of_parametes = parameter_indices.len();
                 if number_of_permutations == 1 {
-                    all_data_groups = Box::new(permutation_group(parameter_indices.clone()))
+                    all_data_groups = Box::new(permutation_group(parameter_indices))
                         as Box<dyn CloneIterator<Item = Permutation>>;
                 } else {
                     all_data_groups = Box::new(
                         all_data_groups
-                            .cartesian_product(permutation_group(parameter_indices.clone()))
+                            .cartesian_product(permutation_group(parameter_indices))
                             .map(|(a, b)| a.concat(&b)),
                     ) as Box<dyn CloneIterator<Item = Permutation>>;
                 }
 
-                number_of_permutations *= permutation_group_size(parameter_indices.len());
+                number_of_permutations *= permutation_group_size(number_of_parametes);
             }
 
             (number_of_permutations, all_data_groups)
@@ -307,7 +308,7 @@ impl SymmetryAlgorithm {
                 permutation_group(control_flow_parameter_indices)
                     .cartesian_product(all_data_groups)
                     .filter(move |(a, b)| {
-                        let pi = a.clone().concat(b);
+                        let pi = a.concat(b);
 
                         // Print progress messages.
                         self.num_of_checked_candidates

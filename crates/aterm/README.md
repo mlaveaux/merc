@@ -98,7 +98,7 @@ mod inner {
     use merc_aterm::Symbol;
     use merc_aterm::SymbolRef;
     use merc_aterm::Markable;
-    use merc_aterm::Marker;
+    use merc_aterm::storage::Marker;
     use merc_aterm::Transmutable;
 
     // Uses the Term trait to specify a predicate for terms that are data expressions

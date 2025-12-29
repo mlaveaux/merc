@@ -16,7 +16,7 @@ use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
 use merc_preorder::RefinementType;
-use merc_preorder::is_refinement;
+use merc_preorder::refines;
 use merc_reduction::Equivalence;
 use merc_reduction::reduce_lts;
 use merc_tools::Version;
@@ -236,7 +236,7 @@ fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), Merc
     );
     
     let refines = apply_lts_pair!(impl_lts, spec_lts, timing, |left, right, timing| {
-        is_refinement(left, right, args.refinement, timing)
+        refines(left, right, args.refinement, timing)
     });
 
     if refines {
