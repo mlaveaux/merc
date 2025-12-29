@@ -193,7 +193,7 @@ pub fn weak_bisim_sigref_inductive_naive<L: LTS>(
 }
 
 /// Computes a branching bisimulation partitioning using signature refinement without dirty blocks.
-pub fn weak_bisim_sigref_naive(lts: impl LTS, timing: &mut Timing) -> (LabelledTransitionSystem, IndexedPartition) {
+pub fn weak_bisim_sigref_naive<L: LTS>(lts: L, timing: &mut Timing) -> (LabelledTransitionSystem<L::Label>, IndexedPartition) {
     let mut timepre = timing.start("preprocess");
     let preprocessed_lts = preprocess_branching(lts);
     timepre.finish();
