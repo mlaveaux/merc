@@ -73,7 +73,7 @@ fn test_parse_regular_expression() {
 
 #[test]
 fn test_parse_procexpr() {
-    let _ = test_logger();
+    test_logger();
 
     use indoc::indoc;
 
@@ -93,7 +93,7 @@ fn test_parse_procexpr() {
 
 #[test]
 fn test_parse_statefrm() {
-    let _ = test_logger();
+    test_logger();
 
     use indoc::indoc;
 

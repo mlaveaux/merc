@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_protection_set_basic() {
-        let _ = test_logger();
+        test_logger();
 
         let mut set = ProtectionSet::<String>::new();
 

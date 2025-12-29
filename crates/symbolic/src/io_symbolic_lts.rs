@@ -15,7 +15,36 @@ use merc_utilities::MercError;
 use crate::SummandGroup;
 use crate::SymbolicLts;
 
-/// Reads a symbolic LTS from a binary stream.
+/// Reads a symbolic LTS from a binary stream in the mCRL2 `.sym` format.
+/// 
+/// # Details
+/// 
+/// The stream contains
+/// <marker>: ATerm
+/// <data specification>
+/// <process parameters>: ATermList<ATerm>
+/// 
+/// <initial state>: LDD
+/// <states>: LDD
+/// 
+/// For each process parameter:
+///   <number of entries>: u64
+///   For each entry:
+///     <value>: ATerm
+/// 
+/// <number of action labels>: u64
+/// For each action label:
+///   <action label>: ATerm
+/// 
+/// <number of summand groups>: u64
+/// For each summand group:
+///  <number of read parameters>: u64
+///  For each read parameter:
+///    <read parameter>: ATerm
+/// 
+/// <number of write parameters>: u64
+/// For each write parameter:
+///  <write parameter>: ATerm
 pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<SymbolicLts, MercError> {
     let aterm_stream = BinaryATermReader::new(reader)?;
     let mut stream = BinaryLddReader::new(aterm_stream)?;
@@ -49,8 +78,19 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
     let mut summand_groups = Vec::new();
     let num_of_groups = stream.read_integer()?;
     for _ in 0..num_of_groups {
-        let read_parameters: Vec<ATerm> = stream.read_aterm_iter()?.collect::<Result<Vec<_>, _>>()?;
-        let write_parameters: Vec<ATerm> = stream.read_aterm_iter()?.collect::<Result<Vec<_>, _>>()?;
+
+        // Note: this is not an ATermInt, as expected by `read_aterm_iter`, but a variable integer.
+        let num_of_reads = stream.read_integer()?;
+        let mut read_parameters: Vec<ATerm> = Vec::with_capacity(num_of_reads as usize);
+        for _ in 0..num_of_reads {
+            read_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?);
+        }
+
+        let num_of_writes = stream.read_integer()?;
+        let mut write_parameters: Vec<ATerm> = Vec::with_capacity(num_of_reads as usize);
+        for _ in 0..num_of_writes {
+            write_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?);
+        }
 
         let relation = stream.read_ldd(storage)?;
 
@@ -67,11 +107,14 @@ fn symbolic_labelled_transition_system_mark() -> ATerm {
 
 #[cfg(test)]
 mod tests {
+    use merc_utilities::test_logger;
+
     use super::*;
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_read_symbolic_lts_wms_sym() {
+        test_logger();
         let input = include_bytes!("../../../examples/lts/WMS.sym");
 
         let mut storage = Storage::new();

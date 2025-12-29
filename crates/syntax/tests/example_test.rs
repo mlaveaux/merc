@@ -217,7 +217,7 @@ fn check_snapshot<T: fmt::Display>(result: &T, snapshot_path: &Path) -> Result<(
 #[test_case(include_str!("../../../examples/mCRL2/visualisation/carpet/carpet.mcrl2"), "tests/snapshot/result_carpet.mcrl2" ; "carpet.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/visualisation/cube/cube.mcrl2"), "tests/snapshot/result_cube.mcrl2" ; "cube.mcrl2")]
 fn test_parse_mcrl2_spec(input: &str, snapshot_file: &str) {
-    let _ = test_logger();
+    test_logger();
 
     match UntypedProcessSpecification::parse(input) {
         Ok(spec) => {
@@ -382,7 +382,7 @@ fn test_parse_mcrl2_spec(input: &str, snapshot_file: &str) {
 #[test_case(include_str!("../../../examples/mCRL2/software_models/Treiber_stack/Treiber_CAS/properties/Correct release implies correct retrieve.mcf"), "tests/snapshot/result_correct_release_implies_correct_retrieve.mcf" ; "correct_release_implies_correct_retrieve.mcf")]
 #[test_case(include_str!("../../../examples/mCRL2/software_models/Treiber_stack/Treiber_CAS/properties/Inevitably retrieve when stacksize is 2.mcf"), "tests/snapshot/result_inevitably_retrieve_when_stacksize_is_2.mcf" ; "inevitably_retrieve_when_stacksize_is_2.mcf")]
 fn test_parse_mcrl2_modal_formula(input: &str, snapshot_file: &str) {
-    let _ = test_logger();
+    test_logger();
 
     match UntypedStateFrmSpec::parse(input) {
         Ok(spec) => {
@@ -479,7 +479,7 @@ fn test_parse_mcrl2_modal_formula(input: &str, snapshot_file: &str) {
 #[test_case(include_str!("../../../examples/REC/mcrl2/tautologyhard.dataspec"), "tests/snapshot/result_tautologyhard.dataspec" ; "tautologyhard.dataspec")]
 #[test_case(include_str!("../../../examples/REC/mcrl2/tricky.dataspec"), "tests/snapshot/result_tricky.dataspec" ; "tricky.dataspec")]
 fn test_parse_mcrl2_dataspec(input: &str, snapshot_file: &str) {
-    let _ = test_logger();
+    test_logger();
 
     match UntypedDataSpecification::parse(input) {
         Ok(spec) => {
@@ -495,7 +495,7 @@ fn test_parse_mcrl2_dataspec(input: &str, snapshot_file: &str) {
 #[test_case(include_str!("../../../examples/mCRL2/pbes/overloading.txt"), "tests/snapshot/result_overloading.txt" ; "overloading.txt")]
 #[test_case(include_str!("../../../examples/mCRL2/pbes/true.txt"), "tests/snapshot/result_true.txt" ; "true.txt")]
 fn test_parse_pbes(input: &str, snapshot_file: &str) {
-    let _ = test_logger();
+    test_logger();
 
     match UntypedPbes::parse(input) {
         Ok(spec) => {
