@@ -87,25 +87,9 @@ pub fn package() -> Result<(), Box<dyn Error>> {
     );
 
     // Add the LICENSE to the package
+    let license_src = workspace_root.join("LICENSE");
+    let license_dest = package_dir.join("LICENSE");
+    copy(&license_src, &license_dest)?;
 
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Box<dyn Error>> {
-    use std::fs;
-
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let dst_path = dst.join(entry.file_name());
-
-        if ty.is_dir() {
-            fs::create_dir_all(&dst_path)?;
-            copy_dir_all(&entry.path(), &dst_path)?;
-        } else {
-            fs::copy(entry.path(), dst_path)?;
-        }
-    }
     Ok(())
 }
