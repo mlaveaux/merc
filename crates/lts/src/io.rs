@@ -135,9 +135,6 @@ pub fn read_explicit_lts(
     let result = match format {
         LtsFormat::Aut => GenericLts::Aut(read_aut(&file, hidden_labels)?),
         LtsFormat::Lts => GenericLts::Lts(read_lts(&file, hidden_labels)?),
-        LtsFormat::Sym => {
-            panic!("Cannot read symbolic LTS as explicit LTS.")
-        }
     };
 
     time_read.finish();

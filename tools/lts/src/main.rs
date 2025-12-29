@@ -163,24 +163,20 @@ fn main() -> Result<ExitCode, MercError> {
 fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
 
-    let format = guess_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
-    if format != LtsFormat::Sym {
-        let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
-        println!(
-            "LTS has {} states and {} transitions.",
-            LargeFormatter(lts.num_of_states()),
-            LargeFormatter(lts.num_of_transitions())
-        );
+    let format = guess_lts_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
+    let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
+    println!(
+        "LTS has {} states and {} transitions.",
+        LargeFormatter(lts.num_of_states()),
+        LargeFormatter(lts.num_of_transitions())
+    );
 
-        apply_lts!(lts, (), |lts, _| {
-            println!("Labels:");
-            for label in lts.labels() {
-                println!("\t {}", label);
-            }
-        });
-    } else {
-        return Err("Unsupported file format for info.".into());
-    }
+    apply_lts!(lts, (), |lts, _| {
+        println!("Labels:");
+        for label in lts.labels() {
+            println!("\t {}", label);
+        }
+    });
 
     Ok(())
 }
@@ -197,64 +193,56 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
         LargeFormatter(lts.num_of_transitions())
     );
 
-    print_allocator_metrics();
+    apply_lts!(lts, timing, |lts, timing| -> Result<(), MercError> {
+        let reduced_lts = reduce_lts(lts, args.equivalence, timing);
 
-        apply_lts!(lts, timing, |lts, timing| -> Result<(), MercError> {
-            let reduced_lts = reduce_lts(lts, args.equivalence, timing);
+        info!(
+            "Reduced LTS has {} states and {} transitions.",
+            LargeFormatter(reduced_lts.num_of_states()),
+            LargeFormatter(reduced_lts.num_of_transitions())
+        );
 
-            info!(
-                "Reduced LTS has {} states and {} transitions.",
-                LargeFormatter(reduced_lts.num_of_states()),
-                LargeFormatter(reduced_lts.num_of_transitions())
-            );
+        if let Some(file) = &args.output {
+            let mut writer = File::create(file)?;
+            write_aut(&mut writer, &reduced_lts)?;
+        } else {
+            write_aut(&mut stdout(), &reduced_lts)?;
+        }
 
-            if let Some(file) = &args.output {
-                let mut writer = File::create(file)?;
-                write_aut(&mut writer, &reduced_lts)?;
-            } else {
-                write_aut(&mut stdout(), &reduced_lts)?;
-            }
-
-            Ok(())
-        })?;
-    } else {
-        return Err("Unsupported file format for reduction.".into());
-    }
+        Ok(())
+    })?;
 
     Ok(())
 }
 
+/// Handles the refinement checking between two LTSs.
 fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), MercError> {
     let impl_path = Path::new(&args.implementation_filename);
     let spec_path = Path::new(&args.specification_filename);
-    let format = guess_format_from_extension(impl_path, None).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(impl_path, None).ok_or("Unknown LTS file format.")?;
 
-    if format != LtsFormat::Sym {
-        let impl_lts = read_explicit_lts(impl_path, format, Vec::new(), timing)?;
-        let spec_lts = read_explicit_lts(spec_path, format, Vec::new(), timing)?;
+    let impl_lts = read_explicit_lts(impl_path, format, Vec::new(), timing)?;
+    let spec_lts = read_explicit_lts(spec_path, format, Vec::new(), timing)?;
 
-        info!(
-            "Implementation LTS has {} states and {} transitions.",
-            LargeFormatter(impl_lts.num_of_states()),
-            LargeFormatter(impl_lts.num_of_transitions())
-        );
-        info!(
-            "Specification LTS has {} states and {} transitions.",
-            LargeFormatter(spec_lts.num_of_states()),
-            LargeFormatter(spec_lts.num_of_transitions())
-        );
-        
-        let refines = apply_lts_pair!(impl_lts, spec_lts, timing, |left, right, timing| {
-            is_refinement(left, right, args.refinement, timing)
-        });
+    info!(
+        "Implementation LTS has {} states and {} transitions.",
+        LargeFormatter(impl_lts.num_of_states()),
+        LargeFormatter(impl_lts.num_of_transitions())
+    );
+    info!(
+        "Specification LTS has {} states and {} transitions.",
+        LargeFormatter(spec_lts.num_of_states()),
+        LargeFormatter(spec_lts.num_of_transitions())
+    );
+    
+    let refines = apply_lts_pair!(impl_lts, spec_lts, timing, |left, right, timing| {
+        is_refinement(left, right, args.refinement, timing)
+    });
 
-        if refines {
-            println!("true");
-        } else {
-            println!("false");
-        }
-
-        print_allocator_metrics();
+    if refines {
+        println!("true");
+    } else {
+        println!("false");
     }
 
     Ok(())
@@ -266,10 +254,8 @@ fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercErr
     let format = guess_lts_format_from_extension(left_path, args.filetype).ok_or("Unknown LTS file format.")?;
 
     info!("Assuming format {:?} for both LTSs.", format);
-
-    if format != LtsFormat::Sym {
-        let left_lts = read_explicit_lts(left_path, format, args.tau.clone().unwrap_or_default(), timing)?;
-        let right_lts = read_explicit_lts(right_path, format, args.tau.clone().unwrap_or_default(), timing)?;
+    let left_lts = read_explicit_lts(left_path, format, args.tau.clone().unwrap_or_default(), timing)?;
+    let right_lts = read_explicit_lts(right_path, format, args.tau.clone().unwrap_or_default(), timing)?;
 
     info!(
         "Left LTS has {} states and {} transitions.",
@@ -282,19 +268,14 @@ fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercErr
         LargeFormatter(right_lts.num_of_transitions())
     );
 
-    print_allocator_metrics();
+    let equivalent = apply_lts_pair!(left_lts, right_lts, timing, |left, right, timing| {
+        merc_reduction::compare_lts(args.equivalence, left, right, timing)
+    });
 
-        let equivalent = apply_lts_pair!(left_lts, right_lts, timing, |left, right, timing| {
-            merc_reduction::compare_lts(args.equivalence, left, right, timing)
-        });
-
-        if equivalent {
-            println!("true");
-        } else {
-            println!("false");
-        }
+    if equivalent {
+        println!("true");
     } else {
-        return Err("Unsupported file format for comparison.".into());
+        println!("false");
     }
 
     Ok(())

@@ -854,6 +854,7 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
+ "merc_io",
  "merc_ldd",
  "merc_symbolic",
  "merc_tools",

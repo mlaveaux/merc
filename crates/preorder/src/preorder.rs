@@ -17,7 +17,7 @@ pub fn is_refinement<L: LTS>(impl_lts: L, spec_lts: L, preorder: RefinementType,
             spec_lts,
             RefinementType::Trace,
             ExplorationStrategy::BFS,
-            true,
+            false,
             timing,
         ),
     }
