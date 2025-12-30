@@ -1,10 +1,8 @@
 # Current
 
+Added support for reading and writing LTSs in the `.bcg` format used by the [CADP](https://cadp.inria.fr/) toolset, this is gated behind the `cadp` feature flag.
 
-Made the AUT format compliant with the original specification. In particular,
-the internal action is now represented by `i` instead of `tau`. This means that
-`merc-lts` now requires the --tau=tau flag to read AUT files that use `tau` as
-the internal action, as is the case for mCRL2.
+Made the AUT format compliant with the original specification. In particular, the internal action is now represented by `i` instead of `tau`. This means that `merc-lts` now requires the `--tau=tau` flag to read AUT files that use `tau` as the internal action, as is the case for mCRL2.
 
 This release introduces the `merc_preorder` crate, which can be used to check whether two labelled transition systems are related by various pre-order relations, which are (weak) trace, failure refinement and failures-divergence refinement and impossible futures.
 
