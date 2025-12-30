@@ -13,7 +13,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-merc_bcg_format = []
+# Enable CADP to read and write files in the BCG format.
+cadp = []
+# Derive some additional traits for clap.
+clap = ["dep:clap"]
 
 [dependencies]
 merc_aterm.workspace = true
@@ -32,6 +35,8 @@ regex.workspace = true
 rustc-hash.workspace = true
 streaming-iterator.workspace = true
 thiserror.workspace = true
+
+clap = { workspace = true, optional = true}
 
 [dev-dependencies]
 test-log.workspace = true

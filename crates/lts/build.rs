@@ -1,14 +1,14 @@
 
-#[cfg(feature = "merc_bcg_format")]
+#[cfg(feature = "cadp")]
 use std::env;
-#[cfg(feature = "merc_bcg_format")]
+#[cfg(feature = "cadp")]
 use std::path::Path;
-#[cfg(feature = "merc_bcg_format")]
+#[cfg(feature = "cadp")]
 use std::path::PathBuf;
 
 fn main() {
 
-    #[cfg(feature = "merc_bcg_format")]
+    #[cfg(feature = "cadp")]
     if let Ok(directory) = env::var("CADP") {
         let bcg_user = Path::new(&directory).join("incl").join("bcg_user.h");
         if bcg_user.exists() {
@@ -58,6 +58,6 @@ fn main() {
             );
         }
     } else {
-        println!("cargo:error=The 'merc_bcg_format' feature is enabled, but the CADP environment variable is not set.");
+        panic!("The 'cadp' feature is enabled, but the CADP environment variable is not set.");
     }
 }

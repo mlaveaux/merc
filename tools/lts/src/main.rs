@@ -6,8 +6,6 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use clap::Subcommand;
-use clap::ValueEnum;
-use clap::builder::PossibleValue;
 use log::info;
 
 use merc_io::LargeFormatter;
@@ -64,7 +62,7 @@ enum Commands {
 #[command(about = "Prints information related to the given LTS")]
 struct InfoArgs {
     filename: String,
-    filetype: Option<LtsFormatClap>,
+    filetype: Option<LtsFormat>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -76,7 +74,7 @@ struct ReduceArgs {
     filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS file format")]
-    filetype: Option<LtsFormatClap>,
+    filetype: Option<LtsFormat>,
 
     output: Option<PathBuf>,
 
@@ -101,7 +99,7 @@ struct CompareArgs {
     right_filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS file format")]
-    filetype: Option<LtsFormatClap>,
+    filetype: Option<LtsFormat>,
 
     #[arg(
         short,
@@ -116,13 +114,13 @@ struct CompareArgs {
 #[command(about = "Converts an LTS from one format to another")]
 struct ConvertArgs {
     #[arg(long, help = "Explicitly specify the LTS input file format")]
-    input_filetype: Option<LtsFormatClap>,
+    input_filetype: Option<LtsFormat>,
 
     /// Specify the input LTS.
     filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS output file format")]
-    output_filetype: Option<LtsFormatClap>,
+    output_filetype: Option<LtsFormat>,
 
     /// Specify the output LTS.
     output: Option<PathBuf>,
@@ -150,7 +148,7 @@ struct RefinesArgs {
     specification_filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS file format")]
-    filetype: Option<LtsFormatClap>,
+    filetype: Option<LtsFormat>,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -200,7 +198,7 @@ fn main() -> Result<ExitCode, MercError> {
 fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
 
-    let format = guess_lts_format_from_extension(path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
     let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
     println!(
         "LTS has {} states and {} transitions.",
@@ -221,7 +219,7 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
 /// Reduce the given LTS into another LTS modulo any of the supported equivalences.
 fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
-    let format = guess_lts_format_from_extension(path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
 
     let lts = read_explicit_lts(path, format, args.tau.clone().unwrap_or_default(), timing)?;
     info!(
@@ -256,7 +254,7 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
 fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), MercError> {
     let impl_path = Path::new(&args.implementation_filename);
     let spec_path = Path::new(&args.specification_filename);
-    let format = guess_lts_format_from_extension(impl_path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(impl_path, args.filetype).ok_or("Unknown LTS file format.")?;
 
     let impl_lts = read_explicit_lts(impl_path, format, Vec::new(), timing)?;
     let spec_lts = read_explicit_lts(spec_path, format, Vec::new(), timing)?;
@@ -287,7 +285,7 @@ fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), Merc
 
 /// Compares two LTSs for equivalence modulo any of the available equivalences.
 fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercError> {
-    let format = guess_lts_format_from_extension(&args.left_filename, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(&args.left_filename, args.filetype).ok_or("Unknown LTS file format.")?;
 
     info!("Assuming format {:?} for both LTSs.", format);
     let left_lts = read_explicit_lts(&args.left_filename, format, args.tau.clone().unwrap_or_default(), timing)?;
@@ -319,12 +317,12 @@ fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercErr
 
 /// Converts an LTS from one format to another, does not do any reduction, see [handle_reduce] for that.
 fn handle_convert(args: &ConvertArgs, timing: &mut Timing) -> Result<(), MercError> {
-    let format = guess_lts_format_from_extension(&args.filename, args.input_filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(&args.filename, args.input_filetype).ok_or("Unknown LTS file format.")?;
     let input_lts = read_explicit_lts(&args.filename, format, args.tau.clone().unwrap_or_default(), timing)?;
 
     match input_lts {
         GenericLts::Aut(lts) => {
-            let output_format = args.output_filetype.map(|f| f.0).unwrap_or(LtsFormat::Aut);
+            let output_format = args.output_filetype.unwrap_or(LtsFormat::Aut);
 
             match output_format {
                 LtsFormat::Aut => {
@@ -353,22 +351,4 @@ fn handle_convert(args: &ConvertArgs, timing: &mut Timing) -> Result<(), MercErr
     }
 
     Ok(())
-}
-
-/// Newtype wrapper to implement `ValueEnum` for `LtsFormat`.
-#[derive(Clone, Copy, Debug)]
-struct LtsFormatClap(LtsFormat);
-
-impl ValueEnum for LtsFormatClap {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[LtsFormatClap(LtsFormat::Aut), LtsFormatClap(LtsFormat::Lts)]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        match self {
-            LtsFormatClap(LtsFormat::Aut) => Some(PossibleValue::new("aut").help("AUTomaton format")),
-            LtsFormatClap(LtsFormat::Lts) => Some(PossibleValue::new("lts").help("mCRL2 binary LTS format")),
-            LtsFormatClap(LtsFormat::Bcg) => Some(PossibleValue::new("bcg").help("BCG format (requires 'merc_bcg_format' feature)")),
-        }
-    }
 }

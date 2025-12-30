@@ -39,7 +39,7 @@ assert_eq!(lts.num_of_transitions(), 2);
 
 ## Features
 
-The `merc_bcg_format` feature flag enables support for reading and writing LTSs in the
+The `cadp` feature flag enables support for reading and writing LTSs in the
 BCG format from the [CADP](https://cadp.inria.fr/man/bcg.html) toolset. The `CADP` environment
 variable must be set to the installation path of CADP at compilation and run time for this to work.
 
@@ -50,12 +50,12 @@ variable must be set to the installation path of CADP at compilation and run tim
 Added support for reading and writing LTSs in the BCG format from the
 [CADP](https://cadp.inria.fr/man/bcg.html) toolset. This requires CADP to be
 installed on the system and the `CADP` environment variable to be set, and it is
-enabled via the `merc_bcg_format` feature flag.
+enabled via the `cadp` feature flag.
 
-Removed the `clap` dependency, this means that parsing of the `LtsFormat` enum
-must be handled separately.
+Added `clap` feature to conditionally enable the `clap` dependency to derive
+some convenience traits.
 
-Made the AUT format compliant with the original specification. In particular,
+Made the AUT format compliant with the actual specification. In particular,
 the internal action is now represented by `i` instead of `tau`.
 
 Introduce a proper `MultiAction` type to represent multi-actions as they are
