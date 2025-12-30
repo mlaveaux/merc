@@ -450,7 +450,7 @@ where {
 
                 // Keep track of the index for every state
                 let mut new_id = BlockIndex::new(key_to_signature.len());
-                if let Some((signature, index)) = id.get_key_value(&Signature::new(&builder)) {
+                if let Some((_signature, index)) = id.get_key_value(&Signature::new(&builder)) {
                     // SAFETY: We know that the signature lives as long as the arena
                     state_to_signature[state_index] = Some(index.value());
                     new_id = *index;
@@ -774,6 +774,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // Miri is too slow
     fn test_random_weak_bisim_sigref() {
         random_test(100, |rng| {
             let lts = random_lts(rng, 10, 3, 3);
