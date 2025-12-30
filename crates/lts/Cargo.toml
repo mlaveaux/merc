@@ -12,6 +12,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+merc_bcg_format = []
+
 [dependencies]
 merc_aterm.workspace = true
 merc_collections.workspace = true
@@ -32,3 +35,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
+
+[build-dependencies]
+bindgen.workspace = true
+cargo-emit = "0.2"

@@ -1,5 +1,9 @@
+
+#[cfg(feature = "merc_bcg_format")]
 use std::env;
+#[cfg(feature = "merc_bcg_format")]
 use std::path::Path;
+#[cfg(feature = "merc_bcg_format")]
 use std::path::PathBuf;
 
 fn main() {
@@ -11,6 +15,8 @@ fn main() {
             // The bindgen::Builder is the main entry point
             // to bindgen, and lets you build up options for
             // the resulting bindings.
+
+            use std::process::Command;
             let bindings = bindgen::Builder::default()
                 // The input header we would like to generate
                 // bindings for.
@@ -28,6 +34,23 @@ fn main() {
             bindings
                 .write_to_file(out_path.join("bindings.rs"))
                 .expect("Couldn't write bindings!");
+
+            // Link to the BCG library.
+            let arch = Command::new("sh")
+                .arg("-c")
+                .arg(Path::new(&directory).join("com").join("arch"))
+                .output()
+                .expect("Failed to get system architecture");
+
+            if !arch.status.success() {
+                panic!("Cannot determine system architecture for linking BCG libraries.");
+            }
+
+            let bcg_libraries = Path::new(&directory).join(format!("bin.{}", String::from_utf8_lossy(&arch.stdout).trim()));
+            cargo_emit::rustc_link_search!(bcg_libraries.to_string_lossy());
+
+            cargo_emit::rustc_link_lib!("BCG");
+            cargo_emit::rustc_link_lib!("BCG_IO");
         } else {
             panic!(
                 "CADP environment variable is set, but the file {} does not exist.",
