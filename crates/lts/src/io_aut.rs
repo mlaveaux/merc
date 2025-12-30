@@ -92,6 +92,8 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
 ///
 /// Note that the writer is buffered internally using a `BufWriter`.
 pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercError> {
+    info!("Writing LTS in .aut format...");
+
     let mut writer = BufWriter::new(writer);
     writeln!(
         writer,
@@ -118,6 +120,7 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
         }
     }
 
+    info!("Finished writing LTS.");
     Ok(())
 }
 

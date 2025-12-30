@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::ffi::OsStr;
+use std::fs::File;
 use std::path::Path;
 
 use merc_utilities::MercError;
@@ -10,6 +11,7 @@ use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::MultiAction;
 use crate::read_aut;
+use crate::read_bcg;
 use crate::read_lts;
 
 /// Convenience macro to call `GenericLts::apply` with the same function for both variants.
@@ -49,6 +51,7 @@ macro_rules! apply_lts_pair {
 pub enum LtsFormat {
     Aut,
     Lts,
+    Bcg,
 }
 
 /// Guesses the LTS file format from the file extension.
@@ -61,6 +64,8 @@ pub fn guess_lts_format_from_extension(path: &Path, format: Option<LtsFormat>) -
         Some(LtsFormat::Aut)
     } else if path.extension() == Some(OsStr::new("lts")) {
         Some(LtsFormat::Lts)
+    } else if path.extension() == Some(OsStr::new("bcg")) {
+        Some(LtsFormat::Bcg)
     } else {
         None
     }
@@ -74,6 +79,8 @@ pub enum GenericLts {
     Aut(LabelledTransitionSystem<String>),
     /// The LTS in the mCRL2 .lts format.
     Lts(LabelledTransitionSystem<MultiAction>),
+    /// The LTS in the CADP BCG format.
+    Bcg(LabelledTransitionSystem<String>),
 }
 
 impl GenericLts {
@@ -87,7 +94,8 @@ impl GenericLts {
         match (self, other) {
             (GenericLts::Aut(a), GenericLts::Aut(b)) => apply_aut(a, b, arguments),
             (GenericLts::Lts(a), GenericLts::Lts(b)) => apply_lts(a, b, arguments),
-            _ => unreachable!("Mismatched LTS variants"),
+            (GenericLts::Bcg(a), GenericLts::Bcg(b)) => apply_aut(a, b, arguments),
+            _ => panic!("Mismatched LTS variants"),
         }
     }
 }
@@ -101,6 +109,7 @@ impl GenericLts {
         match self {
             GenericLts::Aut(lts) => apply_aut(lts, arguments),
             GenericLts::Lts(lts) => apply_lts(lts, arguments),
+            GenericLts::Bcg(lts) => apply_aut(lts, arguments),
         }
     }
 
@@ -111,6 +120,7 @@ impl GenericLts {
         match self {
             GenericLts::Aut(lts) => lts.num_of_states(),
             GenericLts::Lts(lts) => lts.num_of_states(),
+            GenericLts::Bcg(lts) => lts.num_of_states(),
         }
     }
 
@@ -119,6 +129,7 @@ impl GenericLts {
         match self {
             GenericLts::Aut(lts) => lts.num_of_transitions(),
             GenericLts::Lts(lts) => lts.num_of_transitions(),
+            GenericLts::Bcg(lts) => lts.num_of_transitions(),
         }
     }
 }
@@ -130,12 +141,18 @@ pub fn read_explicit_lts(
     hidden_labels: Vec<String>,
     timing: &mut Timing,
 ) -> Result<GenericLts, MercError> {
-    let file = std::fs::File::open(path)?;
     let mut time_read = timing.start("read_aut");
 
     let result = match format {
-        LtsFormat::Aut => GenericLts::Aut(read_aut(&file, hidden_labels)?),
-        LtsFormat::Lts => GenericLts::Lts(read_lts(&file, hidden_labels)?),
+        LtsFormat::Aut => {
+            let file = File::open(path)?;
+            GenericLts::Aut(read_aut(&file, hidden_labels)?)
+        }
+        LtsFormat::Lts => {
+            let file = File::open(path)?;
+            GenericLts::Lts(read_lts(&file, hidden_labels)?)
+        }
+        LtsFormat::Bcg => GenericLts::Bcg(read_bcg(path, hidden_labels)?),
     };
 
     time_read.finish();

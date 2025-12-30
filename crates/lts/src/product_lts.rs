@@ -131,7 +131,8 @@ pub fn product_lts<L: LTS, R: LTS<Label = L::Label>>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{random_lts, write_aut};
+    use crate::random_lts;
+    use crate::write_aut;
 
     use super::*;
 

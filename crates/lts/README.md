@@ -37,9 +37,22 @@ assert_eq!(lts.num_of_states(), 2);
 assert_eq!(lts.num_of_transitions(), 2);
 ```
 
+## Features
+
+The `merc_bcg_format` feature flag enables support for reading and writing LTSs in the
+BCG format from the [CADP](https://cadp.inria.fr/man/bcg.html) toolset.
+
 ## Changelog
 
 ### Current
+
+Added support for reading and writing LTSs in the BCG format from the
+[CADP](https://cadp.inria.fr/man/bcg.html) toolset. This requires CADP
+to be installed on the system since we use its FFI to read and write BCG
+files, and is enabled via the `merc_bcg_format` feature flag.
+
+Removed the `clap` dependency, this means that parsing of the `LtsFormat` enum
+must be handled separately.
 
 Made the AUT format compliant with the original specification. In particular,
 the internal action is now represented by `i` instead of `tau`.
@@ -58,7 +71,8 @@ accomodate for the internal actions.
 
 ## Safety
 
-This crate contains no unsafe code.
+This crate contains minimal `unsafe` code for FFI with CADP, but every other module
+forbids `unsafe` code.
 
 ## Minimum Supported Rust Version
 

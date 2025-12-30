@@ -1,14 +1,17 @@
 use std::fs::File;
 use std::io::stdout;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
 use clap::Subcommand;
 use clap::ValueEnum;
+use clap::builder::PossibleValue;
 use log::info;
 
 use merc_io::LargeFormatter;
+use merc_lts::GenericLts;
 use merc_lts::LTS;
 use merc_lts::LtsFormat;
 use merc_lts::apply_lts;
@@ -16,6 +19,7 @@ use merc_lts::apply_lts_pair;
 use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_explicit_lts;
 use merc_lts::write_aut;
+use merc_lts::write_bcg;
 use merc_preorder::RefinementType;
 use merc_preorder::refines;
 use merc_reduction::Equivalence;
@@ -53,36 +57,14 @@ enum Commands {
     Reduce(ReduceArgs),
     Compare(CompareArgs),
     Refines(RefinesArgs),
-}
-
-/// Newtype wrapper to implement `ValueEnum` for `LtsFormat`.
-#[derive(Clone, Debug)]
-struct ClapLtsFormat(LtsFormat);
-
-impl ValueEnum for ClapLtsFormat {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[ClapLtsFormat(LtsFormat::Aut), ClapLtsFormat(LtsFormat::Lts)]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        match self {
-            ClapLtsFormat(LtsFormat::Aut) => Some(clap::builder::PossibleValue::new("aut").help("AUTomaton format")),
-            ClapLtsFormat(LtsFormat::Lts) => Some(clap::builder::PossibleValue::new("lts").help("mCRL2 binary LTS format")),
-        }
-    }
-}
-
-impl Into<LtsFormat> for ClapLtsFormat {
-    fn into(self) -> LtsFormat {
-        self.0
-    }
+    Convert(ConvertArgs),
 }
 
 #[derive(clap::Args, Debug)]
 #[command(about = "Prints information related to the given LTS")]
 struct InfoArgs {
     filename: String,
-    filetype: Option<ClapLtsFormat>,
+    filetype: Option<LtsFormatClap>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -91,12 +73,12 @@ struct ReduceArgs {
     equivalence: Equivalence,
 
     /// Specify the input LTS.
-    filename: String,
+    filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS file format")]
-    filetype: Option<ClapLtsFormat>,
+    filetype: Option<LtsFormatClap>,
 
-    output: Option<String>,
+    output: Option<PathBuf>,
 
     #[arg(
         short,
@@ -113,13 +95,13 @@ struct CompareArgs {
     equivalence: Equivalence,
 
     /// Specify the input LTS.
-    left_filename: String,
+    left_filename: PathBuf,
 
     /// Specify the input LTS.
-    right_filename: String,
+    right_filename: PathBuf,
 
     #[arg(long, help = "Explicitly specify the LTS file format")]
-    filetype: Option<ClapLtsFormat>,
+    filetype: Option<LtsFormatClap>,
 
     #[arg(
         short,
@@ -131,16 +113,44 @@ struct CompareArgs {
 }
 
 #[derive(clap::Args, Debug)]
+#[command(about = "Converts an LTS from one format to another")]
+struct ConvertArgs {
+    #[arg(long, help = "Explicitly specify the LTS input file format")]
+    input_filetype: Option<LtsFormatClap>,
+
+    /// Specify the input LTS.
+    filename: PathBuf,
+
+    #[arg(long, help = "Explicitly specify the LTS output file format")]
+    output_filetype: Option<LtsFormatClap>,
+
+    /// Specify the output LTS.
+    output: Option<PathBuf>,
+
+    #[arg(
+        short,
+        long,
+        help = "List of actions that should be considered tau actions",
+        value_delimiter = ','
+    )]
+    tau: Option<Vec<String>>,
+}
+
+
+#[derive(clap::Args, Debug)]
 #[command(about = "Checks whether the given implementation LTS refines the given specification LTS modulo various preorders.")]
 struct RefinesArgs {
     /// Selects the preorder to check for refinement.
     refinement: RefinementType,
 
     /// Specify the implementation LTS.
-    implementation_filename: String,
+    implementation_filename: PathBuf,
 
     /// Specify the specification LTS.
-    specification_filename: String,
+    specification_filename: PathBuf,
+
+    #[arg(long, help = "Explicitly specify the LTS file format")]
+    filetype: Option<LtsFormatClap>,
 }
 
 fn main() -> Result<ExitCode, MercError> {
@@ -172,6 +182,9 @@ fn main() -> Result<ExitCode, MercError> {
             Commands::Refines(args) => {
                 handle_refinement(args, &mut timing)?;
             }
+            Commands::Convert(args) => {
+                handle_convert(args, &mut timing)?;
+            }
         }
     }
 
@@ -187,7 +200,7 @@ fn main() -> Result<ExitCode, MercError> {
 fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
 
-    let format = guess_lts_format_from_extension(path, args.filetype.into()).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
     let lts = read_explicit_lts(path, format, Vec::new(), timing)?;
     println!(
         "LTS has {} states and {} transitions.",
@@ -208,7 +221,7 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
 /// Reduce the given LTS into another LTS modulo any of the supported equivalences.
 fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError> {
     let path = Path::new(&args.filename);
-    let format = guess_lts_format_from_extension(path, args.filetype).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
 
     let lts = read_explicit_lts(path, format, args.tau.clone().unwrap_or_default(), timing)?;
     info!(
@@ -243,7 +256,7 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
 fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), MercError> {
     let impl_path = Path::new(&args.implementation_filename);
     let spec_path = Path::new(&args.specification_filename);
-    let format = guess_lts_format_from_extension(impl_path, None).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(impl_path, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
 
     let impl_lts = read_explicit_lts(impl_path, format, Vec::new(), timing)?;
     let spec_lts = read_explicit_lts(spec_path, format, Vec::new(), timing)?;
@@ -272,14 +285,13 @@ fn handle_refinement(args: &RefinesArgs, timing: &mut Timing) -> Result<(), Merc
     Ok(())
 }
 
+/// Compares two LTSs for equivalence modulo any of the available equivalences.
 fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercError> {
-    let left_path = Path::new(&args.left_filename);
-    let right_path = Path::new(&args.right_filename);
-    let format = guess_lts_format_from_extension(left_path, args.filetype).ok_or("Unknown LTS file format.")?;
+    let format = guess_lts_format_from_extension(&args.left_filename, args.filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
 
     info!("Assuming format {:?} for both LTSs.", format);
-    let left_lts = read_explicit_lts(left_path, format, args.tau.clone().unwrap_or_default(), timing)?;
-    let right_lts = read_explicit_lts(right_path, format, args.tau.clone().unwrap_or_default(), timing)?;
+    let left_lts = read_explicit_lts(&args.left_filename, format, args.tau.clone().unwrap_or_default(), timing)?;
+    let right_lts = read_explicit_lts(&args.right_filename, format, args.tau.clone().unwrap_or_default(), timing)?;
 
     info!(
         "Left LTS has {} states and {} transitions.",
@@ -303,4 +315,60 @@ fn handle_compare(args: &CompareArgs, timing: &mut Timing) -> Result<(), MercErr
     }
 
     Ok(())
+}
+
+/// Converts an LTS from one format to another, does not do any reduction, see [handle_reduce] for that.
+fn handle_convert(args: &ConvertArgs, timing: &mut Timing) -> Result<(), MercError> {
+    let format = guess_lts_format_from_extension(&args.filename, args.input_filetype.map(|f| f.0)).ok_or("Unknown LTS file format.")?;
+    let input_lts = read_explicit_lts(&args.filename, format, args.tau.clone().unwrap_or_default(), timing)?;
+
+    match input_lts {
+        GenericLts::Aut(lts) => {
+            let output_format = args.output_filetype.map(|f| f.0).unwrap_or(LtsFormat::Aut);
+
+            match output_format {
+                LtsFormat::Aut => {
+                    if let Some(path) = &args.output {
+                        let mut output_file = File::create(path)?;
+                        write_aut(&mut output_file, &lts)?;
+                    } else {
+                        write_aut(&mut stdout(), &lts)?;
+                    }
+                }
+                LtsFormat::Bcg => {                    
+                    if let Some(path) = &args.output {
+                        write_bcg(&lts, path)?;
+                    } else {
+                        return Err("Output path must be specified when writing BCG files.".into());
+                    }
+                }
+                _ => {
+                    unimplemented!("Conversion to this LTS format is not yet implemented.");
+                }
+            }
+        }
+        _ => {
+            unimplemented!("Conversion for this LTS type is not yet implemented.");
+        }
+    }
+
+    Ok(())
+}
+
+/// Newtype wrapper to implement `ValueEnum` for `LtsFormat`.
+#[derive(Clone, Copy, Debug)]
+struct LtsFormatClap(LtsFormat);
+
+impl ValueEnum for LtsFormatClap {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[LtsFormatClap(LtsFormat::Aut), LtsFormatClap(LtsFormat::Lts)]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            LtsFormatClap(LtsFormat::Aut) => Some(PossibleValue::new("aut").help("AUTomaton format")),
+            LtsFormatClap(LtsFormat::Lts) => Some(PossibleValue::new("lts").help("mCRL2 binary LTS format")),
+            LtsFormatClap(LtsFormat::Bcg) => Some(PossibleValue::new("bcg").help("BCG format (requires 'merc_bcg_format' feature)")),
+        }
+    }
 }

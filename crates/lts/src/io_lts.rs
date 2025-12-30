@@ -100,7 +100,7 @@ pub fn read_lts(
             None => break, // The default constructed term indicates the end of the stream.
         }
     }
-    info!("Finished reading LTS");
+    info!("Finished reading LTS.");
 
     Ok(builder.finish(initial_state.ok_or("Missing initial state")?))
 }
@@ -120,7 +120,7 @@ pub fn read_lts(
 ///     parameters: ATermList
 ///     action_labels: ATermList
 /// ```
-/// 
+///
 /// Afterwards we can write the following elements in any order:
 ///
 /// ```plain
@@ -172,6 +172,7 @@ where
         }
     }
 
+    info!("Finished writing LTS.");
     Ok(())
 }
 

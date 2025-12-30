@@ -334,7 +334,8 @@ mod tests {
     use merc_io::DumpFiles;
     use merc_utilities::random_test;
 
-    use crate::{random_lts, write_aut};
+    use crate::random_lts;
+    use crate::write_aut;
 
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
