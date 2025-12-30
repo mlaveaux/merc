@@ -108,6 +108,9 @@ trybuild = "1.0"
 # Used for benchmarks
 criterion = "0.8"
 
+# Used for FFI
+bindgen = "0.72"
+
 # The workspace crates.
 merc_aterm = { version = "1.0", path = "crates/aterm" }
 merc_collections = { path = "crates/collections" }
