@@ -21,7 +21,6 @@ merc_macros.workspace = true
 merc_utilities.workspace = true
 
 bumpalo.workspace = true
-clap.workspace = true
 delegate.workspace = true
 itertools.workspace = true
 log.workspace = true
