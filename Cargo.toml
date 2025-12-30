@@ -117,7 +117,7 @@ merc_collections = { path = "crates/collections" }
 merc_data = { version = "1.0", path = "crates/data" }
 merc_io = { version = "1.0", path = "crates/io" }
 merc_ldd = { path = "crates/ldd" }
-merc_lts = { version = "1.1", path = "crates/lts" }
+merc_lts = { version = "1.1", path = "crates/lts", features = ["clap"] }
 merc_macros = { version = "1.0", path = "crates/macros" }
 merc_number = { version = "1.0", path = "crates/number" }
 merc_preorder = { path = "crates/preorder" }

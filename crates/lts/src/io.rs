@@ -48,9 +48,13 @@ macro_rules! apply_lts_pair {
 
 /// Explicitly specify the LTS file format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum LtsFormat {
+    /// The AUTomaton or ALDEBARAN format
     Aut,
+    /// The mCRL2 binary LTS format
     Lts,
+    /// The CADP BCG format (requires 'cadp' feature)
     Bcg,
 }
 

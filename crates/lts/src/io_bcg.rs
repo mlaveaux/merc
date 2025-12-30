@@ -12,22 +12,22 @@ use merc_utilities::MercError;
 use crate::LabelledTransitionSystem;
 use crate::LTS;
 
-#[cfg(not(feature = "merc_bcg_format"))]
+#[cfg(not(feature = "cadp"))]
 mod inner {
     use super::*;
 
     /// This is a stub implementation used when BCG support is not compiled in.
     pub fn read_bcg(_path: &Path, _hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
-        Err("BCG format support not compiled in, see the 'merc_bcg_format' feature.".into())
+        Err("BCG format support not compiled in, see the 'cadp' feature.".into())
     }
 
     /// This is a stub implementation used when BCG support is not compiled in.
     pub fn write_bcg(_lts: &impl LTS, _path: &Path) -> Result<(), MercError> {
-        Err("BCG format support not compiled in, see the 'merc_bcg_format' feature.".into())
+        Err("BCG format support not compiled in, see the 'cadp' feature.".into())
     }
 }
 
-#[cfg(feature = "merc_bcg_format")]
+#[cfg(feature = "cadp")]
 mod inner {
     use log::info;
     use merc_io::TimeProgress;
@@ -53,13 +53,16 @@ mod inner {
     // Include the generated bindings for the BCG C library.
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-    /// Reads a labelled transition system in the prioprietary BCG format, from the [CADP](https://cadp.inria.fr/man/bcg.html) toolset.
+    /// Reads a labelled transition system in the BCG format, from the
+    /// [CADP](https://cadp.inria.fr/man/bcg.html) toolset.
     ///
     /// # Details
     ///
-    /// This requires the `CADP` toolset to be installed for the target platform, and the `CADP` environment variable to be set.
+    /// This requires the `CADP` toolset to be installed for the target
+    /// platform, and the `CADP` environment variable to be set.
     ///
-    /// Note that the C library can only read files from disk; reading from in-memory buffers is not supported.
+    /// Note that the C library can only read files from disk; reading from
+    /// in-memory buffers is not supported.
     pub fn read_bcg(path: &Path, hidden_labels: Vec<String>) -> Result<LabelledTransitionSystem<String>, MercError> {
         initialize_bcg()?;
         info!("Reading LTS in BCG format...");
@@ -81,9 +84,9 @@ mod inner {
 
         let mut labels = Vec::with_capacity(num_of_labels as usize);
         for i in 0..num_of_labels {
-            let labe = unsafe { BCG_OT_LABEL_STRING(bcg_object, i) };
+            let label = unsafe { BCG_OT_LABEL_STRING(bcg_object, i) };
 
-            labels.push(unsafe { CStr::from_ptr(labe).to_string_lossy().into_owned() });
+            labels.push(unsafe { CStr::from_ptr(label).to_string_lossy().into_owned() });
         }
 
         // Read the initial state.
@@ -211,6 +214,7 @@ mod inner {
             .map(|label| CString::new::<String>(label.clone().into()))
             .collect::<Result<Vec<_>, _>>()?;
 
+        let mut number_of_transitions = 0;
         for state in lts.iter_states() {
             for transition in lts.outgoing_transitions(state) {
                 // SAFETY: The state label is not mutated by the C function.
@@ -221,14 +225,18 @@ mod inner {
                         transition.to.value() as u64,
                     );
                 }
+
+                progress.print(number_of_transitions);
+                number_of_transitions += 1;
             }
         }
 
         unsafe {
             BCG_IO_WRITE_BCG_END();
         }
-
-        unimplemented!()
+        
+        info!("Finished writing LTS.");
+        Ok(())
     }
 
     /// Initialize the BCG library.

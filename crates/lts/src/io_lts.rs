@@ -18,6 +18,7 @@ use merc_aterm::BinaryATermWriter;
 use merc_aterm::Symbol;
 use merc_aterm::is_list_term;
 use merc_data::DataSpecification;
+use merc_io::LargeFormatter;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
@@ -163,12 +164,24 @@ where
     writer.write_aterm(&initial_state_marker())?;
     writer.write_aterm(&ATermInt::new(*lts.initial_state_index()))?;
 
+    let num_of_transitions = lts.num_of_transitions();
+    let progress = TimeProgress::new(
+        move |written: usize| {
+            info!("Wrote {} transitions ({}%)...", LargeFormatter(written), written * 100 / num_of_transitions);
+        },
+        1,
+    );
+
+    let mut written = 0;
     for state in lts.iter_states() {
         for transition in lts.outgoing_transitions(state) {
             writer.write_aterm(&transition_marker())?;
             writer.write_aterm(&ATermInt::new(*state))?;
             writer.write_aterm(&label_terms[transition.label.value()])?;
             writer.write_aterm(&ATermInt::new(*transition.to))?;
+
+            progress.print(written);
+            written += 1;
         }
     }
 
