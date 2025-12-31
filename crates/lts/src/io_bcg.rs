@@ -100,37 +100,6 @@ mod inner {
         // Read the transitions.
         let num_of_transitions = unsafe { BCG_OT_NB_EDGES(bcg_object) };
 
-        // Default initialization
-        let mut iterator: BCG_TYPE_OT_ITERATOR = BCG_TYPE_OT_ITERATOR {
-            bcg_object_transition: std::ptr::null_mut(),
-            bcg_bcg_file_iterator: bcg_body_bcg_file_iterator { bcg_nb_edges: 0 },
-            bcg_et1_iterator: BCG_TYPE_ET1_ITERATOR {
-                bcg_edge_table: std::ptr::null_mut(),
-                bcg_current_state: 0,
-                bcg_last_edge_of_state: 0,
-                bcg_edge_number: 0,
-                bcg_edge_buffer: std::ptr::null_mut(),
-                bcg_given_state: false,
-            },
-            bcg_et2_iterator: BCG_TYPE_ET2_ITERATOR {
-                bcg_edge_table: std::ptr::null_mut(),
-                bcg_edge_number: 0,
-                bcg_index_number: 0,
-                bcg_edge_buffer: std::ptr::null_mut(),
-            },
-            bcg_edge_buffer: BCG_TYPE_EDGE {
-                bcg_end: false,
-                bcg_i: 0,
-                bcg_p: 0,
-                bcg_l: 0,
-                bcg_n: 0,
-            },
-        };
-
-        unsafe {
-            BCG_OT_START(&mut iterator, bcg_object, bcg_enum_edge_sort_BCG_UNDEFINED_SORT);
-        };
-
         let mut progress = TimeProgress::new(
             move |transitions: usize| {
                 info!(
@@ -142,26 +111,14 @@ mod inner {
             1,
         );
 
-        while !iterator.bcg_edge_buffer.bcg_end {
-            // These values are derived from the bcg_edge_sort.h file in the CADP source code, since we cannot use C macros.
-            let source = iterator.bcg_edge_buffer.bcg_p;
-            let label = iterator.bcg_edge_buffer.bcg_l;
-            let target = iterator.bcg_edge_buffer.bcg_n;
-
+        for edge in unsafe { BcgOtIterator::new(bcg_object, bcg_enum_edge_sort_BCG_UNDEFINED_SORT) } {
             builder.add_transition(
-                StateIndex::new(source as usize),
-                &labels[label as usize],
-                StateIndex::new(target as usize),
+                StateIndex::new(edge.source),
+                &labels[edge.label],
+                StateIndex::new(edge.target),
             );
 
             progress.print(builder.num_of_transitions());
-            unsafe {
-                BCG_OT_NEXT(&mut iterator);
-            }
-        }
-
-        unsafe {
-            BCG_OT_STOP(&mut iterator);
         }
 
         let lts = builder.finish(StateIndex::new(initial_state as usize));
@@ -276,6 +233,83 @@ mod inner {
         }
 
         Ok(())
+    }
+    
+    struct BcgEdge {
+        source: usize,
+        label: usize,
+        target: usize,
+    }
+
+    // Iterator wrapper for the BCG OT iterator.
+    struct BcgOtIterator {
+        inner: BCG_TYPE_OT_ITERATOR,
+    }
+
+    impl BcgOtIterator {
+        /// Create a new BCG OT iterator.
+        unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION, edge_sort: u32) -> Self {
+            let mut inner: BCG_TYPE_OT_ITERATOR = BCG_TYPE_OT_ITERATOR {
+                bcg_object_transition: std::ptr::null_mut(),
+                bcg_bcg_file_iterator: bcg_body_bcg_file_iterator { bcg_nb_edges: 0 },
+                bcg_et1_iterator: BCG_TYPE_ET1_ITERATOR {
+                    bcg_edge_table: std::ptr::null_mut(),
+                    bcg_current_state: 0,
+                    bcg_last_edge_of_state: 0,
+                    bcg_edge_number: 0,
+                    bcg_edge_buffer: std::ptr::null_mut(),
+                    bcg_given_state: false,
+                },
+                bcg_et2_iterator: BCG_TYPE_ET2_ITERATOR {
+                    bcg_edge_table: std::ptr::null_mut(),
+                    bcg_edge_number: 0,
+                    bcg_index_number: 0,
+                    bcg_edge_buffer: std::ptr::null_mut(),
+                },
+                bcg_edge_buffer: BCG_TYPE_EDGE {
+                    bcg_end: false,
+                    bcg_i: 0,
+                    bcg_p: 0,
+                    bcg_l: 0,
+                    bcg_n: 0,
+                },
+            };
+
+            unsafe { BCG_OT_START(&mut inner, bcg_object, edge_sort) };
+            Self { inner }
+        }
+    }
+
+    impl Iterator for BcgOtIterator {
+        type Item = BcgEdge;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // If we've reached the end, signal iteration end.
+            if self.inner.bcg_edge_buffer.bcg_end {
+                return None;
+            }
+
+            let edge = BcgEdge {
+                source: self.inner.bcg_edge_buffer.bcg_p as usize,
+                label: self.inner.bcg_edge_buffer.bcg_l as usize,
+                target: self.inner.bcg_edge_buffer.bcg_n as usize,
+            };
+
+            // Advance the underlying C iterator for the next call.
+            unsafe {
+                BCG_OT_NEXT(&mut self.inner);
+            }
+
+            Some(edge)
+        }
+    }
+
+    impl Drop for BcgOtIterator {
+        fn drop(&mut self) {
+            unsafe {
+                BCG_OT_STOP(&mut self.inner);
+            }
+        }
     }
 
     #[cfg(test)]
