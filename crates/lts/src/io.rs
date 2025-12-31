@@ -99,7 +99,7 @@ impl GenericLts {
             (GenericLts::Aut(a), GenericLts::Aut(b)) => apply_aut(a, b, arguments),
             (GenericLts::Lts(a), GenericLts::Lts(b)) => apply_lts(a, b, arguments),
             (GenericLts::Bcg(a), GenericLts::Bcg(b)) => apply_aut(a, b, arguments),
-            _ => panic!("Mismatched LTS variants"),
+            _ => unreachable!("Mismatched GenericLts variants in apply_pair; this indicates a programming error"),
         }
     }
 }
