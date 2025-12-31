@@ -71,9 +71,12 @@ mod inner {
         let _guard = BCG_LOCK.lock().expect("Failed to acquire BCG lock");
 
         let mut bcg_object: BCG_TYPE_OBJECT_TRANSITION = std::ptr::null_mut();
+        let filename = CString::new(path.to_string_lossy().as_ref())?;
+
+        // SAFETY: The function will not modify the string.
         unsafe {
             BCG_OT_READ_BCG_BEGIN(
-                CString::new(path.to_string_lossy().as_ref())?.into_raw(),
+                file.as_ref() as *mut i8,
                 &mut bcg_object,
                 0, // No special flags
             );
@@ -178,20 +181,25 @@ mod inner {
         String: From<L::Label>,
     {
         initialize_bcg()?;
+        info!("Writing LTS in BCG format...");
 
         // Take the lock to ensure thread-safe access to BCG functions.
         let _guard = BCG_LOCK.lock().expect("Failed to acquire BCG lock");
 
+        let filename = CString::new(path.to_string_lossy().as_ref())?;
+        let comment = CString::new("created by merc_lts")?;
+
+        // SAFETY: The C call will not modify the string.
         unsafe {
             // Equal to 2 if, in the forthcoming successive invocations of
             // function BCG_IO_WRITE_BCG_EDGE(), the sequence of actual values
             // given to the state1 argument of BCG_IO_WRITE_BCG_EDGE() will
             // increase monotonically
             BCG_IO_WRITE_BCG_BEGIN(
-                CString::new(path.to_string_lossy().as_ref())?.into_raw(),
+                filename.as_ref() as *mut i8,
                 lts.initial_state_index().value() as u64,
                 2,
-                CString::new("created by merc_lts")?.into_raw(),
+                comment.as_ref() as *mut i8,
                 false,
             );
         }
