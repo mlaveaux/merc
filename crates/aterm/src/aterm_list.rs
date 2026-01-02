@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 
 use delegate::delegate;
 use itertools::Itertools;
+use merc_utilities::MercError;
 
 use crate::ATerm;
 use crate::ATermArgs;
@@ -60,6 +61,18 @@ impl<T> ATermList<T> {
             list = list.cons(item);
         }
         list
+    }
+
+    /// Constructs a new list from an iterator that is consumed.
+    pub fn try_from_double_iter(iter: impl DoubleEndedIterator<Item = Result<T, MercError>>) -> Result<Self, MercError>
+    where
+        T: Into<ATerm>,
+    {
+        let mut list = Self::empty();
+        for item in iter.rev() {
+            list = list.cons(item?);
+        }
+        Ok(list)
     }
 
     /// Constructs a new list with the given item as the head and the current list as the tail.

@@ -19,6 +19,7 @@ pub struct DataSymbols {
     pub sort_id_symbol: ManuallyDrop<Symbol>,
     /// OpId(name, sort)
     pub data_function_symbol: ManuallyDrop<Symbol>,
+    pub data_function_symbol_no_index: ManuallyDrop<Symbol>,
     pub data_variable: ManuallyDrop<Symbol>,
     pub data_where_clause: ManuallyDrop<Symbol>,
     pub data_abstraction: ManuallyDrop<Symbol>,
@@ -32,6 +33,7 @@ impl DataSymbols {
         Self {
             sort_id_symbol: ManuallyDrop::new(Symbol::new("SortId", 1)),
             data_function_symbol: ManuallyDrop::new(Symbol::new("OpId", 2)),
+            data_function_symbol_no_index: ManuallyDrop::new(Symbol::new("OpIdNoIndex", 2)),
             data_variable: ManuallyDrop::new(Symbol::new("DataVarId", 2)),
 
             data_where_clause: ManuallyDrop::new(Symbol::new("Where", 2)),
@@ -62,7 +64,7 @@ impl DataSymbols {
     }
 
     pub fn is_data_function_symbol<'a, 'b>(&self, term: &'b impl Term<'a, 'b>) -> bool {
-        term.get_head_symbol() == **self.data_function_symbol
+        term.get_head_symbol() == **self.data_function_symbol || term.get_head_symbol() == **self.data_function_symbol_no_index
     }
 
     pub fn is_data_machine_number<'a, 'b>(&self, term: &'b impl Term<'a, 'b>) -> bool {
