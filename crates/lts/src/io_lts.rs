@@ -7,6 +7,7 @@ use std::io::Read;
 use std::io::Write;
 
 use log::info;
+use merc_aterm::is_list_term;
 use merc_aterm::ATerm;
 use merc_aterm::ATermInt;
 use merc_aterm::ATermList;
@@ -16,17 +17,16 @@ use merc_aterm::ATermWrite;
 use merc_aterm::BinaryATermReader;
 use merc_aterm::BinaryATermWriter;
 use merc_aterm::Symbol;
-use merc_aterm::is_list_term;
 use merc_data::DataSpecification;
 use merc_io::LargeFormatter;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
-use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
 use crate::MultiAction;
 use crate::StateIndex;
+use crate::LTS;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
 pub fn read_lts(
@@ -93,9 +93,17 @@ pub fn read_lts(
                 } else if is_list_term(&t) {
                     // State labels can be ignored for the reduction algorithm.
                 } else if t == initial_state_marker() {
+                    let length = ATermInt::from(reader.read_aterm()?.ok_or("Missing initial state length")?).value();
+                    if length != 1 {
+                        return Err("Initial state length greater than 1 is not supported.".into());
+                    }
+
                     initial_state = Some(StateIndex::new(
-                        ATermInt::from(reader.read_aterm()?.ok_or("Missing initial state")?).value(),
+                        ATermInt::from(reader.read_aterm()?.ok_or("Missing initial state index")?).value(),
                     ));
+                    println!("Initial state: {:?}", initial_state);
+                } else {
+                    return Err(format!("Unexpected term in LTS stream: {}", t).into());
                 }
             }
             None => break, // The default constructed term indicates the end of the stream.
@@ -167,7 +175,11 @@ where
     let num_of_transitions = lts.num_of_transitions();
     let progress = TimeProgress::new(
         move |written: usize| {
-            info!("Wrote {} transitions ({}%)...", LargeFormatter(written), written * 100 / num_of_transitions);
+            info!(
+                "Wrote {} transitions ({}%)...",
+                LargeFormatter(written),
+                written * 100 / num_of_transitions
+            );
         },
         1,
     );
@@ -215,8 +227,8 @@ mod tests {
 
     use merc_utilities::random_test;
 
-    use crate::LTS;
     use crate::random_lts_monolithic;
+    use crate::LTS;
 
     #[test]
     #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
@@ -225,6 +237,7 @@ mod tests {
 
         assert_eq!(lts.num_of_states(), 74);
         assert_eq!(lts.num_of_transitions(), 92);
+        assert_eq!(*lts.initial_state_index(), 0);
     }
 
     #[test]
@@ -258,11 +271,9 @@ mod tests {
                 // Check that transitions are the same, modulo label remapping.
                 transitions.iter().for_each(|t| {
                     let mapped_label = mapping[t.label.value()];
-                    assert!(
-                        transitions_read
-                            .iter()
-                            .any(|tr| tr.to == t.to && tr.label.value() == mapped_label)
-                    );
+                    assert!(transitions_read
+                        .iter()
+                        .any(|tr| tr.to == t.to && tr.label.value() == mapped_label));
                 });
             }
         })
