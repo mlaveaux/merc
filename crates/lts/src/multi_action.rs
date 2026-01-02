@@ -6,6 +6,7 @@ use std::hash::Hash;
 use delegate::delegate;
 
 use itertools::Itertools;
+use merc_aterm::storage::Marker;
 use merc_aterm::ATerm;
 use merc_aterm::ATermArgs;
 use merc_aterm::ATermIndex;
@@ -18,12 +19,12 @@ use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::TermIterator;
 use merc_aterm::Transmutable;
-use merc_aterm::storage::Marker;
 use merc_collections::VecSet;
+use merc_data::is_data_variable;
 use merc_data::DataExpression;
 use merc_data::DataVariable;
 use merc_data::DataVariableRef;
-use merc_data::is_data_variable;
+use merc_data::SortExpression;
 use merc_macros::merc_derive_terms;
 use merc_macros::merc_term;
 use merc_utilities::MercError;
@@ -52,9 +53,14 @@ impl MultiAction {
                     return Err(format!("Malformed action with arguments: {}", part).into());
                 }
 
+                let undefined_sort = SortExpression::unknown_sort();
+
                 let label = &part[..open_paren_index].trim();
                 let args_str = &part[open_paren_index + 1..part.len() - 1];
-                let arguments: Vec<String> = args_str.split(',').map(|s| s.trim().to_string()).collect();
+                let arguments: Vec<(String, String)> = args_str
+                    .split(',')
+                    .map(|s| (s.trim().to_string(), undefined_sort.name().to_string()))
+                    .collect();
                 actions.insert(Action {
                     label: label.to_string(),
                     arguments,
@@ -76,16 +82,22 @@ impl MultiAction {
         let action_terms: Vec<MCRL2Action> = self
             .actions
             .iter()
-            .map(|action| {
+            .map(|action| -> Result<MCRL2Action, MercError> {
                 let label_term = MCRL2ActionLabel::new(
                     ATermString::new(&action.label).copy(),
                     ATermList::<DataExpression>::empty(),
                 );
-                let arguments_term = ATermList::<DataExpression>::empty(); // TODO: Convert arguments if needed
 
-                MCRL2Action::new(label_term.copy(), arguments_term)
+                let arguments_term = ATermList::<DataExpression>::try_from_double_iter(
+                    action
+                        .arguments
+                        .iter()
+                        .map(|(name, _sort)| DataExpression::from_string(name)),
+                )?;
+
+                Ok(MCRL2Action::new(label_term.copy(), arguments_term))
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let actions_list = ATermList::<MCRL2Action>::from_double_iter(action_terms.into_iter());
         let time_term: DataExpression = DataVariable::new("@undefined_real").into();
@@ -108,9 +120,15 @@ impl MultiAction {
 
             let mut actions = VecSet::new();
             for action in multi_action.actions() {
+                let arguments = action
+                    .arguments()
+                    .iter()
+                    .map(|arg| (arg.to_string(), arg.data_sort().to_string()))
+                    .collect();
+
                 actions.insert(Action {
                     label: action.label().name().to_string(),
-                    arguments: Vec::new(), // TODO: Extract arguments if needed
+                    arguments,
                 });
             }
 
@@ -239,12 +257,12 @@ fn is_mcrl2_action_label_symbol(symbol: &SymbolRef<'_>) -> bool {
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Action {
     label: String,
-    arguments: Vec<String>,
+    arguments: Vec<(String, String)>,
 }
 
 impl Action {
-    /// Creates a new action label with the given name and arguments.
-    pub fn new(label: String, arguments: Vec<String>) -> Self {
+    /// Creates a new action label with the given name and arguments, consisting of pairs of argument names and sorts.
+    pub fn new(label: String, arguments: Vec<(String, String)>) -> Self {
         Action { label, arguments }
     }
 }
@@ -281,7 +299,7 @@ impl fmt::Display for MultiAction {
         if self.actions.is_empty() {
             write!(f, "τ")
         } else {
-            write!(f, "{{{}}}", self.actions.iter().format("|"))
+            write!(f, "{}", self.actions.iter().format("|"))
         }
     }
 }
@@ -291,7 +309,7 @@ impl fmt::Display for Action {
         if self.arguments.is_empty() {
             write!(f, "{}", self.label)
         } else {
-            let args_str = self.arguments.join(", ");
+            let args_str = self.arguments.iter().map(|(name, _sort)| name).join(", ");
             write!(f, "{}({})", self.label, args_str)
         }
     }
@@ -306,30 +324,26 @@ impl fmt::Debug for MultiAction {
 
 #[cfg(test)]
 mod tests {
+    use merc_data::SortExpression;
+
     use crate::MultiAction;
 
     #[test]
     fn test_multi_action_parse_string() {
         let action = MultiAction::from_string("a | b(1, 2) | c").unwrap();
 
+        let unknown_type = SortExpression::unknown_sort();
+
         assert_eq!(action.actions.len(), 3);
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "a" && act.arguments.is_empty())
-        );
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "b" && act.arguments == vec!["1", "2"])
-        );
-        assert!(
-            action
-                .actions
-                .iter()
-                .any(|act| act.label == "c" && act.arguments.is_empty())
-        );
+        assert!(action
+            .actions
+            .iter()
+            .any(|act| act.label == "a" && act.arguments.is_empty()));
+        assert!(action.actions.iter().any(|act| act.label == "b"
+            && act.arguments == vec![("1".to_string(), unknown_type.name().to_string()), ("2".to_string(), unknown_type.name().to_string())]));
+        assert!(action
+            .actions
+            .iter()
+            .any(|act| act.label == "c" && act.arguments.is_empty()));
     }
 }
