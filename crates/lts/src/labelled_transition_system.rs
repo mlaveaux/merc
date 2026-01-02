@@ -42,9 +42,9 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
     /// Creates a new a labelled transition system with the given transitions,
     /// labels, and hidden labels.
     ///
-    /// The initial state is the state with the given index. num_of_states is
+    /// The initial state is the state with the given index. `num_of_states`` is
     /// the number of states in the LTS, if known. If it is not known, pass
-    /// None. However, in that case the number of states will be determined
+    /// `None`. However, in that case the number of states will be determined
     /// based on the maximum state index in the transitions. And all states that
     /// do not have any outgoing transitions will simply be created as deadlock
     /// states.
@@ -134,6 +134,47 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
         LabelledTransitionSystem {
             initial_state,
             labels,
+            states,
+            transition_labels,
+            transition_to,
+        }
+    }
+
+    /// Constructs a LTS by the the a successor function for every state.
+    pub fn with_successors<F, I>(
+        initial_state: StateIndex,
+        num_of_states: usize,
+        labels: Vec<Label>,
+        mut successors: F) -> Self 
+    where F: FnMut(StateIndex) -> I,
+        I: Iterator<Item = (LabelIndex, StateIndex)>
+    {
+        assert!(*labels.first().expect("At least one label (the hidden label) must be provided") == Label::tau_label(), "The first label must be the hidden label.");
+
+        let mut states = ByteCompressedVec::new();
+        states.resize_with(num_of_states, Default::default);
+
+        let mut transition_labels = ByteCompressedVec::with_capacity(num_of_states, 16usize.bytes_required());
+        let mut transition_to = ByteCompressedVec::with_capacity(num_of_states, num_of_states.bytes_required());
+
+        for state_index in 0..num_of_states {
+            let state_index = StateIndex::new(state_index);
+            states.update(*state_index, |entry| {
+                *entry = transition_labels.len();
+            });
+
+            for (label, to) in successors(state_index) {
+                transition_labels.push(label);
+                transition_to.push(to);
+            }
+        }
+
+        // Add the sentinel state.
+        states.push(transition_labels.len());
+
+        LabelledTransitionSystem {
+            initial_state,
+            labels: vec![],
             states,
             transition_labels,
             transition_to,
