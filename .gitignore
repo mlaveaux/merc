@@ -33,3 +33,6 @@ package/
 
 # Ignore while its not yet clear whether the snaphots are correct
 crates/syntax/tests/snapshot
+
+# Ignore temporary files created by CADP
+*.o
