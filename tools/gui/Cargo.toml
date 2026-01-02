@@ -26,13 +26,13 @@ members = [
 
 [workspace.dependencies]
 clap = { version = "4.5", features = ["derive"] }
-cosmic-text = "0.15"
+cosmic-text = "0.16"
 env_logger = "0.11"
 femtovg = { version = "0.19", features = ["wgpu"] }
 glam = "0.30"
 log = "0.4"
 rfd = { version = "0.16", default-features = false, features = ["xdg-portal", "async-std"] }
-slint = { version = "1.14", features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-skia"], default-features = false}
+slint = { version = "1.14", features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-femtovg"], default-features = false }
 slint-build = "1.14"
 tiny-skia = "0.11"
 tokio = { version = "1.48", features = ["rt", "macros"] }

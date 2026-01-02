@@ -279,6 +279,20 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
         }
     }
 
+    /// Consumes the LTS and relabels its transition labels according to the given mapping.
+    pub fn relabel<L: TransitionLabel>(self, labelling: impl Fn(Label) -> L) -> LabelledTransitionSystem<L> {
+        let new_labels: Vec<L> = self.labels.iter().cloned().map(labelling).collect();
+
+        LabelledTransitionSystem {
+            initial_state: self.initial_state,
+            labels: new_labels,
+            states: self.states,
+            transition_labels: self.transition_labels,
+            transition_to: self.transition_to,
+        }
+
+    }
+
     /// Returns metrics about the LTS.
     pub fn metrics(&self) -> LtsMetrics {
         LtsMetrics {
