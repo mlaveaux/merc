@@ -340,8 +340,6 @@ mod inner {
                 return None;
             }
 
-            println!("Current state: {}", self.inner.p());
-
             let edge = self.inner.edge();
 
             unsafe {
