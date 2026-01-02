@@ -3,50 +3,51 @@
 
 slint::include_modules!();
 
-use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
 
 use clap::Parser;
 use clap::ValueEnum;
-use femtovg::Canvas;
 use femtovg::renderer::WGPURenderer;
+use femtovg::Canvas;
 use log::debug;
 use log::info;
 use log::warn;
-use merc_lts::LtsFormat;
-use merc_lts::guess_lts_format_from_extension;
-use merc_lts::read_aut;
+use slint::invoke_from_event_loop;
+use slint::quit_event_loop;
 use slint::Image;
 use slint::Rgba8Pixel;
 use slint::SharedPixelBuffer;
-use slint::invoke_from_event_loop;
-use slint::quit_event_loop;
 use wgpu::TextureDescriptor;
 use wgpu::TextureFormat;
 use wgpu::TextureUsages;
 
-use merc_lts::LTS;
+use merc_io::LargeFormatter;
+use merc_lts::apply_lts;
+use merc_lts::guess_lts_format_from_extension;
+use merc_lts::read_explicit_lts;
 use merc_lts::LabelledTransitionSystem;
+use merc_lts::LtsFormat;
+use merc_lts::LTS;
 use merc_ltsgraph_lib::FemtovgRenderer;
 use merc_ltsgraph_lib::GraphLayout;
 use merc_ltsgraph_lib::SkiaRenderer;
 use merc_ltsgraph_lib::Viewer;
-use merc_tools::Version;
 use merc_tools::console;
 use merc_tools::verbosity::VerbosityFlag;
-use merc_io::LargeFormatter;
+use merc_tools::Version;
 use merc_utilities::MercError;
+use merc_utilities::Timing;
 
-use merc_ltsgraph::PauseableThread;
 use merc_ltsgraph::init_wgpu;
 use merc_ltsgraph::show_error_dialog;
+use merc_ltsgraph::PauseableThread;
 
 /// Aligns a number up to the next multiple of the given alignment.
 pub const fn align_up(num: u32, align: u32) -> u32 {
@@ -75,9 +76,12 @@ pub struct Cli {
     #[command(flatten)]
     verbosity: VerbosityFlag,
 
+    /// Path to the labelled transition system to load
     #[arg(value_name = "FILE")]
     labelled_transition_system: Option<String>,
 
+    /// Explicitly specify the LTS format
+    #[arg(long)]
     lts_format: Option<LtsFormat>,
 
     #[arg(default_value_t = ViewerType::Cpu, value_enum)]
@@ -487,17 +491,13 @@ async fn main() -> Result<ExitCode, MercError> {
             debug!("Loading LTS {} ...", path.to_string_lossy());
 
             let format = guess_lts_format_from_extension(path, format).ok_or("Unknown LTS file format.")?;
-            if format != LtsFormat::Aut {
-                return Err(MercError::from(format!(
-                    "Unsupported LTS format {:?}, only .aut is supported in the GUI for the time being.",
-                    format
-                )));
-            }
-
-            let file = File::open(path)?;
-            match read_aut(file, vec![]) {
+            let mut timing = Timing::new();
+            match read_explicit_lts(path, format, vec![], &mut timing) {
                 Ok(lts) => {
-                    let lts = Arc::new(lts);
+                    // Ensure that the labels are strings, such that they can displayed.
+                    let lts: Arc<LabelledTransitionSystem<String>> =
+                        apply_lts!(lts, (), |lts, _| { Arc::new(lts.relabel(|label| label.to_string())) });
+
                     info!(
                         "Loaded lts with {} states and {} transitions",
                         LargeFormatter(lts.num_of_states()),
@@ -583,7 +583,11 @@ async fn main() -> Result<ExitCode, MercError> {
 
             invoke_from_event_loop(move || {
                 slint::spawn_local(async move {
-                    if let Some(handle) = rfd::AsyncFileDialog::new().add_filter("", &["aut"]).pick_file().await {
+                    if let Some(handle) = rfd::AsyncFileDialog::new()
+                        .add_filter("", &["aut", "lts", "bcg"])
+                        .pick_file()
+                        .await
+                    {
                         if load_lts(handle.path(), cli.lts_format).is_err() {
                             warn!("Failed to load LTS from file dialog.");
                         }
