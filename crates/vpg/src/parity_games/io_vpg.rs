@@ -88,7 +88,10 @@ pub fn read_vpg(manager: &BDDManagerRef, reader: impl Read) -> Result<Variabilit
     let mut edges_configuration: Vec<BDDFunction> = Vec::with_capacity(num_of_vertices);
 
     // Print progress messages
-    let progress = TimeProgress::new(|(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total), 1);
+    let progress = TimeProgress::new(
+        |(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total),
+        1,
+    );
     let mut vertex_count = 0;
     while let Some(line) = lines.next() {
         // Parse the line: <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;

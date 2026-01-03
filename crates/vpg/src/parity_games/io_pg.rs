@@ -54,7 +54,10 @@ pub fn read_pg(reader: impl Read) -> Result<ParityGame, MercError> {
         .extract();
 
     let num_of_vertices: usize = num_of_vertices_txt.parse()?;
-    let progress = TimeProgress::new(|(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total), 1);
+    let progress = TimeProgress::new(
+        |(amount, total): (usize, usize)| info!("Read {} vertices ({}%)...", amount, amount * 100 / total),
+        1,
+    );
 
     // Collect that data into the parity game structure
     let mut owner: Vec<Player> = vec![Player::Even; num_of_vertices];

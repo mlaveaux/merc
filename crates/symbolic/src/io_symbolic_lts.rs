@@ -7,6 +7,7 @@ use merc_aterm::ATermStreamable;
 use merc_aterm::BinaryATermReader;
 use merc_aterm::Symbol;
 use merc_data::DataSpecification;
+use merc_data::DataVariable;
 use merc_io::BitStreamRead;
 use merc_ldd::BinaryLddReader;
 use merc_ldd::Storage;
@@ -16,36 +17,36 @@ use crate::SummandGroup;
 use crate::SymbolicLts;
 
 /// Reads a symbolic LTS from a binary stream in the mCRL2 `.sym` format.
-/// 
+///
 /// # Details
-/// 
+///
 /// The stream contains
 /// <marker>: ATerm
 /// <data specification>
 /// <process parameters>: ATermList<ATerm>
-/// 
+///
 /// <initial state>: LDD
 /// <states>: LDD
-/// 
+///
 /// For each process parameter:
 ///   <number of entries>: u64
 ///   For each entry:
 ///     <value>: ATerm
-/// 
+///
 /// <number of action labels>: u64
 /// For each action label:
 ///   <action label>: ATerm
-/// 
+///
 /// <number of summand groups>: u64
 /// For each summand group:
 ///  <number of read parameters>: u64
 ///  For each read parameter:
 ///    <read parameter>: ATerm
-/// 
+///
 /// <number of write parameters>: u64
 /// For each write parameter:
 ///  <write parameter>: ATerm
-pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<SymbolicLts, MercError> {
+pub fn read_symbolic_lts<R: Read>(storage: &mut Storage, reader: R) -> Result<SymbolicLts, MercError> {
     let aterm_stream = BinaryATermReader::new(reader)?;
     let mut stream = BinaryLddReader::new(aterm_stream)?;
 
@@ -54,13 +55,14 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
     }
 
     let data_spec = DataSpecification::read(&mut stream)?;
-    let process_parameters: ATermList<ATerm> = stream.read_aterm()?.ok_or("Expected process parameters")?.into();
+    let process_parameters: ATermList<DataVariable> = stream.read_aterm()?.ok_or("Expected process parameters")?.into();
+    let process_parameters: Vec<DataVariable> = process_parameters.to_vec();
 
     let initial_state = stream.read_ldd(storage)?;
     let states = stream.read_ldd(storage)?;
 
     // Read the values for the process parameters.
-    for _parameter in process_parameters {
+    for _parameter in &process_parameters {
         let num_of_entries = stream.read_integer()?;
 
         for _ in 0..num_of_entries {
@@ -78,23 +80,28 @@ pub fn read_symbolic_lts<R: Read>(reader: R, storage: &mut Storage) -> Result<Sy
     let mut summand_groups = Vec::new();
     let num_of_groups = stream.read_integer()?;
     for _ in 0..num_of_groups {
-
         // Note: this is not an ATermInt, as expected by `read_aterm_iter`, but a variable integer.
         let num_of_reads = stream.read_integer()?;
-        let mut read_parameters: Vec<ATerm> = Vec::with_capacity(num_of_reads as usize);
+        let mut read_parameters: Vec<DataVariable> = Vec::with_capacity(num_of_reads as usize);
         for _ in 0..num_of_reads {
-            read_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?);
+            read_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?.into());
         }
 
         let num_of_writes = stream.read_integer()?;
-        let mut write_parameters: Vec<ATerm> = Vec::with_capacity(num_of_reads as usize);
+        let mut write_parameters: Vec<DataVariable> = Vec::with_capacity(num_of_writes as usize);
         for _ in 0..num_of_writes {
-            write_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?);
+            write_parameters.push(stream.read_aterm()?.ok_or("Unexpected end of stream")?.into());
         }
 
         let relation = stream.read_ldd(storage)?;
 
-        summand_groups.push(SummandGroup::new(read_parameters, write_parameters, relation));
+        summand_groups.push(SummandGroup::new(
+            storage,
+            &process_parameters,
+            read_parameters,
+            write_parameters,
+            relation,
+        )?);
     }
 
     Ok(SymbolicLts::new(data_spec, states, initial_state, summand_groups))
@@ -118,6 +125,6 @@ mod tests {
         let input = include_bytes!("../../../examples/lts/WMS.sym");
 
         let mut storage = Storage::new();
-        let _lts = read_symbolic_lts(&input[..], &mut storage).unwrap();
+        let _lts = read_symbolic_lts(&mut storage, &input[..]).unwrap();
     }
 }
