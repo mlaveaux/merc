@@ -1,4 +1,3 @@
-
 #[cfg(feature = "cadp")]
 use std::env;
 #[cfg(feature = "cadp")]
@@ -7,7 +6,6 @@ use std::path::Path;
 use std::path::PathBuf;
 
 fn main() {
-
     #[cfg(feature = "cadp")]
     if let Ok(directory) = env::var("CADP") {
         let bcg_user = Path::new(&directory).join("incl").join("bcg_user.h");
@@ -46,7 +44,8 @@ fn main() {
                 panic!("Cannot determine system architecture for linking BCG libraries.");
             }
 
-            let bcg_libraries = Path::new(&directory).join(format!("bin.{}", String::from_utf8_lossy(&arch.stdout).trim()));
+            let bcg_libraries =
+                Path::new(&directory).join(format!("bin.{}", String::from_utf8_lossy(&arch.stdout).trim()));
             cargo_emit::rustc_link_search!(bcg_libraries.to_string_lossy());
 
             cargo_emit::rustc_link_lib!("BCG");

@@ -9,8 +9,8 @@ use std::path::Path;
 
 use merc_utilities::MercError;
 
-use crate::LabelledTransitionSystem;
 use crate::LTS;
+use crate::LabelledTransitionSystem;
 
 #[cfg(not(feature = "cadp"))]
 mod inner {
@@ -44,7 +44,7 @@ mod inner {
 
     use merc_io::LargeFormatter;
     use merc_io::TimeProgress;
-    
+
     use crate::LabelIndex;
     use crate::LtsBuilder;
     use crate::StateIndex;
@@ -107,11 +107,9 @@ mod inner {
         for i in 0..num_of_labels {
             let label = unsafe { BCG_OT_LABEL_STRING(bcg_object, i) };
 
-            let is_visible = unsafe {
-                BCG_OT_LABEL_VISIBLE(bcg_object, i)
-            };
+            let is_visible = unsafe { BCG_OT_LABEL_VISIBLE(bcg_object, i) };
 
-            let label  = unsafe { CStr::from_ptr(label).to_string_lossy().into_owned() };
+            let label = unsafe { CStr::from_ptr(label).to_string_lossy().into_owned() };
             if is_visible {
                 label_index.insert(i as usize, labels.len()); // Map to new index.
                 labels.push(label.clone());
@@ -143,10 +141,7 @@ mod inner {
             num_of_states as usize,
             labels,
             |state| {
-                unsafe {
-                    SuccessorIter::new(bcg_object, state.value() as u64)
-                }
-                .map(|edge| {
+                unsafe { SuccessorIter::new(bcg_object, state.value() as u64) }.map(|edge| {
                     num_of_transitions.set(num_of_transitions.get() + 1);
                     progress.print(num_of_transitions.get());
                     (LabelIndex::new(label_index[&edge.label]), StateIndex::new(edge.target))
@@ -264,7 +259,7 @@ mod inner {
                 return Err(
                     "The CADP environment variable is not set; the CADP toolset must be installed to read BCG files."
                         .into(),
-                )
+                );
             }
         }
 
@@ -322,21 +317,19 @@ mod inner {
     impl SuccessorIter {
         /// Constructs a new BCG OT iterator for a speific `state`.
         pub unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION, state: u64) -> Self {
-            let mut inner  = unsafe { BcgOtIterator::new() };
+            let mut inner = unsafe { BcgOtIterator::new() };
 
             unsafe { BCG_OT_START_P(&mut inner.inner, bcg_object, bcg_enum_edge_sort_BCG_P_SORT, state) };
             Self { inner, state }
         }
     }
-    
+
     impl Iterator for SuccessorIter {
         type Item = BcgEdge;
 
         fn next(&mut self) -> Option<Self::Item> {
             // If we've reached the end, or the state has changed, signal iteration end.
-            if self.inner.end()
-                || self.inner.p() != self.state
-            {
+            if self.inner.end() || self.inner.p() != self.state {
                 return None;
             }
 
@@ -397,7 +390,7 @@ mod inner {
             self.inner.bcg_edge_buffer.bcg_p as u64
         }
 
-        /// Returns the current edge. 
+        /// Returns the current edge.
         fn edge(&self) -> BcgEdge {
             BcgEdge {
                 source: self.inner.bcg_edge_buffer.bcg_p as usize,
@@ -427,7 +420,8 @@ mod inner {
     mod tests {
         use std::path::Path;
 
-        use crate::{read_bcg, LTS};
+        use crate::LTS;
+        use crate::read_bcg;
 
         #[test]
         fn test_read_bcg() {

@@ -165,7 +165,6 @@ mod tests {
             let mut timing = Timing::new();
             files.dump("input.aut", |f| write_aut(f, &lts)).unwrap();
 
-
             let result = reduce_lts(lts.clone(), Equivalence::WeakBisim, &mut timing);
             let expected = reduce_lts(lts, Equivalence::WeakBisimSigref, &mut timing);
 

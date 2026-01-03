@@ -1,15 +1,17 @@
-use std::{fs::File, path::{Path, PathBuf}};
+use std::fs::File;
+use std::path::Path;
+use std::path::PathBuf;
 
 use log::info;
 use merc_utilities::MercError;
 
 /// A utility for dumping files, mostly used for testing and debugging
-/// 
+///
 /// # Details
-/// 
+///
 /// The given name is used to create a dedicated directory for the output files,
-/// this is especially useful for files dumped from (random) tests. 
-/// 
+/// this is especially useful for files dumped from (random) tests.
+///
 /// Uses the `MERC_DUMP=1` environment variable to enable or disable dumping files
 /// to disk, to avoid unnecessary writes during normal runs. In combination with
 /// `MERC_SEED` we can reproduce specific tests cases for random runs.

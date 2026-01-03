@@ -7,7 +7,6 @@ use std::io::Read;
 use std::io::Write;
 
 use log::info;
-use merc_aterm::is_list_term;
 use merc_aterm::ATerm;
 use merc_aterm::ATermInt;
 use merc_aterm::ATermList;
@@ -17,16 +16,17 @@ use merc_aterm::ATermWrite;
 use merc_aterm::BinaryATermReader;
 use merc_aterm::BinaryATermWriter;
 use merc_aterm::Symbol;
+use merc_aterm::is_list_term;
 use merc_data::DataSpecification;
 use merc_io::LargeFormatter;
 use merc_io::TimeProgress;
 use merc_utilities::MercError;
 
+use crate::LTS;
 use crate::LabelledTransitionSystem;
 use crate::LtsBuilder;
 use crate::MultiAction;
 use crate::StateIndex;
-use crate::LTS;
 
 /// Loads a labelled transition system from the binary 'lts' format of the mCRL2 toolset.
 pub fn read_lts(
@@ -227,8 +227,8 @@ mod tests {
 
     use merc_utilities::random_test;
 
-    use crate::random_lts_monolithic;
     use crate::LTS;
+    use crate::random_lts_monolithic;
 
     #[test]
     #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
@@ -271,9 +271,11 @@ mod tests {
                 // Check that transitions are the same, modulo label remapping.
                 transitions.iter().for_each(|t| {
                     let mapped_label = mapping[t.label.value()];
-                    assert!(transitions_read
-                        .iter()
-                        .any(|tr| tr.to == t.to && tr.label.value() == mapped_label));
+                    assert!(
+                        transitions_read
+                            .iter()
+                            .any(|tr| tr.to == t.to && tr.label.value() == mapped_label)
+                    );
                 });
             }
         })

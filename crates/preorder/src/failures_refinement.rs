@@ -126,7 +126,6 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
     fn test_random_trace_refinement() {
-
         random_test(100, |rng| {
             let mut files = DumpFiles::new("test_random_trace_refinement");
 

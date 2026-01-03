@@ -145,11 +145,19 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
         initial_state: StateIndex,
         num_of_states: usize,
         labels: Vec<Label>,
-        mut successors: F) -> Self 
-    where F: FnMut(StateIndex) -> I,
-        I: Iterator<Item = (LabelIndex, StateIndex)>
+        mut successors: F,
+    ) -> Self
+    where
+        F: FnMut(StateIndex) -> I,
+        I: Iterator<Item = (LabelIndex, StateIndex)>,
     {
-        assert!(*labels.first().expect("At least one label (the hidden label) must be provided") == Label::tau_label(), "The first label must be the hidden label.");
+        assert!(
+            *labels
+                .first()
+                .expect("At least one label (the hidden label) must be provided")
+                == Label::tau_label(),
+            "The first label must be the hidden label."
+        );
 
         let mut states = ByteCompressedVec::new();
         states.resize_with(num_of_states, Default::default);
@@ -290,7 +298,6 @@ impl<Label: TransitionLabel> LabelledTransitionSystem<Label> {
             transition_labels: self.transition_labels,
             transition_to: self.transition_to,
         }
-
     }
 
     /// Returns metrics about the LTS.

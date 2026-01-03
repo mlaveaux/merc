@@ -231,7 +231,9 @@ mod tests {
             let reduction = quotient_lts_naive(&lts, &partitioning, true);
             assert!(!has_tau_loop(&reduction), "The SCC decomposition contains tau-loops");
 
-            files.dump("tau_scc_decomposition.aut", |f| write_aut(f, &reduction)).unwrap();
+            files
+                .dump("tau_scc_decomposition.aut", |f| write_aut(f, &reduction))
+                .unwrap();
 
             // Check that states in a strongly connected component are reachable from each other.
             for state_index in lts.iter_states() {
