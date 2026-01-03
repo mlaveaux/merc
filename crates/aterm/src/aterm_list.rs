@@ -48,6 +48,11 @@ impl<T: From<ATerm>> ATermList<T> {
     pub fn head(&self) -> T {
         self.term.arg(0).protect().into()
     }
+
+    /// Converts the list into a vector.
+    pub fn to_vec(&self) -> Vec<T> {
+        self.iter().collect()
+    }
 }
 
 impl<T> ATermList<T> {
