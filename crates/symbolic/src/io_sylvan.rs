@@ -1,5 +1,6 @@
 use std::io::Read;
 
+use log::info;
 use merc_ldd::Ldd;
 use merc_ldd::Storage;
 use merc_ldd::SylvanReader;
@@ -13,6 +14,7 @@ use crate::TransitionGroup;
 
 /// Returns the (initial state, transitions) read from the file in Sylvan's format.
 pub fn read_sylvan(storage: &mut Storage, stream: &mut impl Read) -> Result<SylvanLts, MercError> {
+    info!("Reading symbolic LTS in Sylvan format...");
     let mut reader = SylvanReader::new();
 
     let _vector_length = read_u32(stream)?;
@@ -120,6 +122,8 @@ impl TransitionGroup for SylvanTransitionGroup {
 
 #[cfg(test)]
 mod test {
+    use crate::reachability;
+
     use super::*;
 
     #[test]
@@ -127,6 +131,7 @@ mod test {
         let mut storage = Storage::new();
         let bytes = include_bytes!("../../../examples/ldd/anderson.4.ldd");
         let lts = read_sylvan(&mut storage, &mut &bytes[..]).expect("Loading should work correctly");
+        reachability(&mut storage, &lts).expect("Reachability should work correctly");
     }
 
     #[test]
@@ -134,5 +139,6 @@ mod test {
         let mut storage = Storage::new();
         let bytes = include_bytes!("../../../examples/ldd/collision.4.ldd");
         let lts = read_sylvan(&mut storage, &mut &bytes[..]).expect("Loading should work correctly");
+        reachability(&mut storage, &lts).expect("Reachability should work correctly");
     }
 }

@@ -1,5 +1,4 @@
 use std::fs::File;
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -11,6 +10,7 @@ use merc_ldd::Storage;
 use merc_symbolic::SymFormat;
 use merc_symbolic::SymbolicLTS;
 use merc_symbolic::guess_format_from_extension;
+use merc_symbolic::reachability;
 use merc_symbolic::read_sylvan;
 use merc_symbolic::read_symbolic_lts;
 use merc_tools::Version;
@@ -110,19 +110,26 @@ fn handle_info(args: InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
 
 /// Explores the given symbolic LTS.
 fn handle_explore(args: ExploreArgs, _timing: &mut Timing) -> Result<(), MercError> {
-    let path = Path::new(&args.filename);
     let mut storage = Storage::new();
 
-    let format = guess_format_from_extension(path, args.format).ok_or("Cannot determine input format")?;
+    let format = guess_format_from_extension(&args.filename, args.format).ok_or("Cannot determine input format")?;
 
-    let mut file = File::open(filename)?;
+    let mut file = File::open(&args.filename)?;
+    let mut timing = Timing::new();
+
 
     match format {
         SymFormat::Sylvan => {
-            let input = read_sylvan(&mut storage, &mut file)?;
+            let mut time_read = timing.start("read_lts");
+            let lts = read_sylvan(&mut storage, &mut file)?;
+            time_read.finish();
+            
+            let mut time_explore = timing.start("explore");
+            println!("LTS has {} states", reachability(&mut storage, &lts)?);
+            time_explore.finish();
         }
         SymFormat::Sym => {
-            let input = read_symbolic_lts(&mut storage, &mut file)?;
+            let _input = read_symbolic_lts(&mut storage, &mut file)?;
         }
     }
 

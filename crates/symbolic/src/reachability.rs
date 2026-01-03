@@ -1,3 +1,5 @@
+use log::info;
+use merc_io::TimeProgress;
 use merc_ldd::Ldd;
 use merc_ldd::Storage;
 use merc_ldd::len;
@@ -32,21 +34,22 @@ pub fn reachability(storage: &mut Storage, lts: &impl SymbolicLTS) -> Result<usi
     let mut states = lts.initial_state().clone(); // The state space.
     let mut iteration = 0;
 
+    let progress = TimeProgress::new(|iteration: usize| {
+        info!("Iteration {}", iteration);
+    }, 1);
+
     while todo != *storage.empty_set() {
         let mut todo1 = storage.empty_set().clone();
         for transition in lts.transition_groups() {
-            let result = relational_product(storage, &todo, &transition.relation(), &transition.meta());
+            let result = relational_product(storage, &todo, transition.relation(), transition.meta());
             todo1 = union(storage, &todo1, &result);
         }
 
         todo = minus(storage, &todo1, &states);
         states = union(storage, &states, &todo);
-        eprintln!("iteration {}", iteration);
+        progress.print(iteration);
         iteration += 1;
     }
 
-    let num_of_states = len(storage, &states);
-    println!("The model has {} states", num_of_states);
-
-    Ok(num_of_states)
+    Ok(len(storage, &states))
 }

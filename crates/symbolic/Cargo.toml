@@ -16,6 +16,7 @@ merc_ldd.workspace = true
 merc_utilities.workspace = true
 
 clap = { workspace = true, optional = true }
+itertools.workspace = true
+log.workspace = true
 oxidd.workspace = true
 rand.workspace = true
-itertools.workspace = true

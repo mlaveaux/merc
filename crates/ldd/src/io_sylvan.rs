@@ -72,6 +72,12 @@ impl SylvanReader {
     }
 }
 
+impl Default for SylvanReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Returns a single u32 read from the given stream.
 pub fn read_u32(stream: &mut impl Read) -> Result<u32, MercError> {
     let mut buffer: [u8; 4] = Default::default();

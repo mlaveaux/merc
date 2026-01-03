@@ -1,5 +1,6 @@
 use std::io::Read;
 
+use log::info;
 use merc_aterm::ATerm;
 use merc_aterm::ATermList;
 use merc_aterm::ATermRead;
@@ -47,6 +48,8 @@ use crate::SymbolicLts;
 /// For each write parameter:
 ///  <write parameter>: ATerm
 pub fn read_symbolic_lts<R: Read>(storage: &mut Storage, reader: R) -> Result<SymbolicLts, MercError> {
+    info!("Reading symbolic LTS in the mCRL2 symbolic format...");
+
     let aterm_stream = BinaryATermReader::new(reader)?;
     let mut stream = BinaryLddReader::new(aterm_stream)?;
 

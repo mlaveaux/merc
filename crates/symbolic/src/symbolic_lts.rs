@@ -1,3 +1,5 @@
+use std::fmt;
+
 use merc_data::DataSpecification;
 use merc_data::DataVariable;
 use merc_ldd::Ldd;
@@ -104,7 +106,7 @@ impl SummandGroup {
     /// This can fail if one of the read or write parameters is not in the list of all parameters.
     pub fn new(
         storage: &mut Storage,
-        parameters: &Vec<DataVariable>,
+        parameters: &[DataVariable],
         read_parameters: Vec<DataVariable>,
         write_parameters: Vec<DataVariable>,
         relation: Ldd,
@@ -157,5 +159,16 @@ impl SummandGroup {
     /// Returns the write parameters for this summand group.
     pub fn write_parameters(&self) -> &[DataVariable] {
         &self.write_parameters
+    }
+}
+
+impl fmt::Debug for SummandGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SummandGroup")
+            .field("read_parameters", &self.read_parameters)
+            .field("read_parameter_indices", &self.read_parameter_indices)
+            .field("write_parameters", &self.write_parameters)
+            .field("write_parameter_indices", &self.write_parameter_indices)
+            .finish()
     }
 }
