@@ -64,7 +64,8 @@ impl DataSymbols {
     }
 
     pub fn is_data_function_symbol<'a, 'b>(&self, term: &'b impl Term<'a, 'b>) -> bool {
-        term.get_head_symbol() == **self.data_function_symbol || term.get_head_symbol() == **self.data_function_symbol_no_index
+        term.get_head_symbol() == **self.data_function_symbol
+            || term.get_head_symbol() == **self.data_function_symbol_no_index
     }
 
     pub fn is_data_machine_number<'a, 'b>(&self, term: &'b impl Term<'a, 'b>) -> bool {
