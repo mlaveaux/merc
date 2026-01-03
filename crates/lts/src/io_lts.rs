@@ -170,6 +170,7 @@ where
 
     // Write the initial state.
     writer.write_aterm(&initial_state_marker())?;
+    writer.write_aterm(&ATermInt::new(1))?; // Length of initial state is 1.
     writer.write_aterm(&ATermInt::new(*lts.initial_state_index()))?;
 
     let num_of_transitions = lts.num_of_transitions();
