@@ -66,7 +66,16 @@ pub fn read_aut(reader: impl Read, hidden_labels: Vec<String>) -> Result<Labelle
     let num_of_states: usize = num_of_states_txt.parse()?;
 
     let mut builder = LtsBuilder::with_capacity(Vec::new(), hidden_labels, num_of_states, 16, num_of_transitions);
-    let progress = TimeProgress::new(move |read: usize| info!("Read {} transitions {}%...", LargeFormatter(read), read * 100 / num_of_transitions), 1);
+    let progress = TimeProgress::new(
+        move |read: usize| {
+            info!(
+                "Read {} transitions {}%...",
+                LargeFormatter(read),
+                read * 100 / num_of_transitions
+            )
+        },
+        1,
+    );
 
     while let Some(line) = lines.next() {
         let (from_txt, label_txt, to_txt) =
@@ -105,7 +114,16 @@ pub fn write_aut(writer: &mut impl Write, lts: &impl LTS) -> Result<(), MercErro
     )?;
 
     let num_of_transitions = lts.num_of_transitions();
-    let progress = TimeProgress::new(move |written: usize| info!("Wrote {} transitions {}%...", LargeFormatter(written), written * 100 / num_of_transitions), 1);
+    let progress = TimeProgress::new(
+        move |written: usize| {
+            info!(
+                "Wrote {} transitions {}%...",
+                LargeFormatter(written),
+                written * 100 / num_of_transitions
+            )
+        },
+        1,
+    );
     let mut transitions_written = 0usize;
     for state_index in lts.iter_states() {
         for transition in lts.outgoing_transitions(state_index) {
