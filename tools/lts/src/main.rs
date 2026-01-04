@@ -210,7 +210,7 @@ fn handle_info(args: &InfoArgs, timing: &mut Timing) -> Result<(), MercError> {
     apply_lts!(lts, (), |lts, _| {
         println!("Labels:");
         for label in lts.labels() {
-            println!("\t {}", label);
+            println!("  {}", label);
         }
     });
 
