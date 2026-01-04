@@ -145,7 +145,7 @@ pub fn read_explicit_lts(
     hidden_labels: Vec<String>,
     timing: &mut Timing,
 ) -> Result<GenericLts, MercError> {
-    let mut time_read = timing.start("read_aut");
+    let mut time_read = timing.start("read_explicit_lts");
 
     let result = match format {
         LtsFormat::Aut => {

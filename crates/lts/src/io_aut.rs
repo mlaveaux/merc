@@ -266,42 +266,9 @@ mod tests {
             let mut buffer: Vec<u8> = Vec::new();
             write_aut(&mut buffer, &lts).unwrap();
 
-            let lts_read = read_aut(&buffer[0..], vec![]).unwrap();
+            let result_lts = read_aut(&buffer[0..], vec![]).unwrap();
 
-            println!("LTS labels: {:?}", lts.labels());
-            println!("Read LTS labels: {:?}", lts_read.labels());
-
-            // If labels are not used, the number of labels may be less. So find a remapping of old labels to new labels.
-            let mapping = lts
-                .labels()
-                .iter()
-                .enumerate()
-                .map(|(_i, label)| lts_read.labels().iter().position(|l| l == label))
-                .collect::<Vec<_>>();
-
-            // Print the mapping
-            for (i, m) in mapping.iter().enumerate() {
-                println!("Label {} mapped to {:?}", i, m);
-            }
-
-            assert_eq!(lts.num_of_states(), lts_read.num_of_states());
-            assert_eq!(lts.num_of_transitions(), lts_read.num_of_transitions());
-
-            // Check that all the outgoing transitions are the same.
-            for state_index in lts.iter_states() {
-                let transitions: Vec<_> = lts.outgoing_transitions(state_index).collect();
-                let transitions_read: Vec<_> = lts_read.outgoing_transitions(state_index).collect();
-
-                // Check that transitions are the same, modulo label remapping.
-                transitions.iter().for_each(|t| {
-                    let mapped_label = mapping[t.label.value()].expect(&format!("Label {} should be found", t.label));
-                    assert!(
-                        transitions_read
-                            .iter()
-                            .any(|tr| tr.to == t.to && tr.label.value() == mapped_label)
-                    );
-                });
-            }
+            crate::check_equivalent(&lts, &result_lts);
         })
     }
 }

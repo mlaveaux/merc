@@ -265,6 +265,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(parity_game.num_of_vertices(), 61014);
+        assert_eq!(parity_game.num_of_vertices(), 3002);
+        assert_eq!(parity_game.num_of_edges(), 4409);
     }
 }

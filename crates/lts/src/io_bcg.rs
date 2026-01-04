@@ -39,6 +39,7 @@ mod inner {
     use std::env;
     use std::ffi::CStr;
     use std::ffi::CString;
+    use std::pin::Pin;
     use std::sync::Mutex;
     use std::sync::Once;
 
@@ -283,7 +284,7 @@ mod inner {
         unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION) -> Self {
             let mut inner = unsafe { BcgOtIterator::new() };
 
-            unsafe { BCG_OT_START(&mut inner.inner, bcg_object, bcg_enum_edge_sort_BCG_UNDEFINED_SORT) };
+            unsafe { BCG_OT_START(inner.inner.as_mut().get_unchecked_mut(), bcg_object, bcg_enum_edge_sort_BCG_UNDEFINED_SORT) };
             Self { inner }
         }
     }
@@ -319,7 +320,7 @@ mod inner {
         pub unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION, state: u64) -> Self {
             let mut inner = unsafe { BcgOtIterator::new() };
 
-            unsafe { BCG_OT_START_P(&mut inner.inner, bcg_object, bcg_enum_edge_sort_BCG_P_SORT, state) };
+            unsafe { BCG_OT_START_P(inner.inner.as_mut().get_unchecked_mut(), bcg_object, bcg_enum_edge_sort_BCG_P_SORT, state) };
             Self { inner, state }
         }
     }
@@ -345,14 +346,14 @@ mod inner {
 
     /// Wrapper around the BCG OT iterator.
     struct BcgOtIterator {
-        inner: BCG_TYPE_OT_ITERATOR,
+        inner: Pin<Box<BCG_TYPE_OT_ITERATOR>>,
     }
 
     impl BcgOtIterator {
         /// Constructs a new BCG OT iterator
         pub unsafe fn new() -> Self {
             Self {
-                inner: BCG_TYPE_OT_ITERATOR {
+                inner: Box::pin(BCG_TYPE_OT_ITERATOR {
                     bcg_object_transition: std::ptr::null_mut(),
                     bcg_bcg_file_iterator: bcg_body_bcg_file_iterator { bcg_nb_edges: 0 },
                     bcg_et1_iterator: BCG_TYPE_ET1_ITERATOR {
@@ -376,7 +377,7 @@ mod inner {
                         bcg_l: 0,
                         bcg_n: 0,
                     },
-                },
+                }),
             }
         }
 
@@ -402,7 +403,7 @@ mod inner {
         /// Advance the underlying C iterator for the next call, `BCG_OT_NEXT`.
         unsafe fn next(&mut self) {
             unsafe {
-                BCG_OT_NEXT(&mut self.inner);
+                BCG_OT_NEXT(self.inner.as_mut().get_unchecked_mut());
             }
         }
     }
@@ -411,26 +412,49 @@ mod inner {
         fn drop(&mut self) {
             unsafe {
                 // The same as BCG_OT_END_ITERATE.
-                BCG_OT_STOP(&mut self.inner);
+                BCG_OT_STOP(self.inner.as_mut().get_unchecked_mut());
             }
         }
     }
 
     #[cfg(test)]
     mod tests {
+        use std::env::temp_dir;
         use std::path::Path;
 
+        use merc_utilities::random_test;
+
         use crate::LTS;
+        use crate::random_lts_monolithic;
         use crate::read_bcg;
+        use crate::write_bcg;
 
         #[test]
         fn test_read_bcg() {
             // Test reading a BCG file.
-            let lts = read_bcg(Path::new("../../examples/lts/vasy_18_73.bcg"), Vec::new()).unwrap();
+            let lts = read_bcg(Path::new("../../examples/lts/abp.bcg"), Vec::new()).unwrap();
 
-            assert_eq!(lts.num_of_states(), 18746);
-            assert_eq!(lts.num_of_transitions(), 73043);
-            assert_eq!(lts.num_of_labels(), 17);
+            assert_eq!(lts.num_of_states(), 74);
+            assert_eq!(lts.num_of_transitions(), 92);
+            assert_eq!(lts.num_of_labels(), 19);
+        }
+
+        #[test]
+        #[cfg_attr(miri, ignore)] // Too slow with miri
+        fn test_random_bcg_io() {
+            random_test(100, |rng| {
+                let lts = random_lts_monolithic::<String>(rng, 100, 3, 20);
+
+                // Use a temporary file in the target directory.
+                let tmp = temp_dir();
+
+                let file = tmp.join("test_random_bcg_io.bcg");
+                write_bcg(&lts, &file).unwrap();   
+
+                let result_lts = read_bcg(&file, Vec::new()).unwrap();
+
+                crate::check_equivalent(&lts, &result_lts);
+            });
         }
     }
 }
