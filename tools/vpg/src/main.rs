@@ -42,6 +42,9 @@ use merc_vpg::translate;
 use merc_vpg::write_pg;
 use merc_vpg::write_vpg;
 
+/// Default node capacity for the Oxidd decision diagram manager.	
+const DEFAULT_OXIDD_NODE_CAPACITY: usize = 2024;
+
 #[derive(clap::Parser, Debug)]
 #[command(
     about = "A command line tool for variability parity games",
@@ -60,7 +63,7 @@ struct Cli {
     #[arg(long, global = true, default_value_t = 1)]
     oxidd_workers: u32,
 
-    #[arg(long, global = true, default_value_t = 2024)]
+    #[arg(long, global = true, default_value_t = DEFAULT_OXIDD_NODE_CAPACITY)]
     oxidd_node_capacity: usize,
 
     #[arg(long, global = true)]
