@@ -15,7 +15,7 @@
 ///
 /// The macro takes an expression followed by `;`, followed by one or more branches separated by `,`.
 /// Each branch has the form `[$patterns] => $body`. The body is an arbitrary expression.
-/// The patterns are a comma-seperated list of either `$rule_name($binder)` or just `$binder`, each
+/// The patterns are a comma-separated list of either `$rule_name($binder)` or just `$binder`, each
 /// optionally followed by `..` to indicate a variable-length pattern.
 ///
 /// # How it works

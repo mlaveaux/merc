@@ -4,7 +4,7 @@
 use merc_pest_consume::match_nodes;
 
 // Define a simple matcher based on an enum. Each variant of the enum gives a node name, and the
-// corresponding matcher function extracts the contained value. The contructed node type stores the
+// corresponding matcher function extracts the contained value. The constructed node type stores the
 // enum variant and an optional tag.
 macro_rules! simple_matcher {
     (

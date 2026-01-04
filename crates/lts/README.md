@@ -68,7 +68,7 @@ formalism, and `τ` simply denotes the empty set.
 
 Removed `add_transition_index` from `LtsBuilder` and `LtsBuilderFast` since it
 is not correct. These builders change the indices of labels internally to
-accomodate for the internal actions.
+accommodate for the internal actions.
 
 ## Safety
 

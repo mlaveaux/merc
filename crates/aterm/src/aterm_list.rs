@@ -169,7 +169,7 @@ impl<T> From<ATerm> for ATermList<T> {
     fn from(value: ATerm) -> Self {
         debug_assert!(
             is_list_term(&value) || is_empty_list_term(&value),
-            "Can only convert a aterm_list"
+            "Can only convert an aterm_list"
         );
         ATermList::<T> {
             term: value,
@@ -182,7 +182,7 @@ impl<'a, T> From<ATermRef<'a>> for ATermList<T> {
     fn from(value: ATermRef<'a>) -> Self {
         debug_assert!(
             is_list_term(&value) || is_empty_list_term(&value),
-            "Can only convert a aterm_list"
+            "Can only convert an aterm_list"
         );
         ATermList::<T> {
             term: value.protect(),
