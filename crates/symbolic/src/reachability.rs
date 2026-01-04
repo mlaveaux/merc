@@ -34,9 +34,12 @@ pub fn reachability(storage: &mut Storage, lts: &impl SymbolicLTS) -> Result<usi
     let mut states = lts.initial_state().clone(); // The state space.
     let mut iteration = 0;
 
-    let progress = TimeProgress::new(|iteration: usize| {
-        info!("Iteration {}", iteration);
-    }, 1);
+    let progress = TimeProgress::new(
+        |iteration: usize| {
+            info!("Iteration {}", iteration);
+        },
+        1,
+    );
 
     while todo != *storage.empty_set() {
         let mut todo1 = storage.empty_set().clone();

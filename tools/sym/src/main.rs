@@ -16,7 +16,6 @@ use merc_symbolic::read_symbolic_lts;
 use merc_tools::Version;
 use merc_tools::VersionFlag;
 use merc_tools::verbosity::VerbosityFlag;
-use merc_tools::verbosity::VerbosityFlag;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
@@ -118,13 +117,12 @@ fn handle_explore(args: ExploreArgs, _timing: &mut Timing) -> Result<(), MercErr
     let mut file = File::open(&args.filename)?;
     let mut timing = Timing::new();
 
-
     match format {
         SymFormat::Sylvan => {
             let mut time_read = timing.start("read_lts");
             let lts = read_sylvan(&mut storage, &mut file)?;
             time_read.finish();
-            
+
             let mut time_explore = timing.start("explore");
             println!("LTS has {} states", reachability(&mut storage, &lts)?);
             time_explore.finish();

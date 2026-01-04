@@ -42,7 +42,7 @@ use merc_vpg::translate;
 use merc_vpg::write_pg;
 use merc_vpg::write_vpg;
 
-/// Default node capacity for the Oxidd decision diagram manager.	
+/// Default node capacity for the Oxidd decision diagram manager.
 const DEFAULT_OXIDD_NODE_CAPACITY: usize = 2024;
 
 #[derive(clap::Parser, Debug)]
