@@ -52,14 +52,15 @@ pub struct ThreadTermPool {
     /// Function symbols to represent 'DataAppl' with any number of arguments.
     data_appl: RefCell<Vec<Symbol>>,
 
-    /// A counter used to periodically trigger a garbage collection test.
-    /// This is a stupid hack, but we need to periodically test for garbage collection and this is only allowed outside of a shared
-    /// lock section. Therefore, we count (arbitrarily) to reduce the amount of this is checked.
+    /// We need to periodically test for garbage collection and this is only
+    /// allowed outside of a shared lock section. Therefore, we count
+    /// (arbitrarily) to reduce the amount of this is checked.
     gc_counter: Cell<usize>,
 
     /// Temporary storage for arguments when creating terms.
     arguments: RefCell<Vec<*const ffi::_aterm>>,
 
+    /// This is only used to keep the callback alive.
     _callback: ManuallyDrop<UniquePtr<ffi::tls_callback_container>>,
 }
 
@@ -128,7 +129,7 @@ impl ThreadTermPool {
         head: &impl Borrow<ATermRef<'a>>,
         arguments: &[impl Borrow<ATermRef<'b>>],
     ) -> ATerm {
-        // Make the temp vector sufficient length.
+        // Make the temp vector of sufficient length.
         let mut tmp_args = self.arguments.borrow_mut();
         while tmp_args.len() < arguments.len() {
             tmp_args.push(std::ptr::null());
@@ -222,7 +223,7 @@ impl ThreadTermPool {
     /// Returns true iff the given term is a data application.
     pub fn is_data_application(&self, term: &ATermRef<'_>) -> bool {
         let symbol = term.get_head_symbol();
-        // It can be that data_applications are created without create_data_application in the mcrl2 ffi.
+        // Data applications can be created without using create_data_application in the mcrl2 FFI.
         let mut data_appl = self.data_appl.borrow_mut();
         while data_appl.len() <= symbol.arity() {
             let symbol = Symbol::take(mcrl2_function_symbol_create(String::from("DataAppl"), data_appl.len()));
@@ -288,7 +289,7 @@ impl Drop for ThreadTermPool {
 
 impl fmt::Display for ThreadTermPool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: This will always print, but only depends on aterm_configuration.h
+        // Note: This will always print the global term pool metrics, only depending on the aterm_configuration.h.
         mcrl2_aterm_pool_print_metrics();
 
         write!(f, "{:?}", GLOBAL_TERM_POOL.lock())

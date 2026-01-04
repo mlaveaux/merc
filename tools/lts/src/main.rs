@@ -88,7 +88,7 @@ struct ReduceArgs {
 }
 
 #[derive(clap::Args, Debug)]
-#[command(about = "Reduces the given LTS modulo an equivalent relation")]
+#[command(about = "Compares two LTS modulo an equivalent relation")]
 struct CompareArgs {
     equivalence: Equivalence,
 
