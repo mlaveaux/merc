@@ -18,7 +18,7 @@ pub type SubstitutionBuilder = Protected<Vec<ATermRef<'static>>>;
 ///
 /// # Example
 ///
-/// The term is constructed bottom up. As an an example take the term s(s(a)).
+/// The term is constructed bottom up. As an example take the term s(s(a)).
 /// Lets say we want to replace the a with the term 0. Then we traverse the term
 /// until we have arrived at a and replace it with 0. We then construct s(0)
 /// and then construct s(s(0)).

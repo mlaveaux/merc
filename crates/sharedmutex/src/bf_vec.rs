@@ -204,7 +204,7 @@ mod tests {
             }));
         }
 
-        // Check whether threads have completed succesfully.
+        // Check whether threads have completed successfully.
         for thread in threads {
             thread.join().unwrap();
         }

@@ -16,7 +16,7 @@ This release comes with a set of five tools:
   - `merc-lts` implement branching, strong and weak (signature-based) bisimulation reduction and comparison for labelled transition systems in the mCRL2 binary [`.lts`](https://www.mcrl2.org/web/user_manual/tools/lts.html) format and the **AUT**omaton (or ALDEBARAN) [`.aut`](https://cadp.inria.fr/man/aut.html) format.
   - `merc-rewrite` allows rewriting of Rewrite Engine Competition specifications ([REC](https://doi.org/10.1007/978-3-030-17502-3_6)) using [Sabre](https://arxiv.org/abs/2202.08687) (Set Automaton Based Rewrite Engine).
   - `merc-vpg` can be used to solve (variability) parity games in the [PGSolver](https://github.com/tcsprojects/pgsolver) `.pg` format, and a slightly extended variability parity game `.vpg` format. Furthermore, it can generate variability parity games for model checking modal mu-calculus on LTSs.
-  - `merc-pbes` can identify symmetries in paramerised boolean equation systems [PBES](https://doi.org/10.1016%2Fj.tcs.2005.06.016).
+  - `merc-pbes` can identify symmetries in parameterised boolean equation systems [PBES](https://doi.org/10.1016%2Fj.tcs.2005.06.016).
   - `merc-ltsgraph` is a GUI tool to visualize LTSs.
 
 This release also comes with various crates that can be used, these are also published on [crates.io](https://crates.io/users/mlaveaux):

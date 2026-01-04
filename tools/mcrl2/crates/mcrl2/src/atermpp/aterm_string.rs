@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::ATerm;
 
-/// Represents a atermpp::aterm_string from the mCRL2 toolset.
+/// Represents an atermpp::aterm_string from the mCRL2 toolset.
 #[derive(PartialEq, Eq)]
 pub struct ATermString {
     term: ATerm,
