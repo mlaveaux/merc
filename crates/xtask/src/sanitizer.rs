@@ -28,12 +28,12 @@ pub fn address_sanitizer(mut arguments: Vec<String>) -> Result<(), Box<dyn Error
 
     add_target_flag(&mut arguments);
 
-    let thread_sanitizer_suppress = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/address_sanitizer.suppress");
+    let leak_sanitizer_suppress = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/leak_sanitizer.suppress");
 
     cmd("cargo", arguments)
         .env(
-            "ASAN_OPTIONS",
-            format!("suppressions={}", thread_sanitizer_suppress.to_string_lossy()),
+            "LSAN_OPTIONS",
+            format!("suppressions={}", leak_sanitizer_suppress.to_string_lossy()),
         )
         .env("RUSTFLAGS", "-Zsanitizer=address,leak")
         .env("RUSTDOCFLAGS", "-Zsanitizer=address,leak")

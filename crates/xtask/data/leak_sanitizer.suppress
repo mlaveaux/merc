@@ -1,0 +1,4 @@
+# Ignore various memory leaks in the CADP BCG libraries.
+leak:bcg_absolute_path
+leak:bcg_init_edges_2
+leak:BCG_TEMPORARY_FILE
