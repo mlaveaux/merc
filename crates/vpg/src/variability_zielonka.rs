@@ -15,12 +15,13 @@ use oxidd::BooleanFunction;
 use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
+use oxidd::util::AllocResult;
 use oxidd::BooleanFunction;
 use oxidd::Edge;
 use oxidd::Function;
 use oxidd::Manager;
 use oxidd::ManagerRef;
-use oxidd::util::AllocResult;
+use oxidd_core::util::EdgeDropGuard;
 
 use merc_utilities::MercError;
 
@@ -82,9 +83,9 @@ pub fn solve_variability_zielonka(
     let mut zielonka = VariabilityZielonkaSolver::new(manager_ref, game, alternative_solving);
 
     // Determine the initial set of vertices V
-    let V = Submap::new(        
+    let V = Submap::new(
         if alternative_solving {
-            manager_ref.with_manager_shared(|manager| { BDDFunction::t(manager) })
+            manager_ref.with_manager_shared(|manager| BDDFunction::t(manager))
         } else {
             game.configuration().clone()
         },
@@ -108,7 +109,7 @@ pub fn solve_variability_zielonka(
     let (W0, W1) = if alternative_solving {
         // Intersect the results with the game's configuration
         let config = game.configuration();
-        (W0.and_function(config)?, W1.and_function(config)?)
+        (W0.and_function(manager_ref, config)?, W1.and_function(manager_ref, config)?)
     } else {
         (W0, W1)
     };
@@ -280,10 +281,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 7. C := { c in \bigC | exists v in V : p(v) = m && c in \gamma(v) }
         // 8. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
-        let mut mu = Submap::new(
-            self.false_bdd.clone(),
-            self.game.num_of_vertices(),
-        );
+        let mut mu = Submap::new(self.false_bdd.clone(), self.game.num_of_vertices());
 
         let mut C = self.false_bdd.clone();
         for v in &self.priority_vertices[*highest_prio] {
@@ -311,7 +309,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             "{indent}zielonka_family_opt(gamma \\ alpha) |alpha| = {}",
             alpha.number_of_non_empty()
         );
-        let (omega1_0, omega1_1) = self.zielonka_family_optimised(gamma.clone().minus(self.manager_ref, &alpha)?, depth + 1)?;
+        let (omega1_0, omega1_1) =
+            self.zielonka_family_optimised(gamma.clone().minus(self.manager_ref, &alpha)?, depth + 1)?;
 
         // omega_prime[not_x] restricted to (gamma \ C)
         let C_restricted = minus(
@@ -361,7 +360,8 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             let gamma_restricted = gamma.minus_function(&C1_restricted)?;
 
             debug!("{indent}zielonka_family_opt((gamma | C') \\ alpha')");
-            let (omega2_0, omega2_1) = self.zielonka_family_optimised(gamma_restricted.minus(self.manager_ref, &alpha1)?, depth + 1)?;
+            let (omega2_0, omega2_1) =
+                self.zielonka_family_optimised(gamma_restricted.minus(self.manager_ref, &alpha1)?, depth + 1)?;
 
             // 18. omega'_x := omega'_x\C' cup alpha\C' cup omega''_x
             // 19. omega_not_x := omega'_not_x\C' cup omega''_x cup beta
@@ -370,8 +370,13 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             let omega1_not_x_restricted = omega1_not_x.minus_function(&C1)?;
 
             let alpha_restricted = alpha.minus_function(&C1)?;
-            let omega2_x_result = omega2_x.or(self.manager_ref, &omega1_x_restricted.or(self.manager_ref, &alpha_restricted)?)?;
-            let omega2_not_x_result = omega2_not_x.or(self.manager_ref, &omega1_not_x_restricted)?.or(self.manager_ref, &alpha1)?;
+            let omega2_x_result = omega2_x.or(
+                self.manager_ref,
+                &omega1_x_restricted.or(self.manager_ref, &alpha_restricted)?,
+            )?;
+            let omega2_not_x_result = omega2_not_x
+                .or(self.manager_ref, &omega1_not_x_restricted)?
+                .or(self.manager_ref, &alpha1)?;
 
             debug!("{indent}return (omega''_0, omega''_1)");
             Ok(combine(omega2_x_result, omega2_not_x_result, x))
@@ -403,48 +408,97 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 4. While Q not empty do
         // 5. w := Q.pop()
-        while let Some(w) = self.temp_queue.pop() {
-            self.temp_vertices.set(*w, false);
+        self.manager_ref
+            .with_manager_shared(|manager| -> Result<(), MercError> {
+                // Used for satisfiability checks
+                let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
 
-            // For every v \in Ew do
-            for (v, edge_guard) in self.predecessors.predecessors(w) {
-                let mut a = gamma[v].and(&A[w])?.and(edge_guard)?;
+                while let Some(w) = self.temp_queue.pop() {
+                    self.temp_vertices.set(*w, false);
 
-                if a.satisfiable() {
-                    // 7. if v in V_\alpha
-                    if self.game.owner(v) == alpha {
-                        // 8. a := gamma(v) \intersect \theta(v, w) \intersect A(w)
-                        // This assignment has already been computed above.
-                    } else {
-                        // 10. a := gamma(v)
-                        a = gamma[v].clone();
-                        // 11. for w' \in vE such that gamma(v) && theta(v, w') && \gamma(w') != \emptyset do
-                        for edge_w1 in self.game.outgoing_conf_edges(v) {
-                            let tmp = gamma[v].and(edge_w1.configuration())?.and(&gamma[edge_w1.to()])?;
+                    // For every v \in Ew do
+                    for (v, edge_guard) in self.predecessors.predecessors(w) {
+                        let mut a = EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                            manager,
+                            &EdgeDropGuard::new(manager, BDDFunction::and_edge(manager, gamma[v].as_edge(manager), A[w].as_edge(manager))?),
+                            edge_guard.as_edge(manager),
+                        )?);
 
-                            if tmp.satisfiable() {
-                                // 12. a := a && ((C \ (theta(v, w') && \gamma(w'))) \cup A(w'))
-                                let tmp = edge_w1.configuration().and(&gamma[edge_w1.to()])?;
+                        if *a != *f_edge {
+                            // 7. if v in V_\alpha
+                            if self.game.owner(v) == alpha {
+                                // 8. a := gamma(v) \intersect \theta(v, w) \intersect A(w)
+                                // This assignment has already been computed above.
+                            } else {
+                                // 10. a := gamma(v)
+                                a = EdgeDropGuard::new(manager, gamma[v].clone().into_edge(manager));
+                                // 11. for w' \in vE such that gamma(v) && theta(v, w') && \gamma(w') != \emptyset do
+                                for edge_w1 in self.game.outgoing_conf_edges(v) {
+                                    let tmp = EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                                        manager,
+                                        &EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                                            manager,
+                                            gamma[v].as_edge(manager),
+                                            edge_w1.configuration().as_edge(manager),
+                                        )?),
+                                        &gamma[edge_w1.to()].as_edge(manager),
+                                    )?);
 
-                                a = a.and(&minus(self.game.configuration(), &tmp)?.or(&A[edge_w1.to()])?)?;
+                                    if *tmp != *f_edge {
+                                        // 12. a := a && ((C \ (theta(v, w') && \gamma(w'))) \cup A(w'))
+                                        let tmp = EdgeDropGuard::new(manager,BDDFunction::and_edge(
+                                            manager,
+                                            edge_w1.configuration().as_edge(manager),
+                                            &gamma[edge_w1.to()].as_edge(manager),
+                                        )?);
+
+                                        a = EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                                            manager,
+                                            &a,
+                                            &EdgeDropGuard::new(manager,BDDFunction::or_edge(
+                                                manager,
+                                                &EdgeDropGuard::new(manager, BDDFunction::imp_strict_edge(
+                                                    manager,
+                                                    &tmp,
+                                                    if self.alternative_solving {
+                                                        self.true_bdd.as_edge(manager)
+                                                    } else {
+                                                        self.game.configuration().as_edge(manager)
+                                                    },
+                                                )?),
+                                                A[edge_w1.to()].as_edge(manager),
+                                            )?),
+                                        )?);
+                                    }
+                                }
+                            }
+
+                            // 15. a \ A(v) != \emptyset
+                            if *EdgeDropGuard::new(manager, BDDFunction::imp_strict_edge(manager, A[v].as_edge(manager), &a)?)
+                                != *f_edge
+                            {
+                                // 16. A(v) := A(v) \cup a
+                                A.set(
+                                    manager,
+                                    v,
+                                    BDDFunction::from_edge(
+                                        manager,
+                                        BDDFunction::or_edge(manager, A[v].as_edge(manager), &a)?,
+                                    ),
+                                );
+
+                                // 17. if v not in Q then Q.push(v)
+                                if !self.temp_vertices[*v] {
+                                    self.temp_queue.push(v);
+                                    self.temp_vertices.set(*v, true);
+                                }
                             }
                         }
                     }
-
-                    // 15. a \ A(v) != \emptyset
-                    if minus(&a, &A[v])?.satisfiable() {
-                        // 16. A(v) := A(v) \cup a
-                        A.set(v, A[v].or(&a)?);
-
-                        // 17. if v not in Q then Q.push(v)
-                        if !self.temp_vertices[*v] {
-                            self.temp_queue.push(v);
-                            self.temp_vertices.set(*v, true);
-                        }
-                    }
                 }
-            }
-        }
+
+                Ok(())
+            })?;
 
         debug_assert!(
             !self.temp_vertices.any(),
@@ -581,9 +635,9 @@ impl Submap {
     /// Computes the difference between this submap and another submap.
     fn minus(mut self, manager_ref: &BDDManagerRef, other: &Submap) -> Result<Submap, MercError> {
         manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
-            let f_edge = BDDFunction::f_edge(manager);
+            let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
             for (i, func) in self.mapping.iter_mut().enumerate() {
-                let was_satisfiable = *func.as_edge(manager) != f_edge;
+                let was_satisfiable = *func.as_edge(manager) != *f_edge;
                 if was_satisfiable {
                     *func = BDDFunction::from_edge(
                         manager,
@@ -593,7 +647,7 @@ impl Submap {
                             func.as_edge(manager),
                         )?,
                     );
-                    let is_satisfiable = *func.as_edge(manager) != f_edge;
+                    let is_satisfiable = *func.as_edge(manager) != *f_edge;
 
                     if was_satisfiable && !is_satisfiable {
                         self.non_empty_count -= 1;
@@ -601,7 +655,6 @@ impl Submap {
                 }
             }
 
-            manager.drop_edge(f_edge);
             Ok(())
         })?;
 
@@ -610,30 +663,50 @@ impl Submap {
 
     /// Computes the union between this submap and another submap.
     fn or(mut self, manager_ref: &BDDManagerRef, other: &Submap) -> Result<Submap, MercError> {
-        for (i, func) in self.mapping.iter_mut().enumerate() {
-            let was_satisfiable = func.satisfiable();
-            *func = func.or(&other.mapping[i])?;
-            let is_satisfiable = func.satisfiable();
+        manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+            let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
+            
+            for (i, func) in self.mapping.iter_mut().enumerate() {
+                let func_edge = func.as_edge(manager);
 
-            if !was_satisfiable && is_satisfiable {
-                self.non_empty_count += 1;
+                let was_satisfiable = *func_edge != *f_edge;
+                let new_func = BDDFunction::or_edge(manager, func_edge, other.mapping[i].as_edge(manager))?;
+                let is_satisfiable = new_func != *f_edge;
+
+                *func = BDDFunction::from_edge(manager, new_func);
+
+                if !was_satisfiable && is_satisfiable {
+                    self.non_empty_count += 1;
+                }
             }
-        }
+
+            Ok(())
+        })?;
 
         Ok(self)
     }
 
     /// Computes the intersection between this submap and another function.
-    fn and_function(mut self, configuration: &BDDFunction) -> Result<Submap, MercError> {
-        for (i, func) in self.mapping.iter_mut().enumerate() {
-            let was_satisfiable = func.satisfiable();
-            *func = func.and(configuration)?;
-            let is_satisfiable = func.satisfiable();
+    fn and_function(mut self, manager_ref: &BDDManagerRef, configuration: &BDDFunction) -> Result<Submap, MercError> {
+        manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+            let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
 
-            if was_satisfiable && !is_satisfiable {
-                self.non_empty_count -= 1;
+            for (i, func) in self.mapping.iter_mut().enumerate() {
+                let func_edge = func.as_edge(manager);
+                
+                let was_satisfiable = *func_edge != *f_edge;
+                let new_func = BDDFunction::and_edge(manager, func_edge, configuration.as_edge(manager))?;
+                let is_satisfiable = new_func != *f_edge;
+
+                *func = BDDFunction::from_edge(manager, new_func);
+
+                if was_satisfiable && !is_satisfiable {
+                    self.non_empty_count -= 1;
+                }
             }
-        }
+
+            Ok(())
+        })?;
 
         Ok(self)
     }
@@ -684,18 +757,14 @@ impl fmt::Debug for Submap {
 #[cfg(test)]
 mod tests {
     use merc_macros::merc_test;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::util::AllocResult;
     use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
-    use oxidd::bdd::BDDFunction;
-    use oxidd::util::AllocResult;
 
     use merc_utilities::random_test;
 
-    use crate::PG;
-    use crate::Submap;
-    use crate::VertexIndex;
-    use crate::ZielonkaVariant;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
     use crate::solve_variability_product_zielonka;
@@ -703,6 +772,11 @@ mod tests {
     use crate::solve_zielonka;
     use crate::verify_variability_product_zielonka_solution;
     use crate::write_vpg;
+    use crate::FormatConfig;
+    use crate::Submap;
+    use crate::VertexIndex;
+    use crate::ZielonkaVariant;
+    use crate::PG;
 
     #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri

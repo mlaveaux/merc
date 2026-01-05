@@ -29,6 +29,7 @@ delegate.workspace = true
 itertools.workspace = true
 log.workspace = true
 oxidd.workspace = true
+oxidd-core.workspace = true
 rand.workspace = true
 regex.workspace = true
 streaming-iterator.workspace = true
