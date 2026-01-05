@@ -34,7 +34,7 @@ impl Timing {
     }
 
     /// Starts a new timer with the given name.
-    pub fn start(&mut self, name: &str) -> Timer {
+    pub fn start(&self, name: &str) -> Timer {
         Timer {
             name: name.to_string(),
             start: Instant::now(),
