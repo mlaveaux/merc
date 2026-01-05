@@ -9,6 +9,7 @@ use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
 use merc_symbolic::FormatConfigSet;
+use merc_symbolic::minus;
 use merc_utilities::MercError;
 
 use crate::PG;
@@ -16,7 +17,6 @@ use crate::ParityGame;
 use crate::Player;
 use crate::Priority;
 use crate::VertexIndex;
-use crate::minus;
 
 /// A variability parity game is an extension of a parity game where each edge is
 /// associated with a BDD function representing the configurations in which the

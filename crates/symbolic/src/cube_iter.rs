@@ -3,11 +3,17 @@
 use std::marker::PhantomData;
 
 use merc_utilities::MercError;
+
 use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
+use oxidd::util::AllocResult;
 use oxidd::util::OptBool;
 
-use crate::minus;
+/// Returns the boolean set difference of two BDD functions: lhs \ rhs.
+/// Implemented as lhs AND (NOT rhs).
+pub fn minus(lhs: &BDDFunction, rhs: &BDDFunction) -> AllocResult<BDDFunction> {
+    rhs.imp_strict(lhs)
+}
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
 ///

@@ -284,7 +284,13 @@ mod inner {
         unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION) -> Self {
             let mut inner = unsafe { BcgOtIterator::new() };
 
-            unsafe { BCG_OT_START(inner.inner.as_mut().get_unchecked_mut(), bcg_object, bcg_enum_edge_sort_BCG_UNDEFINED_SORT) };
+            unsafe {
+                BCG_OT_START(
+                    inner.inner.as_mut().get_unchecked_mut(),
+                    bcg_object,
+                    bcg_enum_edge_sort_BCG_UNDEFINED_SORT,
+                )
+            };
             Self { inner }
         }
     }
@@ -320,7 +326,14 @@ mod inner {
         pub unsafe fn new(bcg_object: BCG_TYPE_OBJECT_TRANSITION, state: u64) -> Self {
             let mut inner = unsafe { BcgOtIterator::new() };
 
-            unsafe { BCG_OT_START_P(inner.inner.as_mut().get_unchecked_mut(), bcg_object, bcg_enum_edge_sort_BCG_P_SORT, state) };
+            unsafe {
+                BCG_OT_START_P(
+                    inner.inner.as_mut().get_unchecked_mut(),
+                    bcg_object,
+                    bcg_enum_edge_sort_BCG_P_SORT,
+                    state,
+                )
+            };
             Self { inner, state }
         }
     }
@@ -449,7 +462,7 @@ mod inner {
                 let tmp = temp_dir();
 
                 let file = tmp.join("test_random_bcg_io.bcg");
-                write_bcg(&lts, &file).unwrap();   
+                write_bcg(&lts, &file).unwrap();
 
                 let result_lts = read_bcg(&file, Vec::new()).unwrap();
 

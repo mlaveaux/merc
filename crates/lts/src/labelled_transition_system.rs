@@ -393,7 +393,7 @@ impl fmt::Display for LtsMetrics {
 
 /// Checks that two LTSs are equivalent, for testing purposes.
 #[cfg(test)]
-pub fn check_equivalent<L: LTS>(lts: &L, lts_read: &L) {    
+pub fn check_equivalent<L: LTS>(lts: &L, lts_read: &L) {
     println!("LTS labels: {:?}", lts.labels());
     println!("Read LTS labels: {:?}", lts_read.labels());
 

@@ -11,29 +11,28 @@ use bitvec::vec::BitVec;
 use clap::ValueEnum;
 use log::debug;
 use log::trace;
-use oxidd::BooleanFunction;
-use oxidd::ManagerRef;
-use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
-use oxidd::util::AllocResult;
+use merc_symbolic::FormatConfigSet;
+use merc_symbolic::minus;
 use oxidd::BooleanFunction;
 use oxidd::Edge;
 use oxidd::Function;
 use oxidd::Manager;
 use oxidd::ManagerRef;
+use oxidd::bdd::BDDFunction;
+use oxidd::bdd::BDDManagerRef;
+use oxidd::util::AllocResult;
 use oxidd_core::util::EdgeDropGuard;
 
 use merc_utilities::MercError;
 
-use crate::combine;
-use crate::x_and_not_x;
-use crate::FormatConfigSet;
+use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
 use crate::VertexIndex;
-use crate::PG;
+use crate::combine;
+use crate::x_and_not_x;
 
 /// Utility to print a repeated static string a given number of times.
 pub struct Repeat {
@@ -109,7 +108,10 @@ pub fn solve_variability_zielonka(
     let (W0, W1) = if alternative_solving {
         // Intersect the results with the game's configuration
         let config = game.configuration();
-        (W0.and_function(manager_ref, config)?, W1.and_function(manager_ref, config)?)
+        (
+            W0.and_function(manager_ref, config)?,
+            W1.and_function(manager_ref, config)?,
+        )
     } else {
         (W0, W1)
     };
@@ -418,11 +420,17 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
                     // For every v \in Ew do
                     for (v, edge_guard) in self.predecessors.predecessors(w) {
-                        let mut a = EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                        let mut a = EdgeDropGuard::new(
                             manager,
-                            &EdgeDropGuard::new(manager, BDDFunction::and_edge(manager, gamma[v].as_edge(manager), A[w].as_edge(manager))?),
-                            edge_guard.as_edge(manager),
-                        )?);
+                            BDDFunction::and_edge(
+                                manager,
+                                &EdgeDropGuard::new(
+                                    manager,
+                                    BDDFunction::and_edge(manager, gamma[v].as_edge(manager), A[w].as_edge(manager))?,
+                                ),
+                                edge_guard.as_edge(manager),
+                            )?,
+                        );
 
                         if *a != *f_edge {
                             // 7. if v in V_\alpha
@@ -434,63 +442,75 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                                 a = EdgeDropGuard::new(manager, gamma[v].clone().into_edge(manager));
                                 // 11. for w' \in vE such that gamma(v) && theta(v, w') && \gamma(w') != \emptyset do
                                 for edge_w1 in self.game.outgoing_conf_edges(v) {
-                                    let tmp = EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                                    let tmp = EdgeDropGuard::new(
                                         manager,
-                                        &EdgeDropGuard::new(manager, BDDFunction::and_edge(
+                                        BDDFunction::and_edge(
                                             manager,
-                                            gamma[v].as_edge(manager),
-                                            edge_w1.configuration().as_edge(manager),
-                                        )?),
-                                        &gamma[edge_w1.to()].as_edge(manager),
-                                    )?);
+                                            &EdgeDropGuard::new(
+                                                manager,
+                                                BDDFunction::and_edge(
+                                                    manager,
+                                                    gamma[v].as_edge(manager),
+                                                    edge_w1.configuration().as_edge(manager),
+                                                )?,
+                                            ),
+                                            &gamma[edge_w1.to()].as_edge(manager),
+                                        )?,
+                                    );
 
                                     if *tmp != *f_edge {
                                         // 12. a := a && ((C \ (theta(v, w') && \gamma(w'))) \cup A(w'))
-                                        let tmp = EdgeDropGuard::new(manager,BDDFunction::and_edge(
+                                        let tmp = EdgeDropGuard::new(
                                             manager,
-                                            edge_w1.configuration().as_edge(manager),
-                                            &gamma[edge_w1.to()].as_edge(manager),
-                                        )?);
-
-                                        a = EdgeDropGuard::new(manager, BDDFunction::and_edge(
-                                            manager,
-                                            &a,
-                                            &EdgeDropGuard::new(manager,BDDFunction::or_edge(
+                                            BDDFunction::and_edge(
                                                 manager,
-                                                &EdgeDropGuard::new(manager, BDDFunction::imp_strict_edge(
+                                                edge_w1.configuration().as_edge(manager),
+                                                &gamma[edge_w1.to()].as_edge(manager),
+                                            )?,
+                                        );
+
+                                        a = EdgeDropGuard::new(
+                                            manager,
+                                            BDDFunction::and_edge(
+                                                manager,
+                                                &a,
+                                                &EdgeDropGuard::new(
                                                     manager,
-                                                    &tmp,
-                                                    if self.alternative_solving {
-                                                        self.true_bdd.as_edge(manager)
-                                                    } else {
-                                                        self.game.configuration().as_edge(manager)
-                                                    },
-                                                )?),
-                                                A[edge_w1.to()].as_edge(manager),
-                                            )?),
-                                        )?);
+                                                    BDDFunction::or_edge(
+                                                        manager,
+                                                        &EdgeDropGuard::new(
+                                                            manager,
+                                                            BDDFunction::imp_strict_edge(
+                                                                manager,
+                                                                &tmp,
+                                                                if self.alternative_solving {
+                                                                    self.true_bdd.as_edge(manager)
+                                                                } else {
+                                                                    self.game.configuration().as_edge(manager)
+                                                                },
+                                                            )?,
+                                                        ),
+                                                        A[edge_w1.to()].as_edge(manager),
+                                                    )?,
+                                                ),
+                                            )?,
+                                        );
                                     }
                                 }
                             }
 
                             // 15. a \ A(v) != \emptyset
-                            if *EdgeDropGuard::new(manager, BDDFunction::imp_strict_edge(manager, A[v].as_edge(manager), &a)?)
-                                != *f_edge
+                            if *EdgeDropGuard::new(
+                                manager,
+                                BDDFunction::imp_strict_edge(manager, A[v].as_edge(manager), &a)?,
+                            ) != *f_edge
                             {
                                 // 16. A(v) := A(v) \cup a
                                 let was_empty = *A[v].as_edge(manager) == *f_edge;
                                 let update = BDDFunction::or_edge(manager, A[v].as_edge(manager), &a)?;
                                 let is_empty = update == *f_edge;
 
-                                A.set_internal(
-                                    v,
-                                    BDDFunction::from_edge(
-                                        manager,
-                                        update
-                                    ),
-                                    was_empty,
-                                    is_empty,
-                                );
+                                A.set_internal(v, BDDFunction::from_edge(manager, update), was_empty, is_empty);
 
                                 // 17. if v not in Q then Q.push(v)
                                 if !self.temp_vertices[*v] {
@@ -546,12 +566,6 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         Ok(())
     }
-}
-
-/// Returns the boolean set difference of two BDD functions: lhs \ rhs.
-/// Implemented as lhs AND (NOT rhs).
-pub fn minus(lhs: &BDDFunction, rhs: &BDDFunction) -> AllocResult<BDDFunction> {
-    rhs.imp_strict(lhs)
 }
 
 /// A mapping from vertices to configurations.
@@ -682,7 +696,7 @@ impl Submap {
     fn or(mut self, manager_ref: &BDDManagerRef, other: &Submap) -> Result<Submap, MercError> {
         manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
             let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
-            
+
             for (i, func) in self.mapping.iter_mut().enumerate() {
                 let func_edge = func.as_edge(manager);
 
@@ -710,7 +724,7 @@ impl Submap {
 
             for (i, func) in self.mapping.iter_mut().enumerate() {
                 let func_edge = func.as_edge(manager);
-                
+
                 let was_satisfiable = *func_edge != *f_edge;
                 let new_func = BDDFunction::and_edge(manager, func_edge, configuration.as_edge(manager))?;
                 let is_satisfiable = new_func != *f_edge;
@@ -774,14 +788,18 @@ impl fmt::Debug for Submap {
 #[cfg(test)]
 mod tests {
     use merc_macros::merc_test;
-    use oxidd::bdd::BDDFunction;
-    use oxidd::util::AllocResult;
     use oxidd::BooleanFunction;
     use oxidd::Manager;
     use oxidd::ManagerRef;
+    use oxidd::bdd::BDDFunction;
+    use oxidd::util::AllocResult;
 
     use merc_utilities::random_test;
 
+    use crate::PG;
+    use crate::Submap;
+    use crate::VertexIndex;
+    use crate::ZielonkaVariant;
     use crate::project_variability_parity_games_iter;
     use crate::random_variability_parity_game;
     use crate::solve_variability_product_zielonka;
@@ -789,11 +807,6 @@ mod tests {
     use crate::solve_zielonka;
     use crate::verify_variability_product_zielonka_solution;
     use crate::write_vpg;
-    use crate::FormatConfig;
-    use crate::Submap;
-    use crate::VertexIndex;
-    use crate::ZielonkaVariant;
-    use crate::PG;
 
     #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri

@@ -17,6 +17,7 @@ use streaming_iterator::StreamingIterator;
 use merc_io::LineIterator;
 use merc_io::TimeProgress;
 use merc_symbolic::FormatConfigSet;
+use merc_symbolic::minus;
 use merc_utilities::MercError;
 
 use crate::IOError;
@@ -26,7 +27,6 @@ use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
-use crate::minus;
 
 /// Reads a variability parity game in an extended PGSolver `.vpg` format from the given reader.
 /// Note that the reader is buffered internally using a `BufReader`.
@@ -168,7 +168,7 @@ fn parse_configuration(manager: &BDDManagerRef, config: &str) -> Result<(Vec<BDD
         })?;
 
         let configuration = parse_configuration_set(manager, &variables, config)?;
-        return Ok((variables, configuration));
+        return Ok((variables.to_vec(), configuration));
     };
 
     Err(MercError::from(IOError::InvalidHeader("Empty configuration string")))

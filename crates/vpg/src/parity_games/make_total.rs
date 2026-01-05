@@ -4,12 +4,13 @@ use oxidd::ManagerRef;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 
+use merc_symbolic::minus;
+
 use crate::PG;
 use crate::Player;
 use crate::Priority;
 use crate::VariabilityParityGame;
 use crate::VertexIndex;
-use crate::variability_zielonka::minus;
 
 /// Makes the given variability parity game total by adding edges to true/false nodes as needed.
 pub fn make_vpg_total(
