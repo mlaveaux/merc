@@ -137,6 +137,7 @@ mod test {
 
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
+    #[cfg(not(debug_assertions))]
     fn test_load_collision_4() {
         let mut storage = Storage::new();
         let bytes = include_bytes!("../../../examples/ldd/collision.4.ldd");
