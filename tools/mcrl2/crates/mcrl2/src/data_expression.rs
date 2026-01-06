@@ -1,3 +1,4 @@
+use mcrl2_macros::mcrl2_derive_terms;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_abstraction;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_application;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_data_expression;
@@ -6,8 +7,7 @@ use mcrl2_sys::data::ffi::mcrl2_data_expression_is_machine_number;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_untyped_identifier;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_variable;
 use mcrl2_sys::data::ffi::mcrl2_data_expression_is_where_clause;
-
-use mcrl2_macros::mcrl2_derive_terms;
+use mcrl2_sys::data::ffi::mcrl2_data_expression_to_string;
 use mcrl2_sys::data::ffi::mcrl2_is_data_sort_expression;
 
 use crate::ATermRef;
@@ -69,11 +69,11 @@ pub fn is_sort_expression(term: &ATermRef<'_>) -> bool {
 // This module is only used internally to run the proc macro.
 #[mcrl2_derive_terms]
 mod inner {
+    use super::*;
+
     use std::fmt;
 
-    use mcrl2_macros::mcrl2_ignore;
     use mcrl2_macros::mcrl2_term;
-    use mcrl2_sys::data::ffi::mcrl2_data_expression_to_string;
 
     use crate::ATerm;
     use crate::ATermArgs;
@@ -81,13 +81,6 @@ mod inner {
     use crate::ATermString;
     use crate::Markable;
     use crate::Todo;
-    use crate::is_abstraction;
-    use crate::is_application;
-    use crate::is_data_expression;
-    use crate::is_function_symbol;
-    use crate::is_machine_number;
-    use crate::is_sort_expression;
-    use crate::is_variable;
 
     /// Represents a data::data_expression from the mCRL2 toolset.
     ///  A data expression can be any of:
@@ -108,12 +101,6 @@ mod inner {
     }
 
     impl DataExpression {
-        /// Creates a new data::data_expression from the given term.
-        #[mcrl2_ignore]
-        pub fn new(term: ATerm) -> Self {
-            Self { term }
-        }
-
         /// Returns the head symbol a data expression
         ///     - function symbol                  f -> f
         ///     - application       f(t_0, ..., t_n) -> f
@@ -170,7 +157,7 @@ mod inner {
             } else if is_variable(&self.term) {
                 write!(f, "{}", DataVariableRef::from(self.term.copy()))
             } else if is_machine_number(&self.term) {
-                write!(f, "{}", MachineNumberRef::from(self.term.copy()))
+                write!(f, "{}", DataMachineNumberRef::from(self.term.copy()))
             } else {
                 write!(f, "{}", self.term)
             }
@@ -184,13 +171,6 @@ mod inner {
     }
 
     impl DataVariable {
-        /// Creates a new data::variable from the given aterm.
-        #[mcrl2_ignore]
-        pub fn new(term: ATerm) -> Self {
-            debug_assert!(is_variable(&term.copy()));
-            DataVariable { term }
-        }
-
         /// Returns the name of the variable.
         pub fn name(&self) -> ATermString {
             ATermString::new(self.term.arg(0).protect())
@@ -215,13 +195,6 @@ mod inner {
     }
 
     impl DataApplication {
-        /// Creates a new data::application from the given term.
-        #[mcrl2_ignore]
-        pub(crate) fn new(term: ATerm) -> Self {
-            debug_assert!(is_application(&term.copy()));
-            DataApplication { term }
-        }
-
         /// Returns the head symbol a data application
         pub fn data_function_symbol(&self) -> DataFunctionSymbolRef<'_> {
             self.term.arg(0).upgrade(&self.term).into()
@@ -272,15 +245,6 @@ mod inner {
         term: ATerm,
     }
 
-    impl DataAbstraction {
-        /// Creates a new data::abstraction from the given term.
-        #[mcrl2_ignore]
-        pub(crate) fn new(term: ATerm) -> Self {
-            debug_assert!(is_abstraction(&term.copy()));
-            DataAbstraction { term }
-        }
-    }
-
     /// Represents a data::function_symbol from the mCRL2 toolset.
     #[mcrl2_term(is_function_symbol)]
     pub struct DataFunctionSymbol {
@@ -288,13 +252,6 @@ mod inner {
     }
 
     impl DataFunctionSymbol {
-        /// Creates a new data::function_symbol from the given term.
-        #[mcrl2_ignore]
-        pub(crate) fn new(term: ATerm) -> Self {
-            debug_assert!(is_function_symbol(&term.copy()));
-            DataFunctionSymbol { term }
-        }
-
         /// Returns the sort of the function symbol.
         pub fn sort(&self) -> SortExpressionRef<'_> {
             self.term.arg(1).into()
@@ -324,13 +281,6 @@ mod inner {
     }
 
     impl SortExpression {
-        /// Creates a new data::sort_expression from the given term.
-        #[mcrl2_ignore]
-        pub fn new(term: ATerm) -> Self {
-            debug_assert!(is_sort_expression(&term.copy()));
-            SortExpression { term }
-        }
-
         /// Returns the name of the sort.
         pub fn name(&self) -> &str {
             // We only change the lifetime, but that is fine since it is derived from the current term.
@@ -346,28 +296,207 @@ mod inner {
 
     /// Represents a data::machine_number from the mCRL2 toolset.
     #[mcrl2_term(is_machine_number)]
-    struct MachineNumber {
+    pub struct DataMachineNumber {
         pub term: ATerm,
     }
 
-    impl MachineNumber {
+    impl DataMachineNumber {
         /// Obtain the underlying value of a machine number.
         pub fn value(&self) -> u64 {
             0
         }
     }
 
-    impl fmt::Display for MachineNumber {
+    impl fmt::Display for DataMachineNumber {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}", self.value())
         }
     }
+
+    /// Represents a data::where_clause from the mCRL2 toolset.
+    #[mcrl2_term(is_where_clause)]
+    pub struct DataWhereClause {
+        pub term: ATerm,
+    }
+
+    /// Represents a data::untyped_identifier from the mCRL2 toolset.
+    #[mcrl2_term(is_untyped_identifier)]
+    pub struct DataUntypedIdentifier {
+        pub term: ATerm,
+    }
+
 }
 
 pub use inner::*;
 
+// Allowed conversions     
 impl From<DataVariable> for DataExpression {
     fn from(var: DataVariable) -> Self {
-        DataExpression::new(var.into())
+        Self::new(var.into())
+    }
+}
+        
+impl From<DataAbstraction> for DataExpression {
+    fn from(var: DataAbstraction) -> Self {
+        Self::new(var.into())
+    }
+}  
+
+impl From<DataApplication> for DataExpression {
+    fn from(var: DataApplication) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataFunctionSymbol> for DataExpression {
+    fn from(var: DataFunctionSymbol) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataMachineNumber> for DataExpression {
+    fn from(var: DataMachineNumber) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataWhereClause> for DataExpression {
+    fn from(var: DataWhereClause) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataUntypedIdentifier> for DataExpression {
+    fn from(var: DataUntypedIdentifier) -> Self {
+        Self::new(var.into())
+    }
+}
+
+// Reference variants 
+impl<'a> From<DataVariableRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataVariableRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+        
+impl<'a> From<DataAbstractionRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataAbstractionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}  
+
+impl<'a> From<DataApplicationRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataApplicationRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataFunctionSymbolRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataFunctionSymbolRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataMachineNumberRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataMachineNumberRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataWhereClauseRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataWhereClauseRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataUntypedIdentifierRef<'a>> for DataExpressionRef<'a> {
+    fn from(var: DataUntypedIdentifierRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+// Allowed conversions     
+impl From<DataExpression> for DataVariable {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+        
+impl From<DataExpression> for DataAbstraction {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}  
+
+impl From<DataExpression> for DataApplication {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataExpression> for DataFunctionSymbol {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataExpression> for DataMachineNumber {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataExpression> for DataWhereClause {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl From<DataExpression> for DataUntypedIdentifier {
+    fn from(var: DataExpression) -> Self {
+        Self::new(var.into())
+    }
+}
+
+// Reference variants 
+impl<'a> From<DataExpressionRef<'a>> for DataVariableRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+        
+impl<'a> From<DataExpressionRef<'a>> for DataAbstractionRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}  
+
+impl<'a> From<DataExpressionRef<'a>> for DataApplicationRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataExpressionRef<'a>> for DataFunctionSymbolRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataExpressionRef<'a>> for DataMachineNumberRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataExpressionRef<'a>> for DataWhereClauseRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
+    }
+}
+
+impl<'a> From<DataExpressionRef<'a>> for DataUntypedIdentifierRef<'a> {
+    fn from(var: DataExpressionRef<'a>) -> Self {
+        Self::new(var.into())
     }
 }
