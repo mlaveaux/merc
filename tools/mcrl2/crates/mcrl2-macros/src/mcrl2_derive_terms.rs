@@ -36,7 +36,7 @@ pub(crate) fn mcrl2_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                         // Add the expected derive macros to the input struct.
                         object
                             .attrs
-                            .push(parse_quote!(#[derive(Clone, Default, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]));
+                            .push(parse_quote!(#[derive(Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]));
 
                         // ALL structs in this module must contain the term.
                         assert!(
@@ -121,7 +121,13 @@ pub(crate) fn mcrl2_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                                 }
                             }
 
-                            #[derive(Default, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+                            impl ::std::fmt::Debug for #name {
+                                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                                    write!(f, "{:?}", self.term)
+                                }
+                            }
+
+                            #[derive(Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
                             pub struct #name_ref<'a> {
                                 pub(crate) term: ATermRef<'a>
                             }
@@ -185,6 +191,13 @@ pub(crate) fn mcrl2_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                                     1
                                 }
                             }
+
+                            impl ::std::fmt::Debug for #name_ref<'_> {
+                                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                                    write!(f, "{:?}", self.term)
+                                }
+                            }
+
                         );
 
                         added.push(Item::Verbatim(generated));
