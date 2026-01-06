@@ -60,6 +60,13 @@ pub(crate) fn mcrl2_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                         let name_ref = format_ident!("{}Ref", object.ident);
                         let generated: TokenStream = quote!(
                             impl #name {
+                                pub fn new(term: ATerm) -> #name {
+                                    #assertion;
+                                    #name {
+                                        term: term.into(),
+                                    }
+                                }
+
                                 pub fn copy<'a>(&'a self) -> #name_ref<'a> {
                                     self.term.copy().into()
                                 }
@@ -120,6 +127,13 @@ pub(crate) fn mcrl2_derive_terms_impl(_attributes: TokenStream, input: TokenStre
                             }
 
                             impl<'a> #name_ref<'a> {
+                                pub fn new(term: ATermRef<'a>) -> #name_ref<'a> {
+                                    #assertion;
+                                    #name_ref {
+                                        term: term.into(),
+                                    }
+                                }
+
                                 pub fn copy<'b>(&'b self) -> #name_ref<'b> {
                                     self.term.copy().into()
                                 }
