@@ -8,12 +8,12 @@ use std::ops::Index;
 
 use bitvec::order::Lsb0;
 use bitvec::vec::BitVec;
+use bitvec::bitvec;
 use clap::ValueEnum;
 use log::debug;
+use log::info;
 use log::trace;
-use merc_symbolic::minus;
-use merc_symbolic::minus_edge;
-use merc_symbolic::FormatConfigSet;
+use merc_symbolic::FormatConfig;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::util::AllocResult;
@@ -22,12 +22,22 @@ use oxidd::Edge;
 use oxidd::Function;
 use oxidd::Manager;
 use oxidd::ManagerRef;
+use oxidd::util::OptBool;
 use oxidd_core::util::EdgeDropGuard;
 
 use merc_utilities::MercError;
+use merc_symbolic::minus;
+use merc_symbolic::minus_edge;
+use merc_symbolic::FormatConfigSet;
+use merc_utilities::Timing;
 
+use crate::PG;
+use crate::Repeat;
+use crate::Set;
 use crate::Submap;
 use crate::combine;
+use crate::compute_reachable;
+use crate::project_variability_parity_games_iter;
 use crate::x_and_not_x;
 use crate::Player;
 use crate::Priority;
@@ -35,7 +45,6 @@ use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
 use crate::VertexIndex;
 use crate::solve_zielonka;
-use crate::x_and_not_x;
 
 /// Variant of the Zielonka algorithm to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,7 +153,7 @@ pub fn solve_variability_product_zielonka<'a>(
 pub fn verify_variability_product_zielonka_solution(
     vpg: &VariabilityParityGame,
     solution: &[Submap; 2],
-    timing: &mut Timing,
+    timing: &Timing,
 ) -> Result<(), MercError> {
     info!("Verifying variability product-based Zielonka solution...");
     solve_variability_product_zielonka(vpg, timing).try_for_each(|res| {
@@ -542,14 +551,14 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                                                         manager,
                                                         &EdgeDropGuard::new(
                                                             manager,
-                                                            BDDFunction::imp_strict_edge(
+                                                            minus_edge(
                                                                 manager,
-                                                                &tmp,
                                                                 if self.alternative_solving {
                                                                     self.true_bdd.as_edge(manager)
                                                                 } else {
                                                                     self.game.configuration().as_edge(manager)
                                                                 },
+                                                                &tmp
                                                             )?,
                                                         ),
                                                         A[edge_w1.to()].as_edge(manager),
@@ -564,7 +573,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                             // 15. a \ A(v) != \emptyset
                             if *EdgeDropGuard::new(
                                 manager,
-                                BDDFunction::imp_strict_edge(manager, A[v].as_edge(manager), &a)?,
+                                minus_edge(manager, &a, A[v].as_edge(manager))?,
                             ) != *f_edge
                             {
                                 // 16. A(v) := A(v) \cup a
@@ -634,6 +643,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 mod tests {
     use merc_io::DumpFiles;
     use merc_macros::merc_test;
+    use merc_utilities::Timing;
     use oxidd::bdd::BDDFunction;
     use oxidd::util::AllocResult;
     use oxidd::BooleanFunction;
@@ -666,7 +676,7 @@ mod tests {
             files.dump("input.vpg", |w| write_vpg(w, &vpg)).unwrap();
 
             let solution = solve_variability_zielonka(&manager_ref, &vpg, ZielonkaVariant::Family, false).unwrap();
-            verify_variability_product_zielonka_solution(&vpg, &solution).unwrap();
+            verify_variability_product_zielonka_solution(&vpg, &solution, &Timing::new()).unwrap();
         })
     }
 
