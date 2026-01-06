@@ -168,7 +168,7 @@ impl Submap {
         manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
             let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
 
-            for (i, func) in self.mapping.iter_mut().enumerate() {
+            for func in self.mapping.iter_mut() {
                 let func_edge = func.as_edge(manager);
 
                 let was_satisfiable = *func_edge != *f_edge;
@@ -194,7 +194,7 @@ impl Submap {
             let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
             let conf_edge = configuration.as_edge(manager);
 
-            for (i, func) in self.mapping.iter_mut().enumerate() {
+            for func in self.mapping.iter_mut() {
                 let func_edge = func.as_edge(manager);
 
                 let was_satisfiable = *func_edge != *f_edge;
