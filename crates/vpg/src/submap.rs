@@ -30,11 +30,14 @@ pub struct Submap {
 
     /// Invariant: counts the number of non-empty positions in the mapping.
     non_empty_count: usize,
+
+    /// A cached reference to the false BDD function.
+    false_bdd: BDDFunction,
 }
 
 impl Submap {
     /// Creates a new empty Submap for the given number of vertices.
-    pub fn new(initial: BDDFunction, num_of_vertices: usize) -> Self {
+    pub fn new(manager_ref: &BDDManagerRef, initial: BDDFunction, num_of_vertices: usize) -> Self {
         Self {
             mapping: vec![initial.clone(); num_of_vertices],
             non_empty_count: if initial.satisfiable() {
@@ -42,6 +45,7 @@ impl Submap {
             } else {
                 0
             },
+            false_bdd: manager_ref.with_manager_shared(|manager| BDDFunction::f(manager)),
         }
     }
 
@@ -62,22 +66,12 @@ impl Submap {
     }
 
     /// Sets the function for the given vertex index.
-    pub fn set(&mut self, index: VertexIndex, func: BDDFunction) {
-        let was_empty = !self.mapping[*index].satisfiable();
-        let is_empty = !func.satisfiable();
+    /// 
+    /// Takes an internal manager to avoid repeated calls to [oxidd:Manager::with_manager_shared].
+    pub fn set<'id>(&mut self, manager: &<BDDFunction as Function>::Manager<'id>, index: VertexIndex, func: BDDFunction) {
+        let was_empty = self.mapping[*index].as_edge(manager) == self.false_bdd.as_edge(manager);
+        let is_empty = func.as_edge(manager) == self.false_bdd.as_edge(manager);
 
-        self.mapping[*index] = func;
-
-        // Update the non-empty count invariant.
-        if was_empty && !is_empty {
-            self.non_empty_count += 1;
-        } else if !was_empty && is_empty {
-            self.non_empty_count -= 1;
-        }
-    }
-
-    /// A variant of `set` that assumes the caller already knows whether the previous and new functions are empty.
-    pub fn set_internal(&mut self, index: VertexIndex, func: BDDFunction, was_empty: bool, is_empty: bool) {
         self.mapping[*index] = func;
 
         // Update the non-empty count invariant.
@@ -234,6 +228,7 @@ impl Submap {
             Submap {
                 mapping,
                 non_empty_count: self.non_empty_count,
+                false_bdd: BDDFunction::f(manager),
             }
         })
     }
@@ -281,11 +276,14 @@ mod tests {
             .expect("Could not create variables");
 
         let false_bdd = manager_ref.with_manager_shared(|manager| BDDFunction::f(manager));
-        let mut submap = Submap::new(false_bdd.clone(), 3);
+        let mut submap = Submap::new(&manager_ref, false_bdd.clone(), 3);
 
         assert_eq!(submap.len(), 3);
         assert_eq!(submap.non_empty_count, 0);
-        submap.set(VertexIndex::new(1), vars[0].clone());
+
+        manager_ref.with_manager_shared(|manager| {
+            submap.set(manager, VertexIndex::new(0), vars[0].clone());
+        });
 
         assert_eq!(submap.non_empty_count, 1);
     }

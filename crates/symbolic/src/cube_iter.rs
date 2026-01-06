@@ -19,10 +19,11 @@ pub fn minus(lhs: &BDDFunction, rhs: &BDDFunction) -> AllocResult<BDDFunction> {
 }
 
 /// Variant of [minus] that works on edges.
-pub fn minus_edge<'id>(manager: &<BDDFunction as Function>::Manager<'id>, 
-    lhs: &EdgeOfFunc<'id, BDDFunction>, 
-    rhs: &EdgeOfFunc<'id, BDDFunction>) -> AllocResult<<<BDDFunction as Function>::Manager<'id> as Manager>::Edge> 
-{
+pub fn minus_edge<'id>(
+    manager: &<BDDFunction as Function>::Manager<'id>,
+    lhs: &EdgeOfFunc<'id, BDDFunction>,
+    rhs: &EdgeOfFunc<'id, BDDFunction>,
+) -> AllocResult<<<BDDFunction as Function>::Manager<'id> as Manager>::Edge> {
     BDDFunction::imp_strict_edge(manager, rhs, lhs)
 }
 

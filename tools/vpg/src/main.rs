@@ -252,7 +252,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             let mut results = [Vec::new(), Vec::new()];
             for result in solve_variability_product_zielonka(&game, &timing) {
                 let (cube, _bdd, solution) = result?;
-                
+
                 for (index, w) in solution.iter().enumerate() {
                     results[index].push((cube.clone(), w.clone()));
                 }

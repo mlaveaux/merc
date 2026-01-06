@@ -6,9 +6,9 @@
 use std::fmt;
 use std::ops::Index;
 
+use bitvec::bitvec;
 use bitvec::order::Lsb0;
 use bitvec::vec::BitVec;
-use bitvec::bitvec;
 use clap::ValueEnum;
 use log::debug;
 use log::info;
@@ -17,34 +17,34 @@ use merc_symbolic::FormatConfig;
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::util::AllocResult;
+use oxidd::util::OptBool;
 use oxidd::BooleanFunction;
 use oxidd::Edge;
 use oxidd::Function;
 use oxidd::Manager;
 use oxidd::ManagerRef;
-use oxidd::util::OptBool;
 use oxidd_core::util::EdgeDropGuard;
 
-use merc_utilities::MercError;
 use merc_symbolic::minus;
 use merc_symbolic::minus_edge;
 use merc_symbolic::FormatConfigSet;
+use merc_utilities::MercError;
 use merc_utilities::Timing;
 
-use crate::PG;
-use crate::Repeat;
-use crate::Set;
-use crate::Submap;
 use crate::combine;
 use crate::compute_reachable;
 use crate::project_variability_parity_games_iter;
+use crate::solve_zielonka;
 use crate::x_and_not_x;
 use crate::Player;
 use crate::Priority;
+use crate::Repeat;
+use crate::Set;
+use crate::Submap;
 use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
 use crate::VertexIndex;
-use crate::solve_zielonka;
+use crate::PG;
 
 /// Variant of the Zielonka algorithm to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +74,7 @@ pub fn solve_variability_zielonka(
 
     // Determine the initial set of vertices V
     let V = Submap::new(
+        manager_ref,
         if alternative_solving {
             manager_ref.with_manager_shared(|manager| BDDFunction::t(manager))
         } else {
@@ -180,8 +181,8 @@ pub fn verify_variability_product_zielonka_solution(
                 }
 
                 Ok(())
-            },
-            Err(res) => Err(res)
+            }
+            Err(res) => Err(res),
         }
     })?;
 
@@ -273,11 +274,15 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         let not_x = x.opponent();
 
         // 7. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
-        let mut mu = Submap::new(self.false_bdd.clone(), self.game.num_of_vertices());
+        let mut mu = Submap::new(self.manager_ref, self.false_bdd.clone(), self.game.num_of_vertices());
 
-        for v in &self.priority_vertices[*highest_prio] {
-            mu.set(*v, gamma[*v].clone());
-        }
+        self.manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+            for v in &self.priority_vertices[*highest_prio] {
+                mu.set(manager,*v, gamma[*v].clone());
+            }
+            
+            Ok(())
+        })?;
 
         debug!(
             "|gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
@@ -298,7 +303,12 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             "{indent}zielonka_family(gamma \\ alpha), |alpha| = {}",
             alpha.number_of_non_empty()
         );
-        let (omega1_0, omega1_1) = self.solve_recursive(gamma.clone_with_manager(self.manager_ref).minus(self.manager_ref, &alpha)?, depth + 1)?;
+        let (omega1_0, omega1_1) = self.solve_recursive(
+            gamma
+                .clone_with_manager(self.manager_ref)
+                .minus(self.manager_ref, &alpha)?,
+            depth + 1,
+        )?;
 
         let (mut omega1_x, mut omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
         if omega1_not_x.is_empty() {
@@ -352,13 +362,18 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // 7. C := { c in \bigC | exists v in V : p(v) = m && c in \gamma(v) }
         // 8. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
-        let mut mu = Submap::new(self.false_bdd.clone(), self.game.num_of_vertices());
+        let mut mu = Submap::new(self.manager_ref, self.false_bdd.clone(), self.game.num_of_vertices());
 
         let mut C = self.false_bdd.clone();
-        for v in &self.priority_vertices[*highest_prio] {
-            mu.set(*v, gamma[*v].clone());
-            C = C.or(&gamma[*v])?;
-        }
+
+        self.manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+            for v in &self.priority_vertices[*highest_prio] {
+                mu.set(manager,*v, gamma[*v].clone());
+                C = C.or(&gamma[*v])?;
+            }
+
+            Ok(())
+        })?;
 
         debug!(
             "{indent}|gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
@@ -380,8 +395,12 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             "{indent}zielonka_family_opt(gamma \\ alpha) |alpha| = {}",
             alpha.number_of_non_empty()
         );
-        let (omega1_0, omega1_1) =
-            self.zielonka_family_optimised(gamma.clone_with_manager(self.manager_ref).minus(self.manager_ref, &alpha)?, depth + 1)?;
+        let (omega1_0, omega1_1) = self.zielonka_family_optimised(
+            gamma
+                .clone_with_manager(self.manager_ref)
+                .minus(self.manager_ref, &alpha)?,
+            depth + 1,
+        )?;
 
         // omega_prime[not_x] restricted to (gamma \ C)
         let C_restricted = minus(
@@ -394,7 +413,9 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         )?;
 
         let (mut omega1_x, omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
-        let omega1_not_x_restricted = omega1_not_x.clone_with_manager(self.manager_ref).minus_function(self.manager_ref, &C_restricted)?;
+        let omega1_not_x_restricted = omega1_not_x
+            .clone_with_manager(self.manager_ref)
+            .minus_function(self.manager_ref, &C_restricted)?;
 
         // 10.
         if omega1_not_x_restricted.is_empty() {
@@ -424,7 +445,9 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                 &C1,
             )?;
 
-            let omega1_not_x_restricted1 = omega1_not_x.clone_with_manager(self.manager_ref).minus_function(self.manager_ref, &C1_restricted)?;
+            let omega1_not_x_restricted1 = omega1_not_x
+                .clone_with_manager(self.manager_ref)
+                .minus_function(self.manager_ref, &C1_restricted)?;
             trace!("{indent}omega'_notx_restricted: {:?}", omega1_not_x_restricted1);
             let alpha1 = self.attractor(not_x, &gamma, omega1_not_x_restricted1)?;
             trace!("{indent}alpha': {:?}", alpha1);
@@ -581,7 +604,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                                 let update = BDDFunction::or_edge(manager, A[v].as_edge(manager), &a)?;
                                 let is_empty = update == *f_edge;
 
-                                A.set_internal(v, BDDFunction::from_edge(manager, update), was_empty, is_empty);
+                                A.set(manager, v, BDDFunction::from_edge(manager, update));
 
                                 // 17. if v not in Q then Q.push(v)
                                 if !self.temp_vertices[*v] {
