@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 use std::rc::Rc;
@@ -25,6 +26,16 @@ pub struct Timer {
     registered: bool,
 }
 
+/// Aggregated timing summary for a named timer.
+struct Aggregate {
+    name: String,
+    min: f32,
+    max: f32,
+    total: f32,
+    avg: f32,
+    count: usize,
+}
+
 impl Timing {
     /// Creates a new timing object to track timers.
     pub fn new() -> Self {
@@ -43,10 +54,51 @@ impl Timing {
         }
     }
 
-    /// Prints all the finished timers.
-    pub fn print(&self) {
+    /// Aggregate results by name and compute (min, max, avg, count, total) for each.
+    fn aggregate_results(&self) -> Vec<Aggregate> {
+        let mut map: HashMap<String, Aggregate> = HashMap::new();
         for (name, time) in self.results.borrow().iter() {
-            eprintln!("Time {name}: {time:.3}s");
+            map.entry(name.clone())
+                .and_modify(|ag| {
+                    ag.count += 1;
+                    ag.total += *time;
+                    ag.min = ag.min.min(*time);
+                    ag.max = ag.max.max(*time);
+                })
+                .or_insert(Aggregate {
+                    name: name.clone(),
+                    min: *time,
+                    max: *time,
+                    total: *time,
+                    avg: 0.0,
+                    count: 1,
+                });
+        }
+
+        // Compute the averages and sort by name.
+        let mut out: Vec<Aggregate> = map
+            .into_iter()
+            .map(|(_, mut ag)| {
+                ag.avg = if ag.count > 0 { ag.total / (ag.count as f32) } else { 0.0 };
+                ag
+            })
+            .collect();
+
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out
+    }
+
+    /// Prints all the finished timers aggregated by name (total first; omit metrics when n == 1).
+    pub fn print(&self) {
+        for ag in self.aggregate_results() {
+            if ag.count == 1 {
+                eprintln!("Time {}: {:.3}s", ag.name, ag.total);
+            } else {
+                eprintln!(
+                    "Time {}: {:.3}s, min: {:.3}s, max: {:.3}s, avg: {:.3}s, n: {}",
+                    ag.name, ag.total, ag.min, ag.max, ag.avg, ag.count
+                );
+            }
         }
     }
 
@@ -55,8 +107,15 @@ impl Timing {
         writeln!(writer, "- tool: {tool_name}")?;
         writeln!(writer, "  timing:")?;
 
-        for (name, time) in self.results.borrow().iter() {
-            writeln!(writer, "    {name}: {time:.3}s")?;
+        for ag in self.aggregate_results() {
+            writeln!(writer, "    {}:", ag.name)?;
+            writeln!(writer, "      total: {total:.3}s", total = ag.total)?;
+            if ag.count > 1 {
+                writeln!(writer, "      count: {}", ag.count)?;
+                writeln!(writer, "      min: {min:.3}s", min = ag.min)?;
+                writeln!(writer, "      max: {max:.3}s", max = ag.max)?;
+                writeln!(writer, "      avg: {avg:.3}s", avg = ag.avg)?;
+            }
         }
         Ok(())
     }
