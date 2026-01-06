@@ -23,7 +23,7 @@ pub fn minus_edge<'id>(manager: &<BDDFunction as Function>::Manager<'id>,
     lhs: &EdgeOfFunc<'id, BDDFunction>, 
     rhs: &EdgeOfFunc<'id, BDDFunction>) -> AllocResult<<<BDDFunction as Function>::Manager<'id> as Manager>::Edge> 
 {
-    BDDFunction::imp_strict_edge(manager, lhs, rhs)
+    BDDFunction::imp_strict_edge(manager, rhs, lhs)
 }
 
 /// Iterator over all cubes (satisfying assignments) in a BDD.
