@@ -250,7 +250,9 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         if solve_variant == ZielonkaVariant::Product {
             // Since we want to print W0, W1 separately, we need to store the results temporarily.
             let mut results = [Vec::new(), Vec::new()];
-            for (cube, _bdd, solution) in solve_variability_product_zielonka(&game) {
+            for result in solve_variability_product_zielonka(&game, &timing) {
+                let (cube, _bdd, solution) = result?;
+                
                 for (index, w) in solution.iter().enumerate() {
                     results[index].push((cube.clone(), w.clone()));
                 }
@@ -291,7 +293,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             }
 
             if args.verify_solution {
-                verify_variability_product_zielonka_solution(&game, &solutions)?;
+                verify_variability_product_zielonka_solution(&game, &solutions, timing)?;
             }
         }
         time_solve.finish();
@@ -380,8 +382,8 @@ fn handle_project(cli: &Cli, args: &ProjectArgs, timing: &mut Timing) -> Result<
 
     let output_path = Path::new(&args.output);
 
-    for result in project_variability_parity_games_iter(&vpg) {
-        let (cube, _bdd, pg) = result?;
+    for result in project_variability_parity_games_iter(&vpg, &timing) {
+        let ((cube, _bdd, pg), _) = result?;
 
         let extension = output_path.extension().ok_or("Missing extension on output file")?;
         let new_path = output_path

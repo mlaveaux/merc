@@ -13,14 +13,7 @@ use bitvec::order::Lsb0;
 use bitvec::vec::BitVec;
 use itertools::Itertools;
 use log::debug;
-use log::info;
 use log::trace;
-use oxidd::BooleanFunction;
-use oxidd::bdd::BDDFunction;
-use oxidd::util::OptBool;
-
-use merc_symbolic::FormatConfig;
-use merc_utilities::MercError;
 
 use crate::PG;
 use crate::ParityGame;
@@ -28,13 +21,10 @@ use crate::Player;
 use crate::Predecessors;
 use crate::Priority;
 use crate::Repeat;
-use crate::Submap;
-use crate::VariabilityParityGame;
 use crate::VertexIndex;
-use crate::compute_reachable;
-use crate::project_variability_parity_games_iter;
 
-type Set = BitVec<usize, Lsb0>;
+/// The type for a set of vertices.
+pub type Set = BitVec<usize, Lsb0>;
 
 /// Solves the given parity game using the Zielonka algorithm.
 pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
@@ -54,69 +44,6 @@ pub fn solve_zielonka(game: &ParityGame) -> [Set; 2] {
         zielonka.check_partition(&W0, &W1, &full_V);
     }
     [W0, W1]
-}
-
-/// Solves the given variability parity game using the product-based Zielonka algorithm.
-pub fn solve_variability_product_zielonka(
-    vpg: &VariabilityParityGame,
-) -> impl Iterator<Item = (Vec<OptBool>, BDDFunction, [Set; 2])> {
-    project_variability_parity_games_iter(vpg).map(|result| {
-        let (cube, bdd, pg) = result.expect("Projection should not fail");
-        let (reachable_pg, projection) = compute_reachable(&pg);
-
-        debug!("Solving projection on {}...", FormatConfig(&cube));
-
-        let pg_solution = solve_zielonka(&reachable_pg);
-        let mut new_solution = [
-            bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],
-            bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],
-        ];
-        for v in pg.iter_vertices() {
-            if let Some(proj_v) = projection[*v] {
-                // Vertex is reachable in the projection, set its solution
-                if pg_solution[0][proj_v] {
-                    new_solution[0].set(*v, true);
-                }
-                if pg_solution[1][proj_v] {
-                    new_solution[1].set(*v, true);
-                }
-            }
-        }
-
-        (cube, bdd, new_solution)
-    })
-}
-
-/// Verifies that the solution obtained from the variability product-based Zielonka solver
-/// is consistent with the solution of the variability parity game.
-pub fn verify_variability_product_zielonka_solution(
-    vpg: &VariabilityParityGame,
-    solution: &[Submap; 2],
-) -> Result<(), MercError> {
-    info!("Verifying variability product-based Zielonka solution...");
-    for (bits, cube, pg_solution) in solve_variability_product_zielonka(vpg) {
-        for v in vpg.iter_vertices() {
-            if pg_solution[0][*v] {
-                // Won by Even
-                assert!(
-                    solution[0][v].and(&cube)?.satisfiable(),
-                    "Projection {}, vertex {v} is won by even in the product, but not in the vpg",
-                    FormatConfig(&bits)
-                );
-            }
-
-            if pg_solution[1][*v] {
-                // Won by Odd
-                assert!(
-                    solution[1][v].and(&cube)?.satisfiable(),
-                    "Projection {}, vertex {v} is won by odd in the product, but not in the vpg",
-                    FormatConfig(&bits)
-                );
-            }
-        }
-    }
-
-    Ok(())
 }
 
 struct ZielonkaSolver<'a> {

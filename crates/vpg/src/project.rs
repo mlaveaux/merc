@@ -1,3 +1,4 @@
+use merc_utilities::Timing;
 use oxidd::BooleanFunction;
 use oxidd::bdd::BDDFunction;
 use oxidd::util::OptBool;
@@ -36,12 +37,17 @@ pub fn project_variability_parity_game(
 }
 
 /// Projects all configurations of a variability parity game into standard parity games.
-pub fn project_variability_parity_games_iter(
-    vpg: &VariabilityParityGame,
-) -> impl Iterator<Item = Result<(Vec<OptBool>, BDDFunction, ParityGame), MercError>> {
-    CubeIterAll::new(vpg.variables(), vpg.configuration()).map(|cube| {
+pub fn project_variability_parity_games_iter<'a>(
+    vpg: &'a VariabilityParityGame,
+    timing: &'a Timing,
+) -> impl Iterator<Item = Result<((Vec<OptBool>, BDDFunction, ParityGame), &'a Timing), MercError>> {
+    CubeIterAll::new(vpg.variables(), vpg.configuration()).map(move |cube| {
         let (cube, bdd) = cube?;
+
+        let mut time_proj = timing.start("project");
         let pg = project_variability_parity_game(vpg, &bdd)?;
-        Ok((cube, bdd, pg))
+        time_proj.finish();
+
+        Ok(((cube, bdd, pg), timing))
     })
 }

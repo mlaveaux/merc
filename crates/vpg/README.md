@@ -41,6 +41,10 @@ let solution = solve_zielonka(&parity_game);
 Added the `clap` feature to conditionally enable the `clap` dependency to derive
 some convenience traits.
 
+Optimised the implementation to avoid unnecessary `with_manager_shared` calls
+when operating on BDDs. This is important since `oxidd` is otherwise not
+efficient when doing many individual operations.
+
 ## Authors
 
 The implementation of this crate was developed by Sjef van Loo and Maurice

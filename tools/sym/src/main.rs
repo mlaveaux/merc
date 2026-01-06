@@ -115,7 +115,7 @@ fn handle_explore(args: ExploreArgs, _timing: &mut Timing) -> Result<(), MercErr
     let format = guess_format_from_extension(&args.filename, args.format).ok_or("Cannot determine input format")?;
 
     let mut file = File::open(&args.filename)?;
-    let mut timing = Timing::new();
+    let timing = Timing::new();
 
     match format {
         SymFormat::Sylvan => {

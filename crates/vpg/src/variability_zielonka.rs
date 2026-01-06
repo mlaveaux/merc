@@ -101,6 +101,84 @@ pub fn solve_variability_zielonka(
     Ok([W0, W1])
 }
 
+/// Solves the given variability parity game using the product-based Zielonka algorithm.
+pub fn solve_variability_product_zielonka<'a>(
+    vpg: &'a VariabilityParityGame,
+    timing: &'a Timing,
+) -> impl Iterator<Item = Result<(Vec<OptBool>, BDDFunction, [Set; 2]), MercError>> + 'a {
+    project_variability_parity_games_iter(vpg, timing).map(|result| {
+        match result {
+            Ok(((cube, bdd, pg), timing)) => {
+                let mut reachable_time = timing.start("reachable");
+                let (reachable_pg, projection) = compute_reachable(&pg);
+                reachable_time.finish();
+
+                debug!("Solving projection on {}...", FormatConfig(&cube));
+
+                let pg_solution = solve_zielonka(&reachable_pg);
+                let mut new_solution = [
+                    bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],
+                    bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],
+                ];
+                for v in pg.iter_vertices() {
+                    if let Some(proj_v) = projection[*v] {
+                        // Vertex is reachable in the projection, set its solution
+                        if pg_solution[0][proj_v] {
+                            new_solution[0].set(*v, true);
+                        }
+                        if pg_solution[1][proj_v] {
+                            new_solution[1].set(*v, true);
+                        }
+                    }
+                }
+
+                Ok((cube, bdd, new_solution))
+            }
+            Err(result) => Err(result)
+        }
+    })
+}
+
+/// Verifies that the solution obtained from the variability product-based Zielonka solver
+/// is consistent with the solution of the variability parity game.
+pub fn verify_variability_product_zielonka_solution(
+    vpg: &VariabilityParityGame,
+    solution: &[Submap; 2],
+    timing: &mut Timing,
+) -> Result<(), MercError> {
+    info!("Verifying variability product-based Zielonka solution...");
+    solve_variability_product_zielonka(vpg, timing).try_for_each(|res| {
+        match res {
+            Ok((bits, cube, pg_solution)) =>  {
+                for v in vpg.iter_vertices() {
+                    if pg_solution[0][*v] {
+                        // Won by Even
+                        assert!(
+                            solution[0][v].and(&cube)?.satisfiable(),
+                            "Projection {}, vertex {v} is won by even in the product, but not in the vpg",
+                            FormatConfig(&bits)
+                        );
+                    }
+
+                    if pg_solution[1][*v] {
+                        // Won by Odd
+                        assert!(
+                            solution[1][v].and(&cube)?.satisfiable(),
+                            "Projection {}, vertex {v} is won by odd in the product, but not in the vpg",
+                            FormatConfig(&bits)
+                        );
+                    }
+                }
+
+                Ok(())
+            },
+            Err(res) => Err(res)
+        }
+    })?;
+
+    Ok(())
+}
+
 struct VariabilityZielonkaSolver<'a> {
     game: &'a VariabilityParityGame,
 
