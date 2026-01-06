@@ -49,9 +49,11 @@ impl Submap {
     }
 
     /// Returns an iterator over the vertices in the submap whose configuration is satisfiable.
-    pub fn iter_vertices(&self) -> impl Iterator<Item = VertexIndex> + '_ {
-        self.mapping.iter().enumerate().filter_map(|(i, func)| {
-            if func.satisfiable() {
+    pub fn iter_vertices<'a, 'id: 'a>(&'a self, manager: &'a <BDDFunction as Function>::Manager<'id>) -> impl Iterator<Item = VertexIndex> + 'a {
+        let f_edge = self.false_bdd.as_edge(manager);
+
+        self.mapping.iter().enumerate().filter_map(move |(i, func)| {
+            if func.as_edge(manager) != f_edge {
                 Some(VertexIndex::new(i))
             } else {
                 None

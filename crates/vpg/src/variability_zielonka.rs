@@ -497,12 +497,15 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             self.temp_queue.is_empty(),
             "temp_queue should be empty at the start of attractor computation"
         );
-        for v in A.iter_vertices() {
-            self.temp_queue.push(v);
 
-            // temp_vertices keeps track of which vertices are in the queue.
-            self.temp_vertices.set(*v, true);
-        }
+        self.manager_ref.with_manager_shared(|manager| {
+            for v in A.iter_vertices(manager) {
+                self.temp_queue.push(v);
+
+                // temp_vertices keeps track of which vertices are in the queue.
+                self.temp_vertices.set(*v, true);
+            }
+        });
 
         // 4. While Q not empty do
         // 5. w := Q.pop()
@@ -631,31 +634,37 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         let mut highest = usize::MIN;
         let mut lowest = usize::MAX;
 
-        for v in V.iter_vertices() {
-            let prio = self.game.priority(v);
-            highest = highest.max(*prio);
-            lowest = lowest.min(*prio);
-        }
-
+        self.manager_ref.with_manager_shared(|manager| {
+            for v in V.iter_vertices(manager) {
+                let prio = self.game.priority(v);
+                highest = highest.max(*prio);
+                lowest = lowest.min(*prio);
+            }
+        });
+        
         (Priority::new(highest), Priority::new(lowest))
     }
 
     /// Checks that the sets W0 and W1 form a  partition w.r.t the submap V, i.e., their union is V and their intersection is empty.
     fn check_partition(&self, W0: &Submap, W1: &Submap, V: &Submap) -> Result<(), MercError> {
-        for v in V.iter_vertices() {
-            let tmp = W0[v].or(&W1[v])?;
+        self.manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
+            for v in V.iter_vertices(manager) {
+                let tmp = W0[v].or(&W1[v])?;
 
-            // The union of both solutions should be the entire set of vertices.
-            assert!(
-                tmp == V[v],
-                "The union of both solutions should be the entire set of vertices, but vertex {v} is missing."
-            );
+                // The union of both solutions should be the entire set of vertices.
+                assert!(
+                    tmp == V[v],
+                    "The union of both solutions should be the entire set of vertices, but vertex {v} is missing."
+                );
 
-            assert!(
-                !W0[v].and(&W1[v])?.satisfiable(),
-                "The intersection of both solutions should be empty, but vertex {v} has non-empty intersection."
-            );
-        }
+                assert!(
+                    !W0[v].and(&W1[v])?.satisfiable(),
+                    "The intersection of both solutions should be empty, but vertex {v} has non-empty intersection."
+                );
+            }
+
+            Ok(())
+        })?;
 
         Ok(())
     }
