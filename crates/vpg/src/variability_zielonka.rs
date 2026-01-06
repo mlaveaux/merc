@@ -144,7 +144,7 @@ pub fn solve_variability_product_zielonka<'a>(
 
                 Ok((cube, bdd, new_solution))
             }
-            Err(result) => Err(result)
+            Err(result) => Err(result),
         }
     })
 }
@@ -159,7 +159,7 @@ pub fn verify_variability_product_zielonka_solution(
     info!("Verifying variability product-based Zielonka solution...");
     solve_variability_product_zielonka(vpg, timing).try_for_each(|res| {
         match res {
-            Ok((bits, cube, pg_solution)) =>  {
+            Ok((bits, cube, pg_solution)) => {
                 for v in vpg.iter_vertices() {
                     if pg_solution[0][*v] {
                         // Won by Even
@@ -276,13 +276,14 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         // 7. \mu := lambda v in V. bigcup { \gamma(v) | p(v) = m }
         let mut mu = Submap::new(self.manager_ref, self.false_bdd.clone(), self.game.num_of_vertices());
 
-        self.manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
-            for v in &self.priority_vertices[*highest_prio] {
-                mu.set(manager,*v, gamma[*v].clone());
-            }
-            
-            Ok(())
-        })?;
+        self.manager_ref
+            .with_manager_shared(|manager| -> Result<(), MercError> {
+                for v in &self.priority_vertices[*highest_prio] {
+                    mu.set(manager, *v, gamma[*v].clone());
+                }
+
+                Ok(())
+            })?;
 
         debug!(
             "|gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
@@ -366,14 +367,15 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         let mut C = self.false_bdd.clone();
 
-        self.manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
-            for v in &self.priority_vertices[*highest_prio] {
-                mu.set(manager,*v, gamma[*v].clone());
-                C = C.or(&gamma[*v])?;
-            }
+        self.manager_ref
+            .with_manager_shared(|manager| -> Result<(), MercError> {
+                for v in &self.priority_vertices[*highest_prio] {
+                    mu.set(manager, *v, gamma[*v].clone());
+                    C = C.or(&gamma[*v])?;
+                }
 
-            Ok(())
-        })?;
+                Ok(())
+            })?;
 
         debug!(
             "{indent}|gamma| = {}, m = {}, l = {}, x = {}, |mu| = {}",
@@ -581,7 +583,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                                                                 } else {
                                                                     self.game.configuration().as_edge(manager)
                                                                 },
-                                                                &tmp
+                                                                &tmp,
                                                             )?,
                                                         ),
                                                         A[edge_w1.to()].as_edge(manager),
@@ -594,10 +596,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
                             }
 
                             // 15. a \ A(v) != \emptyset
-                            if *EdgeDropGuard::new(
-                                manager,
-                                minus_edge(manager, &a, A[v].as_edge(manager))?,
-                            ) != *f_edge
+                            if *EdgeDropGuard::new(manager, minus_edge(manager, &a, A[v].as_edge(manager))?) != *f_edge
                             {
                                 // 16. A(v) := A(v) \cup a
                                 let was_empty = *A[v].as_edge(manager) == *f_edge;
@@ -686,7 +685,7 @@ mod tests {
     use crate::VertexIndex;
     use crate::ZielonkaVariant;
     use crate::PG;
-    
+
     #[merc_test]
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_variability_parity_game_solve() {

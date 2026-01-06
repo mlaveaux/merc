@@ -66,9 +66,14 @@ impl Submap {
     }
 
     /// Sets the function for the given vertex index.
-    /// 
+    ///
     /// Takes an internal manager to avoid repeated calls to [oxidd:Manager::with_manager_shared].
-    pub fn set<'id>(&mut self, manager: &<BDDFunction as Function>::Manager<'id>, index: VertexIndex, func: BDDFunction) {
+    pub fn set<'id>(
+        &mut self,
+        manager: &<BDDFunction as Function>::Manager<'id>,
+        index: VertexIndex,
+        func: BDDFunction,
+    ) {
         let was_empty = self.mapping[*index].as_edge(manager) == self.false_bdd.as_edge(manager);
         let is_empty = func.as_edge(manager) == self.false_bdd.as_edge(manager);
 
@@ -159,7 +164,11 @@ impl Submap {
     }
 
     /// Computes the intersection between this submap and another function.
-    pub fn and_function(mut self, manager_ref: &BDDManagerRef, configuration: &BDDFunction) -> Result<Submap, MercError> {
+    pub fn and_function(
+        mut self,
+        manager_ref: &BDDManagerRef,
+        configuration: &BDDFunction,
+    ) -> Result<Submap, MercError> {
         manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
             let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
 
@@ -184,7 +193,11 @@ impl Submap {
     }
 
     /// Computes the difference between this submap and another function.
-    pub fn minus_function(mut self, manager_ref: &BDDManagerRef, configuration: &BDDFunction) -> Result<Submap, MercError> {
+    pub fn minus_function(
+        mut self,
+        manager_ref: &BDDManagerRef,
+        configuration: &BDDFunction,
+    ) -> Result<Submap, MercError> {
         manager_ref.with_manager_shared(|manager| -> Result<(), MercError> {
             let f_edge = EdgeDropGuard::new(manager, BDDFunction::f_edge(manager));
             let conf_edge = configuration.as_edge(manager);
