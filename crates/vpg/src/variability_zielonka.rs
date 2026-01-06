@@ -83,7 +83,7 @@ pub fn solve_variability_zielonka(
         game.num_of_vertices(),
     );
 
-    let full_V = V.clone_with_manager(manager_ref);
+    let full_V = V.clone();
     let (W0, W1) = match variant {
         ZielonkaVariant::Family => zielonka.solve_recursive(V, 0)?,
         ZielonkaVariant::FamilyOptimisedLeft => zielonka.zielonka_family_optimised(V, 0)?,
@@ -259,11 +259,11 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // For debugging mostly
         let indent = Repeat::new(" ", depth);
-        let gamma_copy = gamma.clone_with_manager(self.manager_ref);
+        let gamma_copy = gamma.clone();
 
         // 1. if \gamma == \epsilon then
         if gamma.is_empty() {
-            return Ok((gamma.clone_with_manager(self.manager_ref), gamma));
+            return Ok((gamma.clone(), gamma));
         }
 
         // 5. m := max { p(v) | v in V && \gamma(v) \neq \emptyset }
@@ -306,7 +306,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         );
         let (omega1_0, omega1_1) = self.solve_recursive(
             gamma
-                .clone_with_manager(self.manager_ref)
+                .clone()
                 .minus(self.manager_ref, &alpha)?,
             depth + 1,
         )?;
@@ -346,12 +346,12 @@ impl<'a> VariabilityZielonkaSolver<'a> {
     fn zielonka_family_optimised(&mut self, gamma: Submap, depth: usize) -> Result<(Submap, Submap), MercError> {
         self.recursive_calls += 1;
         let indent = Repeat::new(" ", depth);
-        let gamma_copy = gamma.clone_with_manager(self.manager_ref);
+        let gamma_copy = gamma.clone();
 
         // 1. if \gamma == \epsilon then
         if gamma.is_empty() {
             // 2. return (\epsilon, \epsilon)
-            return Ok((gamma.clone_with_manager(self.manager_ref), gamma));
+            return Ok((gamma.clone(), gamma));
         }
 
         // 5. m := max { p(v) | v in V && \gamma(v) \neq \emptyset }
@@ -399,7 +399,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
         );
         let (omega1_0, omega1_1) = self.zielonka_family_optimised(
             gamma
-                .clone_with_manager(self.manager_ref)
+                .clone()
                 .minus(self.manager_ref, &alpha)?,
             depth + 1,
         )?;
@@ -416,7 +416,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         let (mut omega1_x, omega1_not_x) = x_and_not_x(omega1_0, omega1_1, x);
         let omega1_not_x_restricted = omega1_not_x
-            .clone_with_manager(self.manager_ref)
+            .clone()
             .minus_function(self.manager_ref, &C_restricted)?;
 
         // 10.
@@ -448,7 +448,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
             )?;
 
             let omega1_not_x_restricted1 = omega1_not_x
-                .clone_with_manager(self.manager_ref)
+                .clone()
                 .minus_function(self.manager_ref, &C1_restricted)?;
             trace!("{indent}omega'_notx_restricted: {:?}", omega1_not_x_restricted1);
             let alpha1 = self.attractor(not_x, &gamma, omega1_not_x_restricted1)?;
