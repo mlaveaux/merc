@@ -12,6 +12,7 @@ mcrl2-sys.workspace = true
 merc_tools.workspace = true
 merc_utilities.workspace = true
 
+itertools.workspace = true
 log.workspace = true
 parking_lot.workspace = true
 rand.workspace = true

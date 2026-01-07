@@ -508,6 +508,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 name = "mcrl2"
 version = "1.0.0"
 dependencies = [
+ "itertools",
  "log",
  "mcrl2-macros",
  "mcrl2-sys",
@@ -557,6 +558,7 @@ dependencies = [
  "merc_io",
  "merc_tools",
  "merc_utilities",
+ "rand",
  "thiserror",
 ]
 
