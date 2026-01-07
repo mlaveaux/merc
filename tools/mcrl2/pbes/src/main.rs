@@ -62,6 +62,10 @@ struct SymmetryArgs {
     #[arg(long)]
     permutation: Option<String>,
 
+    /// Search for all symmetries instead of only the first one.    
+    #[arg(long, default_value_t = false)]
+    all_symmetries: bool,
+
     /// Partition data parameters into their sorts before considering their permutation groups.
     #[arg(long, default_value_t = false)]
     partition_data_sorts: bool,
@@ -122,6 +126,11 @@ fn main() -> Result<ExitCode, MercError> {
 
                 if algorithm.check_symmetry(&candidate) {
                     info!("Found symmetry: {}", candidate);
+
+                    if !args.all_symmetries {
+                        // Only search for the first symmetry
+                        return Ok(ExitCode::SUCCESS);
+                    }
                 }
             }
         }
