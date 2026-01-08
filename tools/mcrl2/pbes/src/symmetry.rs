@@ -743,7 +743,7 @@ mod tests {
         );
 
         let mut symmetries: Vec<Permutation> = algorithm
-            .candidates(false)
+            .candidates(false, false)
             .filter(|pi| algorithm.check_symmetry(pi))
             .collect();
 
