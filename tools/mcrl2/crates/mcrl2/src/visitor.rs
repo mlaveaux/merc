@@ -33,37 +33,43 @@ use crate::is_variable;
 use crate::is_where_clause;
 
 pub trait DataExpressionVisitor {
-    fn visit_variable(&mut self, var: &DataVariableRef<'_>) -> Option<DataExpression> {
+    fn visit_variable(&mut self, _var: &DataVariableRef<'_>) -> Option<DataExpression> {
         None
     }
 
-    fn visit_application(&mut self, appl: &DataApplicationRef<'_>) -> Option<DataExpression {
-        let head = self.visit(&appl.data_function_symbol().into());
+    fn visit_application(&mut self, appl: &DataApplicationRef<'_>) -> Option<DataExpression> {
+        let _head = self.visit(&appl.data_function_symbol().into());
 
-        DataExpression::from(appl.protect())
+        appl.data_arguments().for_each(|arg| {
+            self.visit(&arg.into());
+        });
+
+        None
     }
 
-    fn visit_abstraction(&mut self, abstraction: &DataAbstractionRef<'_>) -> DataExpression {
-        DataExpression::from(abstraction.protect())
+    fn visit_abstraction(&mut self, abstraction: &DataAbstractionRef<'_>) -> Option<DataExpression> {
+        let _body = self.visit(&abstraction.body());
+        None
     }
 
-    fn visit_function_symbol(&mut self, function_symbol: &DataFunctionSymbolRef<'_>) -> DataExpression {
-        DataExpression::from(function_symbol.protect())
+    fn visit_function_symbol(&mut self, _function_symbol: &DataFunctionSymbolRef<'_>) -> Option<DataExpression> {
+        None
     }
 
-    fn visit_where_clause(&mut self, where_: &DataWhereClauseRef<'_>) -> DataExpression {
-        DataExpression::from(where_.protect())
+    fn visit_where_clause(&mut self, where_: &DataWhereClauseRef<'_>) -> Option<DataExpression> {
+        let _body = self.visit(&where_.body());
+        None
     }
 
-    fn visit_machine_number(&mut self, number: &DataMachineNumberRef<'_>) -> DataExpression {
-        DataExpression::from(number.protect())
+    fn visit_machine_number(&mut self, _number: &DataMachineNumberRef<'_>) -> Option<DataExpression> {
+        None
     }
 
-    fn visit_untyped_identifier(&mut self, identifier: &DataUntypedIdentifierRef<'_>) -> DataExpression {
-        DataExpression::from(identifier.protect())
+    fn visit_untyped_identifier(&mut self, _identifier: &DataUntypedIdentifierRef<'_>) -> Option<DataExpression> {
+        None
     }
 
-    fn visit(&mut self, expr: &DataExpressionRef<'_>) -> DataExpression {
+    fn visit(&mut self, expr: &DataExpressionRef<'_>) -> Option<DataExpression> {
         if is_variable(&expr.copy()) {
             self.visit_variable(&DataVariableRef::from(expr.copy()))
         } else if is_application(&expr.copy()) {
@@ -87,48 +93,48 @@ pub trait DataExpressionVisitor {
 pub trait PbesExpressionVisitor {
     fn visit_propositional_variable_instantiation(
         &mut self,
-        inst: &PbesPropositionalVariableInstantiationRef<'_>,
-    ) -> PbesExpression {
-        PbesExpression::from(inst.protect())
+        _inst: &PbesPropositionalVariableInstantiationRef<'_>,
+    ) -> Option<PbesExpression> {
+        None
     }
 
-    fn visit_not(&mut self, not: &PbesNotRef<'_>) -> PbesExpression {
+    fn visit_not(&mut self, not: &PbesNotRef<'_>) -> Option<PbesExpression> {
         self.visit(&not.body());
-        PbesExpression::from(not.protect())
+        None
     }
 
-    fn visit_and(&mut self, and: &PbesAndRef<'_>) -> PbesExpression {
+    fn visit_and(&mut self, and: &PbesAndRef<'_>) -> Option<PbesExpression> {
         self.visit(&and.lhs());
         self.visit(&and.rhs());
-        PbesExpression::from(and.protect())
+        None
     }
 
-    fn visit_or(&mut self, or: &PbesOrRef<'_>) -> PbesExpression {
+    fn visit_or(&mut self, or: &PbesOrRef<'_>) -> Option<PbesExpression> {
         self.visit(&or.lhs());
         self.visit(&or.rhs());
-        PbesExpression::from(or.protect())
+        None
     }
 
-    fn visit_imp(&mut self, imp: &PbesImpRef<'_>) -> PbesExpression {
+    fn visit_imp(&mut self, imp: &PbesImpRef<'_>) -> Option<PbesExpression> {
         self.visit(&imp.lhs());
         self.visit(&imp.rhs());
-        PbesExpression::from(imp.protect())
+        None
     }
 
-    fn visit_forall(&mut self, forall: &PbesForallRef<'_>) -> PbesExpression {
+    fn visit_forall(&mut self, forall: &PbesForallRef<'_>) -> Option<PbesExpression> {
         self.visit(&forall.body());
-        PbesExpression::from(forall.protect())
+        None
     }
 
-    fn visit_exists(&mut self, exists: &PbesExistsRef<'_>) -> PbesExpression {
+    fn visit_exists(&mut self, exists: &PbesExistsRef<'_>) -> Option<PbesExpression> {
         self.visit(&exists.body());
-        PbesExpression::from(exists.protect())
+        None
     }
 
-    fn visit(&mut self, expr: &PbesExpressionRef<'_>) -> PbesExpression {
+    fn visit(&mut self, expr: &PbesExpressionRef<'_>) -> Option<PbesExpression> {
         if is_pbes_propositional_variable_instantiation(&expr.copy()) {
             self.visit_propositional_variable_instantiation(&PbesPropositionalVariableInstantiationRef::from(
-                expr.copy(),
+                expr.copy()
             ))
         } else if is_pbes_not(&expr.copy()) {
             self.visit_not(&PbesNotRef::from(expr.copy()))
@@ -162,13 +168,13 @@ where
     where
         F: Fn(&DataVariableRef<'_>) -> DataExpression,
     {
-        fn visit_variable(&mut self, var: &DataVariableRef<'_>) -> DataExpression {
-            (*self.apply)(var)
+        fn visit_variable(&mut self, var: &DataVariableRef<'_>) -> Option<DataExpression> {
+            Some((*self.apply)(var))
         }
     }
 
     let mut builder = ReplaceVariableBuilder { apply: f };
-    builder.visit(expr)
+    builder.visit(expr).expect("Replacement should return a value")
 }
 
 /// Returns all the PVIs occurring in the given PBES expression.
@@ -183,16 +189,15 @@ pub fn pbes_expression_pvi(expr: &PbesExpressionRef<'_>) -> Vec<PbesPropositiona
         fn visit_propositional_variable_instantiation(
             &mut self,
             inst: &PbesPropositionalVariableInstantiationRef<'_>,
-        ) -> PbesExpression {
+        ) -> Option<PbesExpression> {
             // Found a propositional variable instantiation, return true.
-            self.result.push(PbesPropositionalVariableInstantiation::from(inst.protect()));
-            PbesExpression::from(inst.protect())
+            self.result
+                .push(PbesPropositionalVariableInstantiation::from(inst.protect()));
+            None
         }
     }
 
-    let mut checker = PviChecker {
-        result: &mut result,
-    };
+    let mut checker = PviChecker { result: &mut result };
 
     checker.visit(expr);
     result
