@@ -127,7 +127,7 @@ fn main() -> Result<ExitCode, MercError> {
                 if algorithm.check_symmetry(&candidate) {
                     info!("Found symmetry: {}", candidate);
 
-                    if !args.all_symmetries {
+                    if !args.all_symmetries && !candidate.is_identity() {
                         // Only search for the first symmetry
                         return Ok(ExitCode::SUCCESS);
                     }

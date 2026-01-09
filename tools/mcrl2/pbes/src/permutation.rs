@@ -159,7 +159,6 @@ impl Permutation {
     }
 
     /// Check whether this permutation is the identity permutation.
-    #[cfg(test)]
     pub fn is_identity(&self) -> bool {
         self.mapping.iter().all(|(d, v)| d == v)
     }
