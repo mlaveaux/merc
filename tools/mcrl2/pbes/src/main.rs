@@ -129,7 +129,8 @@ fn main() -> Result<ExitCode, MercError> {
 
                     if !args.all_symmetries && !candidate.is_identity() {
                         // Only search for the first symmetry
-                        return Ok(ExitCode::SUCCESS);
+                        info!("Stopping search after first non-trivial symmetry.");
+                        break;
                     }
                 }
             }
