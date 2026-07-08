@@ -1,8 +1,16 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
-  "features": {
-    "ghcr.io/devcontainers/features/rust:1.5.0": {}
+  "image": "mcr.microsoft.com/devcontainers/base:resolute",
+  "hostRequirements": {
+     "cpus": 4,
+     "memory": "8gb",
+     "storage": "32gb"
   },
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1.5.0": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/cargo-nextest:0.1.8": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/cargo-deny:0.1.8": {}
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [
