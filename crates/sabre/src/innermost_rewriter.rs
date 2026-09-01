@@ -12,6 +12,9 @@ use crate::RewriteEngine;
 use crate::RewriteSpecification;
 use crate::RewritingStatistics;
 use crate::Rule;
+use crate::matching::condition_cache::ConditionCache;
+use crate::matching::condition_cache::build_condition_cache;
+use crate::matching::condition_cache::check_conditions_with_cache;
 use crate::matching::conditions::EMACondition;
 use crate::matching::conditions::extend_conditions;
 use crate::matching::nonlinear::EquivalenceClass;
@@ -349,6 +352,14 @@ impl InnermostRewriter {
         announcement: &AnnouncementInnermost,
         t: &DataExpressionRef<'_>,
     ) -> bool {
+        if let Some(cache) = &announcement.condition_cache {
+            // A cached subterm may itself need normalising, which recurses back
+            // into this same rewrite loop through the closure below.
+            return check_conditions_with_cache(cache, t, builder, &mut |term, builder| {
+                InnermostRewriter::rewrite_aux(tp, stack, builder, stats, automaton, term, &EmptySubstitution)
+            });
+        }
+
         for c in &announcement.conditions {
             let rhs: DataExpression = c.rhs_term_stack.evaluate_with(t, builder);
             let lhs: DataExpression = c.lhs_term_stack.evaluate_with(t, builder);
@@ -381,6 +392,11 @@ pub struct AnnouncementInnermost {
     /// Conditions for the left hand side.
     pub conditions: Vec<EMACondition>,
 
+    /// A cache for the (rare) rules whose conditions share subterms across
+    /// each other, checked instead of `conditions` when present; see
+    /// [crate::matching::condition_cache].
+    pub condition_cache: Option<ConditionCache>,
+
     /// The innermost stack for the right hand side of the rewrite rule.
     pub rhs_stack: TermStack,
 }
@@ -389,6 +405,7 @@ impl AnnouncementInnermost {
     pub fn new(rule: &Rule) -> AnnouncementInnermost {
         AnnouncementInnermost {
             conditions: extend_conditions(rule),
+            condition_cache: build_condition_cache(rule),
             equivalence_classes: derive_equivalence_classes(rule),
             rhs_stack: TermStack::new(rule),
         }
