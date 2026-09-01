@@ -39,6 +39,11 @@ pub struct TermStack {
     pub innermost_stack: Protected<Vec<Config<'static>>>,
     /// The variables of the left-hand side that must be placed at certain places in the stack.
     pub variables: Vec<(DataPosition, usize)>,
+    /// Positions filled from an external slice of precomputed values instead
+    /// of the matched term, as `(index into that slice, stack position)`; see
+    /// [TermStack::from_term_with_cache]. Empty for a [TermStack] built with
+    /// [TermStack::from_term], which never produces one.
+    pub cached: Vec<(usize, usize)>,
     /// The number of elements that must be reserved on the innermost stack.
     pub stack_size: usize,
 }
@@ -178,6 +183,82 @@ impl TermStack {
             innermost_stack,
             stack_size,
             variables,
+            cached: Vec::new(),
+        }
+    }
+
+    /// Like [TermStack::from_term], but `cache_index` additionally marks
+    /// subterms whose value is known ahead of time (e.g. the already
+    /// normalised result of a commonly-occurring subterm, see
+    /// [crate::matching::condition_cache]): a subterm equal to one of
+    /// `cache_index`'s keys is filled from that external slot instead of
+    /// being reconstructed from `term`, and its own subterms are not
+    /// visited.
+    ///
+    /// Every key of `cache_index` must be reachable at most as a maximal
+    /// occurrence, i.e. not nested inside another key — `cache_index` is
+    /// expected to be built bottom-up (see
+    /// `condition_cache::collect_cached_terms`) so that a smaller cached
+    /// subterm is substituted before a larger one that contains it is even
+    /// considered.
+    pub fn from_term_with_cache(
+        term: &DataExpressionRef,
+        var_map: &HashMap<DataVariable, DataPosition>,
+        cache_index: &HashMap<DataExpression, usize>,
+    ) -> TermStack {
+        let mut innermost_stack: Protected<Vec<Config>> = Protected::new(vec![]);
+        let mut variables = vec![];
+        let mut cached = vec![];
+        let mut stack_size = 0;
+
+        // Positions whose subtree has already been substituted by a cached
+        // reference, so their descendants (still yielded by the position
+        // iterator below) must be skipped.
+        let mut pruned: Vec<DataPosition> = vec![];
+
+        for (term, position) in DataPositionIterator::new(term.copy()) {
+            if pruned.iter().any(|p| position.indices().starts_with(p.indices())) {
+                continue;
+            }
+
+            if let Some(&index) = cache_index.get(&term.protect()) {
+                cached.push((index, stack_size));
+                stack_size += 1;
+                pruned.push(position);
+            } else if is_data_variable(&term) {
+                let variable: DataVariableRef<'_> = term.into();
+                variables.push((
+                    var_map
+                        .get(&variable.protect())
+                        .expect("All variables in the right hand side must occur in the left hand side")
+                        .clone(),
+                    stack_size,
+                ));
+                stack_size += 1;
+            } else if is_data_machine_number(&term) {
+                let mut write = innermost_stack.write();
+                // Safety: term is pushed into the container on the next line.
+                let t = unsafe { write.protect(&term) };
+                write.push(Config::Term(t.into(), stack_size));
+                stack_size += 1;
+            } else {
+                let arity = term.data_arguments().len();
+                let mut write = innermost_stack.write();
+                write.push(Config::Construct(term.data_function_symbol(), arity, stack_size));
+                stack_size += 1;
+            }
+        }
+
+        debug_assert!(
+            stack_size >= 1,
+            "A term must contain at least one variable, cached reference or function symbol"
+        );
+
+        TermStack {
+            innermost_stack,
+            stack_size,
+            variables,
+            cached,
         }
     }
 
@@ -193,6 +274,21 @@ impl TermStack {
         term: &'b T,
         builder: &mut TermStackBuilder,
     ) -> DataExpression {
+        self.evaluate_with_cache(term, &[], builder)
+    }
+
+    /// Like [TermStack::evaluate_with], but also resolves any position built
+    /// by [TermStack::from_term_with_cache] against `cache`.
+    ///
+    /// `cache` must have at least as many elements as the highest index this
+    /// stack's `cached` entries refer to; a [TermStack] built with
+    /// [TermStack::from_term] never has any, so `cache` is unused for it.
+    pub fn evaluate_with_cache<'a, 'b, T: Term<'a, 'b>>(
+        &self,
+        term: &'b T,
+        cache: &[DataExpression],
+        builder: &mut TermStackBuilder,
+    ) -> DataExpression {
         let stack = &mut builder.stack;
         {
             let mut write = stack.terms.write();
@@ -200,12 +296,13 @@ impl TermStack {
             write.push(None);
         }
 
-        InnermostStack::integrate(
+        InnermostStack::integrate_with_cache(
             &mut stack.configs.write(),
             &mut stack.terms.write(),
             self,
             &DataExpressionRef::from(term.copy()),
             0,
+            cache,
         );
 
         loop {
@@ -303,6 +400,7 @@ impl Clone for TermStack {
 
         Self {
             variables: self.variables.clone(),
+            cached: self.cached.clone(),
             stack_size: self.stack_size,
             innermost_stack,
         }

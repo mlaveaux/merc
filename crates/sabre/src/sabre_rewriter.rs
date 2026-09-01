@@ -9,6 +9,7 @@ use merc_data::DataExpressionRef;
 use merc_utilities::debug_trace;
 
 use crate::RewriteSpecification;
+use crate::matching::condition_cache::check_conditions_with_cache;
 use crate::matching::nonlinear::check_equivalence_classes;
 use crate::set_automaton::MatchAnnouncement;
 use crate::set_automaton::SetAutomaton;
@@ -346,6 +347,14 @@ impl SabreRewriter {
         matched: &DataExpression,
         stats: &mut RewritingStatistics,
     ) -> bool {
+        if let Some(cache) = &annotation.condition_cache {
+            // A cached subterm may itself need normalising, which recurses back
+            // into this same rewrite loop through the closure below.
+            return check_conditions_with_cache(cache, matched, builder, &mut |term, builder| {
+                SabreRewriter::stack_based_normalise_aux(tp, automaton, builder, term_stack, term, stats)
+            });
+        }
+
         for c in &annotation.conditions {
             let rhs: DataExpression = c.rhs_term_stack.evaluate_with(matched, builder);
             let lhs: DataExpression = c.lhs_term_stack.evaluate_with(matched, builder);

@@ -7,6 +7,8 @@ use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
 
 use crate::Rule;
+use crate::matching::condition_cache::ConditionCache;
+use crate::matching::condition_cache::build_condition_cache;
 use crate::matching::conditions::EMACondition;
 use crate::matching::conditions::extend_conditions;
 use crate::matching::nonlinear::EquivalenceClass;
@@ -30,6 +32,11 @@ pub struct AnnouncementSabre {
     /// Conditions for applying the rule.
     pub conditions: Vec<EMACondition>,
 
+    /// A cache for the (rare) rules whose conditions share subterms across
+    /// each other, checked instead of `conditions` when present; see
+    /// [crate::matching::condition_cache].
+    pub condition_cache: Option<ConditionCache>,
+
     /// The right hand side stored such that it can be substituted easily.
     pub rhs_term_stack: TermStack,
 
@@ -50,6 +57,7 @@ impl AnnouncementSabre {
 
         AnnouncementSabre {
             conditions: extend_conditions(rule),
+            condition_cache: build_condition_cache(rule),
             equivalence_classes: derive_equivalence_classes(rule),
             rhs_term_stack: sctt_rhs,
             is_duplicating,
