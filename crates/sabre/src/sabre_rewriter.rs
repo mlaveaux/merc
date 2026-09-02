@@ -9,7 +9,7 @@ use merc_data::DataExpressionRef;
 use merc_utilities::debug_trace;
 
 use crate::RewriteSpecification;
-use crate::matching::condition_cache::check_conditions_with_cache;
+use crate::matching::condition_cache::ConditionCache;
 use crate::matching::nonlinear::check_equivalence_classes;
 use crate::set_automaton::MatchAnnouncement;
 use crate::set_automaton::SetAutomaton;
@@ -54,6 +54,9 @@ pub struct RewritingStatistics {
     pub symbol_comparisons: usize,
     /// The number of times rewrite is called recursively (to rewrite conditions etc)
     pub recursions: usize,
+    /// The number of times a condition side was already in the
+    /// [ConditionCache], so its normal form did not need recomputing.
+    pub condition_cache_hits: usize,
 }
 
 /// The Set Automaton based Rewrite Engine implementation.
@@ -67,6 +70,10 @@ pub struct SabreRewriter {
     /// instance means only one protected container is ever registered, instead
     /// of one per configuration stack.
     term_stack: SharedTermStack,
+    /// Caches condition-side normal forms across the whole computation —
+    /// every top-level [rewrite call](SabreRewriter::rewrite), not just one —
+    /// keyed by the substituted term; see `matching::condition_cache`.
+    condition_cache: ConditionCache,
 }
 
 impl RewriteEngine for SabreRewriter {
@@ -77,12 +84,20 @@ impl RewriteEngine for SabreRewriter {
 
 impl SabreRewriter {
     pub fn new(spec: &RewriteSpecification) -> Self {
+        Self::with_condition_cache_capacity(spec, crate::matching::condition_cache::DEFAULT_MAX_ENTRIES)
+    }
+
+    /// Like [SabreRewriter::new], but `max_entries` sets the condition
+    /// cache's capacity (0 means unbounded; see `ConditionCache::new`)
+    /// instead of the default.
+    pub fn with_condition_cache_capacity(spec: &RewriteSpecification, max_entries: usize) -> Self {
         let automaton = SetAutomaton::new(spec, AnnouncementSabre::new, false);
 
         SabreRewriter {
             automaton,
             builder: TermStackBuilder::new(),
             term_stack: SharedTermStack::new(),
+            condition_cache: ConditionCache::new(max_entries),
         }
     }
 
@@ -103,14 +118,15 @@ impl SabreRewriter {
                 &self.automaton,
                 &mut self.builder,
                 &mut self.term_stack,
+                &mut self.condition_cache,
                 t,
                 &mut stats,
             )
         });
 
         info!(
-            "{} rewrites, {} single steps and {} symbol comparisons",
-            stats.recursions, stats.rewrite_steps, stats.symbol_comparisons
+            "{} rewrites, {} single steps, {} symbol comparisons and {} condition cache hits",
+            stats.recursions, stats.rewrite_steps, stats.symbol_comparisons, stats.condition_cache_hits
         );
 
         (result, stats)
@@ -121,11 +137,13 @@ impl SabreRewriter {
     /// `tp` and `automaton` are passed as separate parameters, rather than bundled behind
     /// `&mut self`, so the term pool can be mutated while the automaton's state and transition
     /// data are still borrowed.
+    #[allow(clippy::too_many_arguments)]
     fn stack_based_normalise_aux(
         tp: &ThreadTermPool,
         automaton: &SetAutomaton<AnnouncementSabre>,
         builder: &mut TermStackBuilder,
         term_stack: &mut SharedTermStack,
+        condition_cache: &mut ConditionCache,
         t: &DataExpression,
         stats: &mut RewritingStatistics,
     ) -> DataExpression {
@@ -259,7 +277,14 @@ impl SabreRewriter {
                                     // Apply the delayed rewrite rule if the conditions hold
                                     if check_equivalence_classes(&matched, &annotation.equivalence_classes)
                                         && SabreRewriter::conditions_hold(
-                                            tp, automaton, builder, term_stack, annotation, &matched, stats,
+                                            tp,
+                                            automaton,
+                                            builder,
+                                            term_stack,
+                                            condition_cache,
+                                            annotation,
+                                            &matched,
+                                            stats,
                                         )
                                     {
                                         SabreRewriter::apply_rewrite_rule(
@@ -338,33 +363,41 @@ impl SabreRewriter {
     /// `matched` is the subterm at the match root (`announcement.position`), which
     /// the caller has already resolved. The recursive normalisation reuses the
     /// shared `term_stack` (the parent frame's subterms sit below it, LIFO).
+    #[allow(clippy::too_many_arguments)]
     fn conditions_hold(
         tp: &ThreadTermPool,
         automaton: &SetAutomaton<AnnouncementSabre>,
         builder: &mut TermStackBuilder,
         term_stack: &mut SharedTermStack,
+        condition_cache: &mut ConditionCache,
         annotation: &AnnouncementSabre,
         matched: &DataExpression,
         stats: &mut RewritingStatistics,
     ) -> bool {
-        if let Some(cache) = &annotation.condition_cache {
-            // A cached subterm may itself need normalising, which recurses back
-            // into this same rewrite loop through the closure below.
-            return check_conditions_with_cache(cache, matched, builder, &mut |term, builder| {
-                SabreRewriter::stack_based_normalise_aux(tp, automaton, builder, term_stack, term, stats)
-            });
-        }
-
         for c in &annotation.conditions {
             let rhs: DataExpression = c.rhs_term_stack.evaluate_with(matched, builder);
             let lhs: DataExpression = c.lhs_term_stack.evaluate_with(matched, builder);
 
             // Equality => lhs == rhs.
             if !c.equality || lhs != rhs {
-                let rhs_normal =
-                    SabreRewriter::stack_based_normalise_aux(tp, automaton, builder, term_stack, &rhs, stats);
-                let lhs_normal =
-                    SabreRewriter::stack_based_normalise_aux(tp, automaton, builder, term_stack, &lhs, stats);
+                let rhs_normal = SabreRewriter::normalise_condition_side(
+                    tp,
+                    automaton,
+                    builder,
+                    term_stack,
+                    condition_cache,
+                    &rhs,
+                    stats,
+                );
+                let lhs_normal = SabreRewriter::normalise_condition_side(
+                    tp,
+                    automaton,
+                    builder,
+                    term_stack,
+                    condition_cache,
+                    &lhs,
+                    stats,
+                );
 
                 // If lhs != rhs && !equality OR equality && lhs == rhs.
                 if (!c.equality && lhs_normal == rhs_normal) || (c.equality && lhs_normal != rhs_normal) {
@@ -374,5 +407,29 @@ impl SabreRewriter {
         }
 
         true
+    }
+
+    /// Normalises `term` as a condition side, returning `condition_cache`'s
+    /// stored normal form for it if present, and storing the result there
+    /// for reuse otherwise.
+    #[allow(clippy::too_many_arguments)]
+    fn normalise_condition_side(
+        tp: &ThreadTermPool,
+        automaton: &SetAutomaton<AnnouncementSabre>,
+        builder: &mut TermStackBuilder,
+        term_stack: &mut SharedTermStack,
+        condition_cache: &mut ConditionCache,
+        term: &DataExpression,
+        stats: &mut RewritingStatistics,
+    ) -> DataExpression {
+        if let Some(normal_form) = condition_cache.get(term) {
+            stats.condition_cache_hits += 1;
+            return normal_form;
+        }
+
+        let normal_form =
+            SabreRewriter::stack_based_normalise_aux(tp, automaton, builder, term_stack, condition_cache, term, stats);
+        condition_cache.insert(term.clone(), normal_form.clone());
+        normal_form
     }
 }

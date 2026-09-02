@@ -2,7 +2,6 @@ use std::fmt;
 
 use merc_aterm::Protected;
 use merc_aterm::ProtectedWriteGuard;
-use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
 use merc_data::DataFunctionSymbolRef;
 use merc_utilities::debug_trace;
@@ -33,20 +32,6 @@ impl InnermostStack {
         rhs_stack: &TermStack,
         term: &DataExpressionRef<'_>,
         result_index: usize,
-    ) {
-        Self::integrate_with_cache(write_configs, write_terms, rhs_stack, term, result_index, &[]);
-    }
-
-    /// Like [InnermostStack::integrate], but also fills every position of
-    /// `rhs_stack.cached` (see [TermStack::from_term_with_cache]) from
-    /// `cache` instead of from `term`.
-    pub fn integrate_with_cache(
-        write_configs: &mut ProtectedWriteGuard<Vec<Config<'static>>>,
-        write_terms: &mut ProtectedWriteGuard<Vec<Option<DataExpressionRef<'static>>>>,
-        rhs_stack: &TermStack,
-        term: &DataExpressionRef<'_>,
-        result_index: usize,
-        cache: &[DataExpression],
     ) {
         // TODO: This ignores the first element of the stack, but that is kind of difficult to deal with.
         let top_of_stack = write_terms.len();
@@ -97,8 +82,8 @@ impl InnermostStack {
         );
 
         debug_assert!(
-            rhs_stack.stack_size != 1 || rhs_stack.variables.len() + rhs_stack.cached.len() <= 1,
-            "There can only be a single variable or cached reference in the right hand side"
+            rhs_stack.stack_size != 1 || rhs_stack.variables.len() <= 1,
+            "There can only be a single variable in the right hand side"
         );
         if rhs_stack.stack_size == 1 && rhs_stack.variables.len() == 1 {
             // This is a special case where we place the result on the correct position immediately.
@@ -106,21 +91,12 @@ impl InnermostStack {
             // Safety: term is stored in the container on the next line.
             write_terms[result_index] =
                 Some(unsafe { write_terms.protect(&term.get_data_position(&rhs_stack.variables[0].0)) }.into());
-        } else if rhs_stack.stack_size == 1 && rhs_stack.cached.len() == 1 {
-            // Same special case, but the right hand side is only a cached reference.
-            // Safety: the cached term is stored in the container on the next line.
-            write_terms[result_index] = Some(unsafe { write_terms.protect(&cache[rhs_stack.cached[0].0]) }.into());
         } else {
             for (position, index) in &rhs_stack.variables {
                 // Add the positions to the stack.
                 // Safety: term is stored in the container on the same line.
                 write_terms[top_of_stack + index - 1] =
                     Some(unsafe { write_terms.protect(&term.get_data_position(position)) }.into());
-            }
-            for (cache_index, index) in &rhs_stack.cached {
-                // Safety: the cached term is stored in the container on the same line.
-                write_terms[top_of_stack + index - 1] =
-                    Some(unsafe { write_terms.protect(&cache[*cache_index]) }.into());
             }
         }
     }
