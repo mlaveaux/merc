@@ -13,8 +13,6 @@ use crate::RewriteSpecification;
 use crate::RewritingStatistics;
 use crate::Rule;
 use crate::matching::condition_cache::ConditionCache;
-use crate::matching::condition_cache::build_condition_cache;
-use crate::matching::condition_cache::check_conditions_with_cache;
 use crate::matching::conditions::EMACondition;
 use crate::matching::conditions::extend_conditions;
 use crate::matching::nonlinear::EquivalenceClass;
@@ -65,24 +63,41 @@ impl InnermostRewriter {
         debug_trace!("input: {}", t);
 
         let result = THREAD_TERM_POOL.with(|tp| {
-            InnermostRewriter::rewrite_aux(tp, &mut self.stack, &mut self.builder, &mut stats, &self.apma, t, sigma)
+            InnermostRewriter::rewrite_aux(
+                tp,
+                &mut self.stack,
+                &mut self.builder,
+                &mut stats,
+                &self.apma,
+                &mut self.condition_cache,
+                t,
+                sigma,
+            )
         });
 
         info!(
-            "{} rewrites, {} single steps and {} symbol comparisons",
-            stats.recursions, stats.rewrite_steps, stats.symbol_comparisons
+            "{} rewrites, {} single steps, {} symbol comparisons and {} condition cache hits",
+            stats.recursions, stats.rewrite_steps, stats.symbol_comparisons, stats.condition_cache_hits
         );
         (result, stats)
     }
 
     /// Creates a new InnermostRewriter from the given rewrite specification.
     pub fn new(spec: &RewriteSpecification) -> InnermostRewriter {
+        Self::with_condition_cache_capacity(spec, crate::matching::condition_cache::DEFAULT_MAX_ENTRIES)
+    }
+
+    /// Like [InnermostRewriter::new], but `max_entries` sets the condition
+    /// cache's capacity (0 means unbounded; see `ConditionCache::new`)
+    /// instead of the default.
+    pub fn with_condition_cache_capacity(spec: &RewriteSpecification, max_entries: usize) -> InnermostRewriter {
         let apma = SetAutomaton::new(spec, AnnouncementInnermost::new, true);
 
         InnermostRewriter {
             apma,
             stack: InnermostStack::default(),
             builder: TermStackBuilder::new(),
+            condition_cache: ConditionCache::new(max_entries),
         }
     }
 
@@ -111,6 +126,7 @@ impl InnermostRewriter {
         builder: &mut TermStackBuilder,
         stats: &mut RewritingStatistics,
         automaton: &SetAutomaton<AnnouncementInnermost>,
+        condition_cache: &mut ConditionCache,
         input_term: &DataExpression,
         sigma: &S,
     ) -> DataExpression {
@@ -197,7 +213,15 @@ impl InnermostRewriter {
                         drop(write_terms);
                         drop(write_configs);
 
-                        match InnermostRewriter::find_match(tp, stack, builder, stats, automaton, &term.copy()) {
+                        match InnermostRewriter::find_match(
+                            tp,
+                            stack,
+                            builder,
+                            stats,
+                            automaton,
+                            condition_cache,
+                            &term.copy(),
+                        ) {
                             Some(MatchResult::Native(result)) => {
                                 debug_trace!("native rewrite {} => {}", term, result);
 
@@ -279,12 +303,14 @@ impl InnermostRewriter {
     /// Use the APMA to find a match for the given term: either a rewrite rule,
     /// or — when the term's head symbol is a machine-word operation — the
     /// natively-evaluated result.
+    #[allow(clippy::too_many_arguments)]
     fn find_match<'a>(
         tp: &ThreadTermPool,
         stack: &mut InnermostStack,
         builder: &mut TermStackBuilder,
         stats: &mut RewritingStatistics,
         automaton: &'a SetAutomaton<AnnouncementInnermost>,
+        condition_cache: &mut ConditionCache,
         t: &DataExpressionRef<'_>,
     ) -> Option<MatchResult<'a, AnnouncementInnermost>> {
         // Start at the initial state
@@ -321,7 +347,16 @@ impl InnermostRewriter {
 
                 for (announcement, annotation) in &transition.announcements {
                     if check_equivalence_classes(t, &annotation.equivalence_classes)
-                        && InnermostRewriter::check_conditions(tp, stack, builder, stats, automaton, annotation, t)
+                        && InnermostRewriter::check_conditions(
+                            tp,
+                            stack,
+                            builder,
+                            stats,
+                            automaton,
+                            condition_cache,
+                            annotation,
+                            t,
+                        )
                     {
                         // We found a matching pattern
                         return Some(MatchResult::Rule(announcement, annotation));
@@ -343,31 +378,39 @@ impl InnermostRewriter {
     ///
     /// The condition sides are built from the matched subterms, which are already substituted
     /// normal forms, so the nested normalisations must not apply the substitution a second time.
+    #[allow(clippy::too_many_arguments)]
     fn check_conditions(
         tp: &ThreadTermPool,
         stack: &mut InnermostStack,
         builder: &mut TermStackBuilder,
         stats: &mut RewritingStatistics,
         automaton: &SetAutomaton<AnnouncementInnermost>,
+        condition_cache: &mut ConditionCache,
         announcement: &AnnouncementInnermost,
         t: &DataExpressionRef<'_>,
     ) -> bool {
-        if let Some(cache) = &announcement.condition_cache {
-            // A cached subterm may itself need normalising, which recurses back
-            // into this same rewrite loop through the closure below.
-            return check_conditions_with_cache(cache, t, builder, &mut |term, builder| {
-                InnermostRewriter::rewrite_aux(tp, stack, builder, stats, automaton, term, &EmptySubstitution)
-            });
-        }
-
         for c in &announcement.conditions {
             let rhs: DataExpression = c.rhs_term_stack.evaluate_with(t, builder);
             let lhs: DataExpression = c.lhs_term_stack.evaluate_with(t, builder);
 
-            let rhs_normal =
-                InnermostRewriter::rewrite_aux(tp, stack, builder, stats, automaton, &rhs, &EmptySubstitution);
-            let lhs_normal =
-                InnermostRewriter::rewrite_aux(tp, stack, builder, stats, automaton, &lhs, &EmptySubstitution);
+            let rhs_normal = InnermostRewriter::normalise_condition_side(
+                tp,
+                stack,
+                builder,
+                stats,
+                automaton,
+                condition_cache,
+                &rhs,
+            );
+            let lhs_normal = InnermostRewriter::normalise_condition_side(
+                tp,
+                stack,
+                builder,
+                stats,
+                automaton,
+                condition_cache,
+                &lhs,
+            );
 
             if (lhs_normal != rhs_normal && c.equality) || (lhs_normal == rhs_normal && !c.equality) {
                 return false;
@@ -376,6 +419,37 @@ impl InnermostRewriter {
 
         true
     }
+
+    /// Normalises `term` as a condition side, returning `condition_cache`'s
+    /// stored normal form for it if present, and storing the result there
+    /// for reuse otherwise.
+    fn normalise_condition_side(
+        tp: &ThreadTermPool,
+        stack: &mut InnermostStack,
+        builder: &mut TermStackBuilder,
+        stats: &mut RewritingStatistics,
+        automaton: &SetAutomaton<AnnouncementInnermost>,
+        condition_cache: &mut ConditionCache,
+        term: &DataExpression,
+    ) -> DataExpression {
+        if let Some(normal_form) = condition_cache.get(term) {
+            stats.condition_cache_hits += 1;
+            return normal_form;
+        }
+
+        let normal_form = InnermostRewriter::rewrite_aux(
+            tp,
+            stack,
+            builder,
+            stats,
+            automaton,
+            condition_cache,
+            term,
+            &EmptySubstitution,
+        );
+        condition_cache.insert(term.clone(), normal_form.clone());
+        normal_form
+    }
 }
 
 /// Innermost Adaptive Pattern Matching Automaton (APMA) rewrite engine.
@@ -383,6 +457,8 @@ pub struct InnermostRewriter {
     apma: SetAutomaton<AnnouncementInnermost>,
     stack: InnermostStack,
     builder: TermStackBuilder,
+    /// Caches condition-side normal forms across the whole computation.
+    condition_cache: ConditionCache,
 }
 
 pub struct AnnouncementInnermost {
@@ -392,11 +468,6 @@ pub struct AnnouncementInnermost {
     /// Conditions for the left hand side.
     pub conditions: Vec<EMACondition>,
 
-    /// A cache for the (rare) rules whose conditions share subterms across
-    /// each other, checked instead of `conditions` when present; see
-    /// [crate::matching::condition_cache].
-    pub condition_cache: Option<ConditionCache>,
-
     /// The innermost stack for the right hand side of the rewrite rule.
     pub rhs_stack: TermStack,
 }
@@ -405,7 +476,6 @@ impl AnnouncementInnermost {
     pub fn new(rule: &Rule) -> AnnouncementInnermost {
         AnnouncementInnermost {
             conditions: extend_conditions(rule),
-            condition_cache: build_condition_cache(rule),
             equivalence_classes: derive_equivalence_classes(rule),
             rhs_stack: TermStack::new(rule),
         }
