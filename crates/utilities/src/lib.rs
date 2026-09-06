@@ -45,6 +45,7 @@ pub use source_map::SourceMap;
 pub use span::Span;
 pub use span::Spanned;
 pub use span::respan;
+pub use span::with_offset_corrections;
 pub use tagged_index::IdAllocator;
 pub use tagged_index::MercIndex;
 pub use tagged_index::TagIndex;

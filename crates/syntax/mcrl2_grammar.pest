@@ -317,14 +317,33 @@ ProcExprPrimary = _{
 
 ProcExprPrefix = _{
     | ProcExprSum
-    | ProcExprDist 
-    | ProcExprIfThen 
-    | ProcExprIf
+    | ProcExprDist
+    | ProcExprIfPrefix
 }
     ProcExprSum = { "sum" ~ VarsDeclList ~ "." }
     ProcExprDist = { "dist" ~ VarsDeclList ~ "[" ~ DataExpr ~ "]" ~ "." }
-    ProcExprIfThen = { DataExpr ~ "->" ~ ProcExprNoIf ~ "<>" }
-    ProcExprIf = { DataExpr ~ "->" }
+    // A private-use-area marker that `merc_syntax`'s condition-marker preprocessing pass (see
+    // docs/procexpr-parsing-performance-plan.md at the repository root) inserts immediately
+    // before every genuine condition, and nowhere else. Requiring it here lets a doomed
+    // `ProcExprIfPrefix`/`ProcExprIfThen` attempt fail in O(1), before ever touching `DataExpr`,
+    // instead of walking all the way to the end of the process-expression chain looking for a
+    // "->" that greedy DataExpr backtracking would otherwise need to rule out the hard way. This
+    // character cannot occur in real mCRL2 source (identifiers are ASCII-only) and is silent so
+    // it never appears as an extra child of `ProcExprIfPrefix`/`ProcExprIfThen`.
+    ProcExprConditionMarker = _{ "\u{E000}" }
+    // A second private-use-area marker, inserted immediately after the "->" of every condition the
+    // same preprocessing pass proves has a reachable "<>". Without this, the "(ProcExprNoIf ~ '<>')?"
+    // tail below (and ProcExprIfThen's otherwise-identical mandatory one) would unconditionally
+    // attempt to find one — and since ProcExprNoIf's own repetition is possessive/greedy in exactly
+    // the same way DataExpr's is, and recursively re-attempts this very same tail at every further
+    // condition it walks past, a chain of many if-without-"<>" terms costs not just O(n²) but
+    // genuinely exponential time (see docs/procexpr-parsing-performance-plan.md §1b). Requiring this
+    // marker turns every such doomed attempt into an O(1) failure instead.
+    ProcExprElseMarker = _{ "\u{E001}" }
+    // The condition is parsed once, with the "<> else" tail optional.
+    ProcExprIfPrefix = { ProcExprConditionMarker ~ DataExpr ~ "->" ~ (ProcExprElseMarker ~ ProcExprNoIf ~ "<>")? }
+    // Kept as its own rule to avoid the classic dangling-else ambiguity within a `ProcExprNoIf` context.
+    ProcExprIfThen = { ProcExprConditionMarker ~ DataExpr ~ "->" ~ ProcExprElseMarker ~ ProcExprNoIf ~ "<>" }
 
 ProcExprInfix = _{
       ProcExprChoice

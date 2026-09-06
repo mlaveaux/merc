@@ -18,18 +18,42 @@ use crate::UntypedPbes;
 use crate::UntypedPres;
 use crate::UntypedProcessSpecification;
 use crate::UntypedStateFrmSpec;
+use crate::condition_marker;
 
 #[derive(Parser)]
 #[grammar = "mcrl2_grammar.pest"]
 pub struct Mcrl2Parser;
 
+/// Parses `text` (either plain mCRL2 source, or a copy with [condition_marker] markers spliced
+/// in) as a `MCRL2Spec`.
+fn parse_mcrl2_spec(text: &str) -> Result<UntypedProcessSpecification, MercError> {
+    let mut result = Mcrl2Parser::parse(Rule::MCRL2Spec, text).map_err(extend_parser_error)?;
+    let root = result.next().expect("Could not parse mCRL2 specification");
+
+    Ok(Mcrl2Parser::MCRL2Spec(ParseNode::new(root))?)
+}
+
 /// Parses the given mCRL2 specification into an AST.
 impl UntypedProcessSpecification {
     pub fn parse(spec: &str) -> Result<UntypedProcessSpecification, MercError> {
-        let mut result = Mcrl2Parser::parse(Rule::MCRL2Spec, spec).map_err(extend_parser_error)?;
-        let root = result.next().expect("Could not parse mCRL2 specification");
+        // See `condition_marker`'s module docs: this preprocessing pass avoids a PEG backtracking
+        // pathology in `ProcExpr`/`DataExpr` parsing that otherwise makes some real specifications
+        // take quadratic time (or overflow the stack) to parse. It does not need to be
+        // exhaustively correct — its marker can only ever cause a hard parse error if placed
+        // somewhere unexpected, never a silently different parse — so on any failure it is safe to
+        // just fall back to parsing the original, unmarked text.
+        let (marked, markers) = condition_marker::mark_process_conditions(spec);
+        if !markers.is_empty() {
+            let fast =
+                merc_utilities::with_offset_corrections(&markers, condition_marker::CONDITION_MARKER_LEN, || {
+                    parse_mcrl2_spec(&marked)
+                });
+            if let Ok(spec) = fast {
+                return Ok(spec);
+            }
+        }
 
-        Ok(Mcrl2Parser::MCRL2Spec(ParseNode::new(root))?)
+        parse_mcrl2_spec(spec)
     }
 }
 

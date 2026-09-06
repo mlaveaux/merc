@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -13,11 +14,55 @@ pub struct Span {
     pub end: usize,
 }
 
+thread_local! {
+    /// Ambient byte-offset correction applied by [Span]'s `From<pest::Span>` conversion, set up by
+    /// [with_offset_corrections]. `None` (the default) means "no correction, use positions as-is".
+    static OFFSET_CORRECTION: RefCell<Option<(Vec<usize>, usize)>> = const { RefCell::new(None) };
+}
+
+/// Runs `f` while every [Span] built from a `pest::Span` (via `Span::from`/`.into()`) is corrected
+/// as though `insertions.len() * insertion_len` fewer bytes existed before it: a parser given text
+/// with `insertion_len` placeholder bytes spliced in at each of `insertions` (byte offsets into
+/// *that* text, sorted ascending) reports positions in the spliced text, and this makes the spans
+/// it builds come out as if it had parsed the text without those placeholders instead.
+///
+/// This exists for a parser that needs a little extra, otherwise-unrepresentable syntax spliced
+/// into its input to disambiguate what it's about to parse (see `merc_syntax`'s condition-marker
+/// preprocessing), without every one of that parser's many span-computing call sites having to
+/// know about it. It is a thread-local rather than an explicit parameter for exactly that reason;
+/// nested calls save and restore the previous correction (via an RAII guard, so a panicking `f`
+/// still restores it), so it composes safely with itself even though nothing in this codebase
+/// currently nests it.
+pub fn with_offset_corrections<R>(insertions: &[usize], insertion_len: usize, f: impl FnOnce() -> R) -> R {
+    struct RestoreOnDrop(Option<(Vec<usize>, usize)>);
+
+    impl Drop for RestoreOnDrop {
+        fn drop(&mut self) {
+            OFFSET_CORRECTION.with(|cell| *cell.borrow_mut() = self.0.take());
+        }
+    }
+
+    let previous = OFFSET_CORRECTION.with(|cell| cell.replace(Some((insertions.to_vec(), insertion_len))));
+    let _restore = RestoreOnDrop(previous);
+    f()
+}
+
+/// Maps a position through the ambient correction installed by [with_offset_corrections], if any.
+fn correct_offset(position: usize) -> usize {
+    OFFSET_CORRECTION.with(|cell| match cell.borrow().as_ref() {
+        Some((insertions, insertion_len)) => {
+            let count = insertions.partition_point(|&inserted| inserted < position);
+            position - count * insertion_len
+        }
+        None => position,
+    })
+}
+
 impl From<pest::Span<'_>> for Span {
     fn from(span: pest::Span) -> Self {
         Span {
-            start: span.start(),
-            end: span.end(),
+            start: correct_offset(span.start()),
+            end: correct_offset(span.end()),
         }
     }
 }

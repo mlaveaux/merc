@@ -215,7 +215,7 @@ pub fn parse_dataexpr(pairs: Pairs<Rule>) -> ParseResult<DataExpr> {
         })
         .map_postfix(|expr, postfix| {
             let expr = expr?;
-            let end = postfix.as_span().end();
+            let end = Span::from(postfix.as_span()).end;
             let span = Span {
                 start: expr.span.start,
                 end,
@@ -240,7 +240,7 @@ pub fn parse_dataexpr(pairs: Pairs<Rule>) -> ParseResult<DataExpr> {
             }
         })
         .map_prefix(|prefix, expr| {
-            let start = prefix.as_span().start();
+            let start = Span::from(prefix.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -292,7 +292,7 @@ pub static PROCEXPR_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(||
         .op(Op::prefix(Rule::ProcExprSum) | Op::prefix(Rule::ProcExprDist)) // $right 2
         .op(Op::infix(Rule::ProcExprParallel, Assoc::Right)) // $right 3
         .op(Op::infix(Rule::ProcExprLeftMerge, Assoc::Right)) // $right 4
-        .op(Op::prefix(Rule::ProcExprIf)) // $right 5
+        .op(Op::prefix(Rule::ProcExprIfPrefix)) // $right 5
         .op(Op::prefix(Rule::ProcExprIfThen)) // $right 5
         .op(Op::infix(Rule::ProcExprUntil, Assoc::Left)) // $left 6
         .op(Op::infix(Rule::ProcExprSeq, Assoc::Right)) // $right 7
@@ -354,7 +354,7 @@ pub fn parse_process_expr(pairs: Pairs<Rule>) -> ParseResult<ProcessExpr> {
             .spanned(span))
         })
         .map_prefix(|prefix, expr| {
-            let start = prefix.as_span().start();
+            let start = Span::from(prefix.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -376,15 +376,27 @@ pub fn parse_process_expr(pairs: Pairs<Rule>) -> ParseResult<ProcessExpr> {
                     }
                     .spanned(span))
                 }
-                Rule::ProcExprIf => {
-                    let condition = Mcrl2Parser::ProcExprIf(Node::new(prefix))?;
+                Rule::ProcExprIfPrefix => {
+                    let (condition, then) = Mcrl2Parser::ProcExprIfPrefix(Node::new(prefix))?;
 
-                    Ok(ProcessExprKind::Condition {
-                        condition,
-                        then: Box::new(expr),
-                        else_: None,
+                    match then {
+                        // No "<> else" tail: what follows this prefix operator in the Pratt
+                        // chain is the "then" branch, and there is no "else" branch.
+                        None => Ok(ProcessExprKind::Condition {
+                            condition,
+                            then: Box::new(expr),
+                            else_: None,
+                        }
+                        .spanned(span)),
+                        // A "<> else" tail was present: it supplied the "then" branch, and what
+                        // follows this prefix operator in the Pratt chain is the "else" branch.
+                        Some(then) => Ok(ProcessExprKind::Condition {
+                            condition,
+                            then: Box::new(then),
+                            else_: Some(Box::new(expr)),
+                        }
+                        .spanned(span)),
                     }
-                    .spanned(span))
                 }
                 Rule::ProcExprIfThen => {
                     let (condition, then) = Mcrl2Parser::ProcExprIfThen(Node::new(prefix))?;
@@ -403,7 +415,7 @@ pub fn parse_process_expr(pairs: Pairs<Rule>) -> ParseResult<ProcessExpr> {
             let expr = expr?;
             let span = Span {
                 start: expr.span.start,
-                end: postfix.as_span().end(),
+                end: Span::from(postfix.as_span()).end,
             };
             match postfix.as_rule() {
                 Rule::ProcExprAt => Ok(ProcessExprKind::At {
@@ -458,7 +470,7 @@ pub fn parse_actfrm(pairs: Pairs<Rule>) -> ParseResult<ActFrm> {
             }
         })
         .map_prefix(|prefix, expr| {
-            let start = prefix.as_span().start();
+            let start = Span::from(prefix.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -561,7 +573,7 @@ pub fn parse_regfrm(pairs: Pairs<Rule>) -> ParseResult<RegFrm> {
             let expr = expr?;
             let span = Span {
                 start: expr.span.start,
-                end: postfix.as_span().end(),
+                end: Span::from(postfix.as_span()).end,
             };
             match postfix.as_rule() {
                 Rule::RegFrmIteration => Ok(RegFrmKind::Iteration(Box::new(expr)).spanned(span)),
@@ -624,7 +636,7 @@ pub fn parse_statefrm(pairs: Pairs<Rule>) -> ParseResult<StateFrm> {
             }
         })
         .map_prefix(|prefix, expr| {
-            let start = prefix.as_span().start();
+            let start = Span::from(prefix.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -723,7 +735,7 @@ pub fn parse_statefrm(pairs: Pairs<Rule>) -> ParseResult<StateFrm> {
             let expr = expr?;
             let span = Span {
                 start: expr.span.start,
-                end: postfix.as_span().end(),
+                end: Span::from(postfix.as_span()).end,
             };
             match postfix.as_rule() {
                 Rule::StateFrmRightConstantMultiply => Ok(StateFrmKind::DataValExprRightMult(
@@ -773,7 +785,7 @@ pub fn parse_pbesexpr(pairs: Pairs<Rule>) -> ParseResult<PbesExpr> {
             }
         })
         .map_prefix(|op, expr| {
-            let start = op.as_span().start();
+            let start = Span::from(op.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -861,7 +873,7 @@ pub fn parse_presexpr(pairs: Pairs<Rule>) -> ParseResult<PresExpr> {
             }
         })
         .map_prefix(|op, expr| {
-            let start = op.as_span().start();
+            let start = Span::from(op.as_span()).start;
             let expr = expr?;
             let span = Span {
                 start,
@@ -920,7 +932,7 @@ pub fn parse_presexpr(pairs: Pairs<Rule>) -> ParseResult<PresExpr> {
             let expr = expr?;
             let span = Span {
                 start: expr.span.start,
-                end: postfix.as_span().end(),
+                end: Span::from(postfix.as_span()).end,
             };
             match postfix.as_rule() {
                 Rule::PresExprRightConstMultiply => Ok(PresExprKind::RightConstantMultiply {

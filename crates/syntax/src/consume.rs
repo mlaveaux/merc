@@ -1107,10 +1107,13 @@ impl Mcrl2Parser {
         )
     }
 
-    pub(crate) fn ProcExprIf(input: ParseNode) -> ParseResult<DataExpr> {
+    pub(crate) fn ProcExprIfPrefix(input: ParseNode) -> ParseResult<(DataExpr, Option<ProcessExpr>)> {
         match_nodes!(input.into_children();
             [DataExpr(condition)] => {
-                Ok(condition)
+                Ok((condition, None))
+            },
+            [DataExpr(condition), ProcExprNoIf(then)] => {
+                Ok((condition, Some(then)))
             },
         )
     }
