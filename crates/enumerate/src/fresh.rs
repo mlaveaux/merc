@@ -4,23 +4,6 @@ use merc_data::SortExpressionRef;
 
 /// Generates fresh variable names guaranteed not to collide with a
 /// caller-supplied set of names already in scope.
-///
-/// Deliberately **not** a single process-wide generator seeded by scanning
-/// the whole symbol table, unlike mCRL2's `enumerator_identifier_generator`
-/// (`docs/enumeration-crate-plan.md` §4.8, which this corrects): this crate
-/// has no notion of "the whole symbol table", and inventing one from just the
-/// one `(vars, body)` pair an [`Enumerator`](crate::Enumerator) call happens
-/// to see would still be wrong whenever more names are in scope than that —
-/// e.g. an LPS's *other* summands, sharing the same process-parameter
-/// substitution, whose variables this enumerator's fresh names must also
-/// avoid even though they never appear in the one guard being enumerated.
-///
-/// So the caller builds the generator from exactly the names that must not
-/// collide — the same pattern `merc_vpg::FreshStateVarGenerator` already uses
-/// for modal formulas — and threads it through one [`Enumerator`](crate::Enumerator) instance
-/// for that instance's whole lifetime (across every `enumerate`/`find_witness`
-/// call it serves), rather than the enumerator inventing its own notion of
-/// "the context" internally.
 pub struct FreshVariableGenerator {
     used: AHashSet<String>,
 }

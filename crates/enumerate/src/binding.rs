@@ -14,12 +14,6 @@ use merc_sabre::utilities::RewriteSubstitution;
 /// An immutable, cheaply-extended record of the variable bindings chosen so
 /// far along one branch of the enumeration search.
 ///
-/// Mirrors mCRL2's `enumerator_substitution` (a pair of parallel lists
-/// composed lazily): [`BindingChain::extend`] pushes a new front node onto a
-/// shared, reference-counted spine, so sibling work items that differ in only
-/// their most recent binding share the rest of the chain instead of cloning a
-/// map. See `docs/enumeration-crate-plan.md` §4.1.
-///
 /// A bound variable's image may itself mention a variable bound *later* in
 /// the same chain (e.g. `v ↦ c(y1, y2)` where `y1`/`y2` are fresh variables
 /// introduced to expand `v`, and are only bound in subsequent work items) —

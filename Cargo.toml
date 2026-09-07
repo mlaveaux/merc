@@ -23,6 +23,8 @@ members = [
     "crates/aterm/benchmarks",
     "crates/collections",
     "crates/data",
+    "crates/enumerate",
+    "crates/enumerate/benchmarks",
     "crates/explore",
     "crates/io",
     "crates/lts",
@@ -143,6 +145,7 @@ bindgen = "0.72"
 merc_aterm = { version = "3.0", path = "crates/aterm" }
 merc_collections = { version = "3.0", path = "crates/collections" }
 merc_data = { version = "3.0", path = "crates/data" }
+merc_enumerate = { version = "0.1", path = "crates/enumerate" }
 merc_explore = { version = "2.0", path = "crates/explore" }
 merc_io = { version = "3.0", path = "crates/io" }
 merc_lts = { version = "3.0", path = "crates/lts" }

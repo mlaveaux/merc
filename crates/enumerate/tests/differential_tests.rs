@@ -13,7 +13,7 @@
 //! `merc_syntax`'s parser overhead 200-odd times over and, more importantly,
 //! because embedding a random goal in source text would need to re-run
 //! `merc_typecheck` per goal — and this crate's own sort/rewrite objects
-//! (`SortPlans`, `RewriteSpecification`) only need building once for a fixed
+//! (`EnumerationPlans`, `RewriteSpecification`) only need building once for a fixed
 //! spec, exactly like a real caller would build them once per run.
 
 use std::ops::ControlFlow;
@@ -27,11 +27,11 @@ use merc_data::DataVariable;
 use merc_data::Mcrl2DataSpecification;
 use merc_data::SortArrow;
 use merc_data::SortExpression;
+use merc_enumerate::EnumerationPlans;
 use merc_enumerate::Enumerator;
 use merc_enumerate::FreshVariableGenerator;
 use merc_enumerate::NaiveEnumerator;
 use merc_enumerate::Outcome;
-use merc_enumerate::SortPlans;
 use merc_sabre::InnermostRewriter;
 use merc_sabre::RewriteEngine;
 use merc_sabre::RewriteSpecification;
@@ -167,7 +167,7 @@ fn conjunction(terms: &[DataExpression]) -> DataExpression {
 #[allow(clippy::too_many_arguments)]
 fn check_one_random_goal(
     rng: &mut StdRng,
-    plans: &SortPlans,
+    plans: &EnumerationPlans,
     enumerator_rewriter: &mut InnermostRewriter,
     naive_rewriter: &mut InnermostRewriter,
     checker: &mut InnermostRewriter,
@@ -222,7 +222,7 @@ fn check_one_random_goal(
 fn test_enumerator_agrees_with_naive_enumerator() {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
     let mut enumerator_rewriter = InnermostRewriter::new(&rewrite_spec);
     let mut naive_rewriter = InnermostRewriter::new(&rewrite_spec);
     let mut checker = InnermostRewriter::new(&rewrite_spec);
@@ -239,7 +239,7 @@ fn test_enumerator_agrees_with_naive_enumerator() {
 fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let n = DataVariable::with_sort("n", d_sort().copy());
     let vars = vec![n.clone()];

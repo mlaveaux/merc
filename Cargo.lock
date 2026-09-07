@@ -159,6 +159,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "benchmarks_enumerate"
+version = "2.0.0"
+dependencies = [
+ "criterion",
+ "merc_data",
+ "merc_enumerate",
+ "merc_sabre",
+ "merc_syntax",
+ "merc_typecheck",
+ "merc_utilities",
+]
+
+[[package]]
 name = "benchmarks_lts"
 version = "2.0.0"
 dependencies = [
@@ -1176,6 +1189,22 @@ dependencies = [
  "merc_number",
  "merc_utilities",
  "thiserror",
+]
+
+[[package]]
+name = "merc_enumerate"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "log",
+ "merc_aterm",
+ "merc_data",
+ "merc_sabre",
+ "merc_syntax",
+ "merc_typecheck",
+ "merc_utilities",
+ "rand",
+ "test-log",
 ]
 
 [[package]]
