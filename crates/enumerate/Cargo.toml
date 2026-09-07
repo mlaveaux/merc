@@ -1,0 +1,29 @@
+[package]
+name = "merc_enumerate"
+description = "Enumerates constructor instances of (possibly infinite) data sorts, for quantifier elimination and sum-variable exploration."
+keywords = ["rewriting", "enumeration", "data"]
+categories = ["algorithms", "data-structures", "science"]
+readme = "README.md"
+version = "0.1.0"
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+merc_aterm.workspace = true
+merc_data.workspace = true
+merc_sabre.workspace = true
+merc_utilities.workspace = true
+
+ahash.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+merc_syntax.workspace = true
+merc_typecheck.workspace = true
+test-log.workspace = true
+
+rand.workspace = true
