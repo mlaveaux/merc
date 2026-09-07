@@ -12,30 +12,19 @@ use merc_data::SortExpression;
 use merc_sabre::RewriteEngine;
 
 use crate::binding::BindingChain;
+use crate::enumeration_plan::EnumerationPlanId;
+use crate::enumeration_plan::EnumerationPlans;
+use crate::enumeration_plan::NotEnumerableReason;
+use crate::enumeration_plan::SortEnumerability;
 use crate::fresh::FreshVariableGenerator;
 use crate::one_point::apply_one_point_rule;
-use crate::sort_plan::NotEnumerableReason;
-use crate::sort_plan::SortEnumerability;
-use crate::sort_plan::SortPlanId;
-use crate::sort_plan::SortPlans;
 
 /// Configures how far [`Enumerator::find_witness`] searches before giving up.
-///
-/// **Only [`Enumerator::find_witness`] (quantifier witness search) honours
-/// these.** [`Enumerator::enumerate`] (`sum`-variable exploration) ignores
-/// them entirely and always runs to exhaustion: truncating a `sum` silently
-/// drops transitions and produces a wrong LTS, so there is no safe bound to
-/// apply there — see `docs/enumeration-crate-plan.md` §4.6/§7.2. A `sum` over
-/// a genuinely unconstrained infinite sort is therefore a real non-termination
-/// risk today; bounding *that* case safely needs the caller-facing
-/// `--truncate-sum`/hard-error machinery §4.6 describes, which is `merc_lps_data`
-/// (Phase 3) wiring, not something the enumerator core can decide on its own.
 ///
 /// Must stay fixed for the lifetime of a cache built over this enumerator's
 /// results: a summand or quantifier cache keyed on read positions assumes two
 /// calls with the same inputs enumerate the same solutions, which a search
-/// bound that changes between calls (e.g. "search deeper on a second visit")
-/// would silently violate — see §6.4.
+/// bound that changes between calls.
 #[derive(Clone, Copy, Debug)]
 pub struct EnumerationLimits {
     /// Maximum number of work items processed before giving up. mCRL2's
@@ -65,9 +54,6 @@ pub enum Outcome {
     Stopped,
     /// [`EnumerationLimits::max_items`] or `max_depth` was hit somewhere in
     /// the search; results are incomplete.
-    ///
-    /// [`Enumerator::enumerate`] never returns this: it ignores the limits
-    /// entirely (see [`EnumerationLimits`]'s doc comment).
     LimitReached,
     /// `variable`'s sort cannot be enumerated at all (`reason`), so the whole
     /// search is abandoned.
@@ -90,12 +76,6 @@ pub enum WitnessOutcome {
 }
 
 /// Which quantifier [`Enumerator::find_witness`] is deciding.
-///
-/// Decoupled from `merc_data`'s binder representation on purpose: the
-/// enumerator works over plain `(variables, body)` pairs, so it needs no
-/// binder accessors and is usable ahead of the Sabre-side quantifier wiring
-/// (`docs/enumeration-crate-plan.md` §5, blocked on capture-avoiding
-/// substitution — see §5.3).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuantifierKind {
     /// Find a witness making the body `true`.
@@ -110,10 +90,7 @@ pub enum QuantifierKind {
 ///
 /// Borrows the enumerator's reused scratch buffer rather than owning a fresh
 /// `Vec` per solution, so consuming a solution costs no aterm protection-set
-/// traffic beyond the values themselves — see
-/// `docs/enumeration-crate-plan.md` §4.4. Clone the values out
-/// ([`Solution::values`] returns a slice) if a solution must outlive the
-/// callback invocation that received it.
+/// traffic beyond the values themselves.
 pub struct Solution<'s> {
     values: &'s [DataExpression],
 }
@@ -125,45 +102,32 @@ impl Solution<'_> {
     }
 }
 
-/// One unfinished branch of the search: the variables still to be
-/// instantiated, and the goal body already rewritten under the bindings
-/// chosen so far (with those still-`remaining` variables held as free normal
-/// forms). See `docs/enumeration-crate-plan.md` §4.1.
+/// One unfinished branch of the search.
 struct WorkItem {
+    /// the variables still to be instantiated
     remaining: Vec<DataVariable>,
+    /// the goal body already rewritten under the current bindings
     body: DataExpression,
+    /// the current variable bindings chain
     bindings: BindingChain,
+    /// the search depth at which this work item was created
     depth: u32,
 }
 
 /// Enumerates ground constructor instances of a data sort, closing a
 /// quantifier body (via [`Enumerator::find_witness`]) or a `sum`-variable
 /// guard (via [`Enumerator::enumerate`]).
-///
-/// See `docs/enumeration-crate-plan.md` for the full design. `R` is generic
-/// over the rewrite engine so the naive/innermost engines can stand in for
-/// `SabreRewriter` in tests.
 pub struct Enumerator<'a, R: RewriteEngine> {
     rewriter: &'a mut R,
-    plans: &'a SortPlans,
+    plans: &'a EnumerationPlans,
     limits: EnumerationLimits,
     /// See [`FreshVariableGenerator`]: seeded once by the caller from
     /// whatever namespace this enumerator must not collide with, and reused
     /// for this `Enumerator`'s whole lifetime.
     generator: FreshVariableGenerator,
-    /// Finite sorts' materialised element lists, cached **per enumerator
-    /// instance** — populated lazily on first use and reused for the rest of
-    /// this `Enumerator`'s lifetime, across every `enumerate`/`find_witness`
-    /// call it serves. See `docs/enumeration-crate-plan.md` §6.2; unlike
-    /// [`crate::SortPlans`] itself (immutable and shared by `&` across
-    /// threads/enumerators), this cache is owned by one `Enumerator` because
-    /// the elements it stores are already-rewritten `DataExpression`s tied to
-    /// this enumerator's `R` — sharing it across enumerators built over
-    /// different rewriters (or different `RewriteSpecification`s) would be
-    /// unsound.
-    finite_elements: HashMap<SortPlanId, Vec<DataExpression>>,
-    /// Reused across leaves to report a [`Solution`] without allocating a
-    /// fresh `Vec` per solution (§4.4).
+    /// Finite sorts' materialised element list.
+    finite_elements: HashMap<EnumerationPlanId, Vec<DataExpression>>,
+    /// Reused across leaves to report a [`Solution`] without allocating..
     solution_buf: Vec<DataExpression>,
 }
 
@@ -171,10 +135,8 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
     /// Builds an enumerator with the default [`EnumerationLimits`].
     ///
     /// `generator` must be seeded with every name this enumerator's fresh
-    /// variables must not collide with — see [`FreshVariableGenerator`]'s doc
-    /// comment for why that is the caller's responsibility, not this
-    /// constructor's.
-    pub fn new(rewriter: &'a mut R, plans: &'a SortPlans, generator: FreshVariableGenerator) -> Self {
+    /// variables must not collide with.
+    pub fn new(rewriter: &'a mut R, plans: &'a EnumerationPlans, generator: FreshVariableGenerator) -> Self {
         Enumerator {
             rewriter,
             plans,
@@ -187,16 +149,14 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
 
     /// Sets the [`EnumerationLimits`] used by [`Enumerator::find_witness`].
     ///
-    /// Must be called before the first search, and not changed afterwards:
-    /// see [`EnumerationLimits`]'s doc comment on why a bound that changes
-    /// between calls breaks caching built over this enumerator's results.
+    /// Must be called before the first search, and not changed afterwards.
     pub fn with_limits(mut self, limits: EnumerationLimits) -> Self {
         self.limits = limits;
         self
     }
 
     /// Enumerates every ground substitution `σ` of `vars` for which
-    /// `rewrite(bodyσ)` is the `Bool` literal `true`, reporting each one to
+    /// `rewrite(body, σ)` is the `Bool` literal `true`, reporting each one to
     /// `consume`.
     ///
     /// Runs to exhaustion or until `consume` returns [`ControlFlow::Break`];
@@ -232,13 +192,12 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
     }
 
     /// Searches for a ground substitution `σ` of `vars` that decides `kind`:
-    /// for [`QuantifierKind::Exists`], one making `rewrite(bodyσ)` `true`; for
-    /// [`QuantifierKind::Forall`], a counterexample making it `false`.
+    /// for [`QuantifierKind::Exists`], one making `rewrite(body, σ)` `true`;
+    /// for [`QuantifierKind::Forall`], a counterexample making it `false`.
     ///
-    /// Bounded by [`EnumerationLimits`] (set via
-    /// [`Enumerator::with_limits`]); returns [`WitnessOutcome::GaveUp`] rather
-    /// than guessing when the bound is hit or a variable's sort cannot be
-    /// enumerated.
+    /// Bounded by [`EnumerationLimits`], returns [`WitnessOutcome::GaveUp`]
+    /// rather than guessing when the bound is hit or a variable's sort cannot
+    /// be enumerated.
     pub fn find_witness(
         &mut self,
         vars: &[DataVariable],
@@ -281,19 +240,15 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
         }
     }
 
-    /// The shared search core behind both [`Enumerator::enumerate`] and
-    /// [`Enumerator::find_witness`]: expands `remaining_vars` breadth-first
-    /// (§4.5, for fairness across co-enumerated infinite sorts), pruning any
-    /// branch whose body has already rewritten to `reject` regardless of its
-    /// still-free variables (sound: see the module-level reasoning in
-    /// `docs/enumeration-crate-plan.md` §5.1 step 6), and reports every leaf
-    /// (fully ground) branch to `on_leaf`.
+    /// Expands `remaining_vars` breadth-first, pruning any branch whose body
+    /// has already rewritten to `reject` regardless of its still-free
+    /// variables, and reports every leaf (fully ground) branch to `on_leaf`.
     ///
     /// `all_vars` is the *original* variable list (before the one-point rule
-    /// may have removed some of them) — every one of them is resolved into
-    /// the [`Solution`] handed to `on_leaf`, since one-point-eliminated
-    /// variables are bound in `initial_bindings` just as surely as the ones
-    /// the search itself binds.
+    /// may have removed some of them) — every one of them is resolved into the
+    /// [`Solution`] handed to `on_leaf`, since one-point-eliminated variables
+    /// are bound in `initial_bindings` just as surely as the ones the search
+    /// itself binds.
     #[allow(clippy::too_many_arguments)]
     fn drive(
         &mut self,
@@ -363,7 +318,7 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
                         continue;
                     }
 
-                    // `self.plans` is a `&'a SortPlans` field (a reference,
+                    // `self.plans` is a `&'a EnumerationPlans` field (a reference,
                     // not owned data), so copying it out borrows nothing of
                     // `self` — `constructors` can be iterated while `self` is
                     // mutated below to build each candidate's fresh variables
@@ -417,10 +372,10 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
     /// Returns `sort_id`'s materialised element list, computing and caching it
     /// on first use (§6.2). Only ever called for a [`SortEnumerability::Finite`]
     /// sort, whose constructor argument sorts are themselves finite by
-    /// construction (`SortPlans::build`'s finiteness fixpoint), so the
+    /// construction (`EnumerationPlans::build`'s finiteness fixpoint), so the
     /// recursion in [`Enumerator::materialize_finite_elements`] always
     /// terminates.
-    fn cached_finite_elements(&mut self, sort_id: SortPlanId) -> Vec<DataExpression> {
+    fn cached_finite_elements(&mut self, sort_id: EnumerationPlanId) -> Vec<DataExpression> {
         if let Some(elements) = self.finite_elements.get(&sort_id) {
             return elements.clone();
         }
@@ -429,7 +384,7 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
         elements
     }
 
-    fn materialize_finite_elements(&mut self, sort_id: SortPlanId) -> Vec<DataExpression> {
+    fn materialize_finite_elements(&mut self, sort_id: EnumerationPlanId) -> Vec<DataExpression> {
         let plans = self.plans;
         let mut result = Vec::new();
 
@@ -454,10 +409,8 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
     }
 
     /// Substitutes `variable ↦ value` into `body` and rewrites the result.
-    /// `value` is always a fresh constructor application (or a cached finite
-    /// element, itself already a rewriter normal form), so it satisfies
-    /// [`merc_sabre::utilities::RewriteSubstitution::get`]'s "already normal"
-    /// contract.
+    /// `value` is always a fresh constructor application, so its in normal
+    /// form.
     fn rewrite_singleton(
         &mut self,
         body: &DataExpression,

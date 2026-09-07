@@ -14,9 +14,9 @@ use merc_data::DataVariable;
 use merc_data::Mcrl2DataSpecification;
 use merc_data::SortArrow;
 use merc_data::SortExpression;
+use merc_enumerate::EnumerationPlans;
 use merc_enumerate::Enumerator;
 use merc_enumerate::FreshVariableGenerator;
-use merc_enumerate::SortPlans;
 use merc_sabre::InnermostRewriter;
 use merc_sabre::RewriteSpecification;
 use merc_syntax::UntypedDataSpecification;
@@ -71,13 +71,13 @@ fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
 }
 
 /// Constructor-expansion throughput for `sum n:D . n < bound`, across a range
-/// of bounds — isolates the cost of `SortPlans`-indexed constructor lookup
+/// of bounds — isolates the cost of `EnumerationPlans`-indexed constructor lookup
 /// and per-step normalisation (§6.1), since the enumerator processes roughly
 /// `2 * bound` work items regardless of `bound`'s size.
 fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let mut group = c.benchmark_group("bounded sum enumeration");
     for bound in [10, 50, 200] {
@@ -98,29 +98,22 @@ fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
     group.finish();
 }
 
-/// The `SortPlans::build` win the constructor-index buys, isolated:
-/// re-running it once per call is what the enumerator would pay without it
-/// (§6.1's "no constructor lookup" claim).
-fn criterion_benchmark_sort_plans_build(c: &mut Criterion) {
+/// The `EnumerationPlans::build` win the constructor-index buys, isolated.
+fn criterion_benchmark_enumeration_plans_build(c: &mut Criterion) {
     let spec = lower(PRELUDE);
 
-    c.bench_function("SortPlans::build (D + Bool prelude)", |bencher| {
+    c.bench_function("EnumerationPlans::build (D + Bool prelude)", |bencher| {
         bencher.iter(|| {
-            black_box(SortPlans::build(&spec));
+            black_box(EnumerationPlans::build(&spec));
         });
     });
 }
 
-/// Finite-sort enumeration throughput, materialised once and served from the
-/// per-`Enumerator` cache (§6.2) on every subsequent call within the same
-/// `bencher.iter()` batch — a single `Enumerator` is reused across
-/// iterations here specifically to measure the cache-hit path, unlike the
-/// other benchmarks which rebuild one per iteration to isolate a single
-/// `enumerate` call's cost.
+/// Finite-sort enumeration throughput, cached after the first call.
 fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
 
     let b = DataVariable::with_sort("b", SortExpression::from(BasicSort::new("Bool")).copy());
@@ -146,7 +139,7 @@ fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
 criterion_group!(
     benches,
     criterion_benchmark_bounded_enumeration,
-    criterion_benchmark_sort_plans_build,
+    criterion_benchmark_enumeration_plans_build,
     criterion_benchmark_finite_sort_cache_hit,
 );
 criterion_main!(benches);

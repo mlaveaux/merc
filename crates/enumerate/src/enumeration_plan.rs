@@ -12,13 +12,13 @@ use merc_data::is_container_sort;
 use merc_data::is_function_sort;
 use merc_utilities::TagIndex;
 
-/// Distinguishes a [`SortPlanId`] from every other `TagIndex<usize, _>` in the
+/// Distinguishes a [`EnumerationPlanId`] from every other `TagIndex<usize, _>` in the
 /// workspace at compile time.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct SortPlanTag;
+pub struct EnumerationPlanTag;
 
-/// Indexes a [`SortPlan`] inside a [`SortPlans`].
-pub type SortPlanId = TagIndex<usize, SortPlanTag>;
+/// Indexes a [`EnumerationPlan`] inside a [`EnumerationPlans`].
+pub type EnumerationPlanId = TagIndex<usize, EnumerationPlanTag>;
 
 /// Why a sort cannot be enumerated at all.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,7 +37,7 @@ pub enum NotEnumerableReason {
     /// The sort is `Bag` or `FBag`. Multisets are refused outright, matching
     /// mCRL2 (§4.7); `List`/`Set`/`FSet` go through the generic constructor path.
     Bag,
-    /// The sort was never seen while building the [`SortPlans`] (not among the
+    /// The sort was never seen while building the [`EnumerationPlans`] (not among the
     /// data specification's declared sorts or any constructor's domain/target),
     /// so nothing is known about it.
     UnknownSort,
@@ -56,12 +56,12 @@ pub enum SortEnumerability {
     NotEnumerable(NotEnumerableReason),
 }
 
-/// One constructor of a [`SortPlan`], with its argument sorts pre-resolved to
-/// [`SortPlanId`]s so expanding it needs no sort lookup.
+/// One constructor of a [`EnumerationPlan`], with its argument sorts pre-resolved to
+/// [`EnumerationPlanId`]s so expanding it needs no sort lookup.
 #[derive(Debug)]
 pub struct ConstructorPlan {
     symbol: DataFunctionSymbol,
-    arguments: Vec<SortPlanId>,
+    arguments: Vec<EnumerationPlanId>,
 }
 
 impl ConstructorPlan {
@@ -71,7 +71,7 @@ impl ConstructorPlan {
     }
 
     /// Returns the sorts of the constructor's arguments, in declaration order.
-    pub fn arguments(&self) -> &[SortPlanId] {
+    pub fn arguments(&self) -> &[EnumerationPlanId] {
         &self.arguments
     }
 
@@ -87,7 +87,7 @@ impl ConstructorPlan {
 ///
 /// See `docs/enumeration-crate-plan.md` §6.1.
 #[derive(Debug)]
-pub struct SortPlan {
+pub struct EnumerationPlan {
     sort: SortExpression,
     /// Constructors targeting this sort, ordered by ascending minimal closed
     /// term size, so the base cases (if any) come first.
@@ -98,7 +98,7 @@ pub struct SortPlan {
     min_size: u32,
 }
 
-impl SortPlan {
+impl EnumerationPlan {
     /// Returns the sort this plan describes.
     pub fn sort(&self) -> &SortExpression {
         &self.sort
@@ -131,28 +131,29 @@ impl SortPlan {
 ///
 /// See `docs/enumeration-crate-plan.md` §6.1.
 #[derive(Debug)]
-pub struct SortPlans {
-    plans: Vec<SortPlan>,
-    index: HashMap<SortExpression, SortPlanId>,
+pub struct EnumerationPlans {
+    plans: Vec<EnumerationPlan>,
+    index: HashMap<SortExpression, EnumerationPlanId>,
 }
 
-impl SortPlans {
+impl EnumerationPlans {
     /// Builds the enumeration plans for every sort reachable from `spec`.
-    pub fn build(spec: &Mcrl2DataSpecification) -> SortPlans {
+    pub fn build(spec: &Mcrl2DataSpecification) -> EnumerationPlans {
         // Phase 1: collect the sort universe in first-seen order, and group the
         // specification's constructors by target sort.
         let mut sorts: Vec<SortExpression> = Vec::new();
-        let mut index: HashMap<SortExpression, SortPlanId> = HashMap::new();
+        let mut index: HashMap<SortExpression, EnumerationPlanId> = HashMap::new();
 
-        let intern = |sort: SortExpression, sorts: &mut Vec<SortExpression>, index: &mut HashMap<_, _>| -> SortPlanId {
-            if let Some(id) = index.get(&sort) {
-                return *id;
-            }
-            let id = SortPlanId::new(sorts.len());
-            sorts.push(sort.clone());
-            index.insert(sort, id);
-            id
-        };
+        let intern =
+            |sort: SortExpression, sorts: &mut Vec<SortExpression>, index: &mut HashMap<_, _>| -> EnumerationPlanId {
+                if let Some(id) = index.get(&sort) {
+                    return *id;
+                }
+                let id = EnumerationPlanId::new(sorts.len());
+                sorts.push(sort.clone());
+                index.insert(sort, id);
+                id
+            };
 
         for basic in spec.sorts() {
             intern(SortExpression::from(basic.clone()), &mut sorts, &mut index);
@@ -306,7 +307,7 @@ impl SortPlans {
                     SortEnumerability::InfiniteEnumerable
                 };
 
-                SortPlan {
+                EnumerationPlan {
                     sort,
                     constructors: constructors.into_iter().map(|(_, c)| c).collect(),
                     enumerability,
@@ -315,27 +316,27 @@ impl SortPlans {
             })
             .collect();
 
-        SortPlans { plans, index }
+        EnumerationPlans { plans, index }
     }
 
     /// Looks up the plan id for `sort`, or `None` if `sort` was not reachable
-    /// from the data specification this [`SortPlans`] was built from (see
+    /// from the data specification this [`EnumerationPlans`] was built from (see
     /// [`NotEnumerableReason::UnknownSort`]).
-    pub fn get(&self, sort: &SortExpressionRef<'_>) -> Option<SortPlanId> {
+    pub fn get(&self, sort: &SortExpressionRef<'_>) -> Option<EnumerationPlanId> {
         self.index.get(&sort.protect()).copied()
     }
 
     /// Returns the plan for `id`.
-    pub fn plan(&self, id: SortPlanId) -> &SortPlan {
+    pub fn plan(&self, id: EnumerationPlanId) -> &EnumerationPlan {
         &self.plans[id]
     }
 
-    /// Returns the number of distinct sorts this [`SortPlans`] knows about.
+    /// Returns the number of distinct sorts this [`EnumerationPlans`] knows about.
     pub fn len(&self) -> usize {
         self.plans.len()
     }
 
-    /// Returns `true` iff this [`SortPlans`] knows about no sorts at all.
+    /// Returns `true` iff this [`EnumerationPlans`] knows about no sorts at all.
     pub fn is_empty(&self) -> bool {
         self.plans.is_empty()
     }
@@ -392,9 +393,9 @@ mod tests {
     use merc_syntax::UntypedDataSpecification;
     use merc_typecheck::DataSpecification;
 
+    use super::EnumerationPlans;
     use super::NotEnumerableReason;
     use super::SortEnumerability;
-    use super::SortPlans;
 
     /// Parses and type-checks the given mCRL2 data specification text.
     fn lower(source: &str) -> merc_data::Mcrl2DataSpecification {
@@ -403,7 +404,11 @@ mod tests {
         data_spec.lower_data_specification()
     }
 
-    fn plan_for<'a>(plans: &'a SortPlans, spec: &merc_data::Mcrl2DataSpecification, name: &str) -> &'a super::SortPlan {
+    fn plan_for<'a>(
+        plans: &'a EnumerationPlans,
+        spec: &merc_data::Mcrl2DataSpecification,
+        name: &str,
+    ) -> &'a super::EnumerationPlan {
         let sort = spec
             .sorts()
             .iter()
@@ -434,7 +439,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_bool_is_finite() {
         let spec = lower("sort D;\ncons c: D;");
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
 
         let bool_plan = plan_for(&plans, &spec, "Bool");
         assert_eq!(bool_plan.enumerability(), SortEnumerability::Finite);
@@ -446,7 +451,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_nat_is_infinite_enumerable() {
         let spec = lower("sort D;\ncons c: D;");
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
 
         let nat_plan = plan_for(&plans, &spec, "Nat");
         assert_eq!(nat_plan.enumerability(), SortEnumerability::InfiniteEnumerable);
@@ -464,7 +469,7 @@ mod tests {
         // ever becomes an `Mcrl2DataSpecification` (confirmed by the sibling
         // `test_typecheck_rejects_empty_sort` below), so building the
         // specification directly, bypassing typecheck, is the only way to
-        // exercise `SortPlans`'s *own* classification of this case — which
+        // exercise `EnumerationPlans`'s *own* classification of this case — which
         // matters because nothing stops a caller from assembling one by hand.
         let d: merc_data::SortExpression = merc_data::BasicSort::new("D").into();
         let arrow: merc_data::SortExpression = merc_data::SortArrow::new(std::slice::from_ref(&d), d.clone()).into();
@@ -477,7 +482,7 @@ mod tests {
             Vec::new(),
         );
 
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
         let id = plans.get(&d.copy()).unwrap();
         assert_eq!(
             plans.plan(id).enumerability(),
@@ -498,7 +503,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_abstract_sort_has_no_constructors() {
         let spec = lower("sort D;\n     E;\ncons c: D -> E;");
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
 
         let plan = plan_for(&plans, &spec, "D");
         assert_eq!(
@@ -511,7 +516,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_function_sort_is_not_enumerable() {
         // `Bool -> Bool` would be reachable as `f`'s own sort if `f` were a
-        // mapping, but walking `spec.mappings()` isn't part of `SortPlans`
+        // mapping, but walking `spec.mappings()` isn't part of `EnumerationPlans`
         // (§Division of responsibility: constructors are the only source of
         // sorts); build a spec whose *constructor* has a function-sorted
         // argument instead.
@@ -519,7 +524,7 @@ mod tests {
             "sort D;
              cons c: (Bool -> Bool) -> D;",
         );
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
         let sort = spec.constructors()[0].sort();
         let arrow = merc_data::SortArrowRef::from(Term::copy(&sort));
         let function_sort = arrow.domain().to_vec().into_iter().next().unwrap();
@@ -541,7 +546,7 @@ mod tests {
                   a1: B -> A;
                   b1: A -> B;",
         );
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
 
         let a_plan = plan_for(&plans, &spec, "A");
         let b_plan = plan_for(&plans, &spec, "B");
@@ -555,7 +560,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_bag_is_not_enumerable() {
         let spec = lower("sort D = Bag(Bool);");
-        let plans = SortPlans::build(&spec);
+        let plans = EnumerationPlans::build(&spec);
 
         let sort = spec.aliases()[0].reference().protect();
         let id = plans.get(&sort.copy()).unwrap();

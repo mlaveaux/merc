@@ -2,12 +2,18 @@
 #![forbid(unsafe_code)]
 
 mod binding;
+mod enumeration_plan;
 mod enumerator;
 mod fresh;
 mod naive_enumerator;
 mod one_point;
-mod sort_plan;
 
+pub use enumeration_plan::ConstructorPlan;
+pub use enumeration_plan::EnumerationPlan;
+pub use enumeration_plan::EnumerationPlanId;
+pub use enumeration_plan::EnumerationPlans;
+pub use enumeration_plan::NotEnumerableReason;
+pub use enumeration_plan::SortEnumerability;
 pub use enumerator::EnumerationLimits;
 pub use enumerator::Enumerator;
 pub use enumerator::Outcome;
@@ -16,9 +22,3 @@ pub use enumerator::Solution;
 pub use enumerator::WitnessOutcome;
 pub use fresh::FreshVariableGenerator;
 pub use naive_enumerator::NaiveEnumerator;
-pub use sort_plan::ConstructorPlan;
-pub use sort_plan::NotEnumerableReason;
-pub use sort_plan::SortEnumerability;
-pub use sort_plan::SortPlan;
-pub use sort_plan::SortPlanId;
-pub use sort_plan::SortPlans;

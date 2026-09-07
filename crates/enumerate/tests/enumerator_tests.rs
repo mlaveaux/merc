@@ -18,7 +18,7 @@
 //! *rewriting*, is still only built once per exploration run, but LPSs
 //! overwhelmingly use `Nat`. `D` additionally sidesteps needing the real
 //! `Nat`/`Pos` machine-word encoding to cooperate with an enumerator built
-//! purely from raw constructor terms (see `SortPlans`'s doc comment on why
+//! purely from raw constructor terms (see `EnumerationPlans`'s doc comment on why
 //! enumeration must go through constructors, never `@word`, and
 //! `docs/enumeration-crate-plan.md` §1.2).
 
@@ -29,11 +29,11 @@ use merc_data::DataExpression;
 use merc_data::DataVariable;
 use merc_data::Mcrl2DataSpecification;
 use merc_enumerate::EnumerationLimits;
+use merc_enumerate::EnumerationPlans;
 use merc_enumerate::Enumerator;
 use merc_enumerate::FreshVariableGenerator;
 use merc_enumerate::Outcome;
 use merc_enumerate::QuantifierKind;
-use merc_enumerate::SortPlans;
 use merc_enumerate::WitnessOutcome;
 use merc_sabre::InnermostRewriter;
 use merc_sabre::RewriteSpecification;
@@ -112,7 +112,7 @@ fn test_enumerate_finds_every_bounded_solution() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -162,7 +162,7 @@ fn test_enumerate_never_truncates_past_the_default_limits() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -206,7 +206,7 @@ fn test_enumerate_is_fair_across_two_infinite_variables() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -239,7 +239,7 @@ fn test_enumerate_applies_the_one_point_rule() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -280,7 +280,7 @@ fn test_find_witness_exists_finds_a_small_witness() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -313,7 +313,7 @@ fn test_find_witness_gives_up_past_the_bound() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 
@@ -337,7 +337,7 @@ fn test_find_witness_forall_holds_over_a_finite_sort() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = SortPlans::build(&spec);
+    let plans = EnumerationPlans::build(&spec);
 
     let (vars, body) = goal(&spec, "goal");
 

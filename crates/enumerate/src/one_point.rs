@@ -16,40 +16,21 @@ use merc_utilities::Step;
 
 use crate::binding::BindingChain;
 
-/// Applies the one-point rule to `(vars, body)` to a fixpoint: repeatedly
-/// finds a top-level `&&`-conjunct `x == e` / `e == x` where `x` is one of
-/// the still-unbound variables and `e` mentions none of them, binds `x := e`
+/// Applies the one-point rule to `(vars, body)` to a fixpoint: repeatedly finds
+/// a top-level `&&`-conjunct `x == e` / `e == x` where `x` is one of the
+/// still-unbound variables and `e` mentions none of them, binds `x := e`
 /// directly instead of enumerating its sort, and rewrites the residual body
-/// under that binding — which is what lets a *chain* of one-point conjuncts
-/// (`n == 5 && m == n + 1`) resolve in one pass: after `n` is substituted away
-/// the second conjunct becomes `m == 5 + 1`, itself a one-point conjunct on
-/// the next iteration.
+/// under that binding — which is what lets a *chain* of one-point conjuncts (`n
+/// == 5 && m == n + 1`) resolve in one pass: after `n` is substituted away the
+/// second conjunct becomes `m == 5 + 1`, itself a one-point conjunct on the
+/// next iteration.
 ///
-/// Returns the narrowed variable list (with every eliminated variable
-/// removed), the rewritten residual body, and the accumulated bindings.
+/// Returns the narrowed variable list, the rewritten residual body, and the
+/// accumulated bindings.
 ///
-/// `body` must already be in normal form (every subterm of a normal form is
-/// itself a normal form, which is what makes the `e` side of a matched
-/// conjunct usable directly as a substitution image without re-rewriting it —
-/// see [`merc_sabre::utilities::RewriteSubstitution::get`]'s contract).
-///
-/// This is the degenerate, single-step, always-sound case of narrowing (the
-/// mgu is read off by inspection, no unification engine needed) — see
-/// `docs/enumeration-crate-plan.md` §8.4 — applied *statically* here, once per
-/// goal, ahead of the search, and shared by both
-/// [`Enumerator::enumerate`](crate::Enumerator::enumerate) and
-/// [`Enumerator::find_witness`](crate::Enumerator::find_witness).
-///
-/// A *dynamic* variant — re-scanning the body inside the work-queue expansion
-/// loop, so a one-point opportunity that only appears after some *other*,
-/// non-conjunct-linked variable has been bound by ordinary constructor
-/// expansion (e.g. it only surfaces once an `if`-branch collapses) would also
-/// be caught — was considered and is deliberately not implemented: the static
-/// fixpoint above already resolves every conjunct-chain case, so the dynamic
-/// version would only help the strictly rarer "hidden behind a non-`&&`
-/// connective" case, at the cost of re-splitting the (potentially large) body
-/// into conjuncts on every queue pop instead of once per goal. Worth revisiting
-/// if benchmarking (§10) turns up guards where it would matter.
+/// `body` must already be in normal form. Every subterm of a normal form is
+/// itself a normal form, which is what makes the `e` side of a matched conjunct
+/// usable directly as a substitution image without re-rewriting it.
 pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
     rewriter: &mut R,
     mut vars: Vec<DataVariable>,
@@ -164,11 +145,7 @@ mod tests {
     use super::apply_one_point_rule;
 
     // A small, hand-built rewrite system standing in for the `==`/`&&`
-    // fragment of the `Bool` prelude, so these tests exercise real rewriting
-    // (`apply_one_point_rule`'s documented precondition is that `body` is
-    // already a normal form) without depending on how a real numeral or `Nat`
-    // literal happens to be represented — see the convention in
-    // `crates/sabre/tests/rewrite_with_tests.rs`.
+    // fragment of the `Bool` prelude.
 
     fn d_sort() -> SortExpression {
         SortExpression::from(BasicSort::new("D"))
