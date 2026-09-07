@@ -1,4 +1,6 @@
 use ahash::AHashSet;
+use ahash::HashMap;
+use ahash::HashMapExt;
 use merc_data::DataVariable;
 use merc_data::SortExpressionRef;
 
@@ -6,6 +8,8 @@ use merc_data::SortExpressionRef;
 /// caller-supplied set of names already in scope.
 pub struct FreshVariableGenerator {
     used: AHashSet<String>,
+    /// The next index to try per `base`, for cheap generation of fresh names.
+    next_index: HashMap<String, u64>,
 }
 
 impl FreshVariableGenerator {
@@ -13,13 +17,15 @@ impl FreshVariableGenerator {
     pub fn new(used: impl IntoIterator<Item = String>) -> Self {
         FreshVariableGenerator {
             used: used.into_iter().collect(),
+            next_index: HashMap::new(),
         }
     }
 
     /// Generates a fresh variable of `sort`, named `base` suffixed with the
-    /// smallest natural number that keeps it out of the used set.
+    /// smallest natural number, no smaller than any this generator has
+    /// already tried for `base`, that keeps it out of the used set.
     pub fn generate(&mut self, base: &str, sort: SortExpressionRef<'_>) -> DataVariable {
-        let mut index = 0;
+        let mut index = self.next_index.get(base).copied().unwrap_or(0);
         let name = loop {
             let candidate = format!("{base}{index}");
             if !self.used.contains(&candidate) {
@@ -27,6 +33,13 @@ impl FreshVariableGenerator {
             }
             index += 1;
         };
+
+        if let Some(next) = self.next_index.get_mut(base) {
+            *next = index + 1;
+        } else {
+            self.next_index.insert(base.to_string(), index + 1);
+        }
+
         self.used.insert(name.clone());
         DataVariable::with_sort(name.as_str(), sort)
     }
