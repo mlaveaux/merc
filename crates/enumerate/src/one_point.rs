@@ -1,8 +1,6 @@
 use std::ops::ControlFlow;
 
 use ahash::AHashSet;
-use ahash::HashMap;
-use ahash::HashMapExt;
 use merc_aterm::Term;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
@@ -14,6 +12,7 @@ use merc_data::visit_data_expr;
 use merc_sabre::RewriteEngine;
 use merc_utilities::Step;
 
+use crate::binding::BindingArena;
 use crate::binding::BindingChain;
 
 /// Applies the one-point rule to `(vars, body)` to a fixpoint: repeatedly finds
@@ -33,6 +32,7 @@ use crate::binding::BindingChain;
 /// usable directly as a substitution image without re-rewriting it.
 pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
     rewriter: &mut R,
+    arena: &mut BindingArena,
     mut vars: Vec<DataVariable>,
     mut body: DataExpression,
 ) -> (Vec<DataVariable>, DataExpression, BindingChain) {
@@ -45,11 +45,8 @@ pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
             .expect("find_one_point_conjunct only returns variables from `vars`");
         vars.remove(position);
 
-        let mut singleton = HashMap::new();
-        singleton.insert(variable.clone(), value.clone());
-        body = rewriter.rewrite_with(&body, &singleton);
-
-        bindings = bindings.extend(variable, value);
+        bindings = arena.extend(bindings, variable, value);
+        body = rewriter.rewrite_with(&body, &arena.substitution(bindings));
     }
 
     (vars, body, bindings)
@@ -74,7 +71,7 @@ fn find_one_point_conjunct(vars: &[DataVariable], body: &DataExpression) -> Opti
         if let Some(pair) = one_point_candidate(vars, &lhs, &rhs) {
             return Some(pair);
         }
-        
+
         if let Some(pair) = one_point_candidate(vars, &rhs, &lhs) {
             return Some(pair);
         }
@@ -160,6 +157,8 @@ mod tests {
     use merc_sabre::Rule;
     use merc_sabre::SabreRewriter;
 
+    use crate::binding::BindingArena;
+
     use super::apply_one_point_rule;
 
     // A small, hand-built rewrite system standing in for the `==`/`&&`
@@ -244,11 +243,14 @@ mod tests {
         let n = variable("n");
         let body = and(eq(n.clone().into(), constant("five")), true_lit());
 
-        let (vars, residual, bindings) = apply_one_point_rule(&mut rewriter, vec![n.clone()], body);
+        let mut arena = BindingArena::default();
+        let (vars, residual, bindings) = apply_one_point_rule(&mut rewriter, &mut arena, vec![n.clone()], body);
 
         assert!(vars.is_empty());
         assert_eq!(residual, true_lit());
-        assert_eq!(bindings.resolve_all(&[n]), vec![constant("five")]);
+        let mut resolved = Vec::new();
+        arena.resolve_all(&mut rewriter, bindings, &[n], &mut resolved);
+        assert_eq!(resolved, vec![constant("five")]);
     }
 
     #[test]
@@ -264,11 +266,15 @@ mod tests {
             eq(m.clone().into(), n.clone().into()),
         );
 
-        let (vars, residual, bindings) = apply_one_point_rule(&mut rewriter, vec![n.clone(), m.clone()], body);
+        let mut arena = BindingArena::default();
+        let (vars, residual, bindings) =
+            apply_one_point_rule(&mut rewriter, &mut arena, vec![n.clone(), m.clone()], body);
 
         assert!(vars.is_empty());
         assert_eq!(residual, true_lit());
-        assert_eq!(bindings.resolve_all(&[n, m]), vec![constant("five"), constant("five")]);
+        let mut resolved = Vec::new();
+        arena.resolve_all(&mut rewriter, bindings, &[n, m], &mut resolved);
+        assert_eq!(resolved, vec![constant("five"), constant("five")]);
     }
 
     #[test]
@@ -277,7 +283,9 @@ mod tests {
         let n = variable("n");
         let body: DataExpression = DataApplication::with_args(&f_symbol(), &[DataExpression::from(n.clone())]).into();
 
-        let (vars, residual, _bindings) = apply_one_point_rule(&mut rewriter, vec![n.clone()], body.clone());
+        let mut arena = BindingArena::default();
+        let (vars, residual, _bindings) =
+            apply_one_point_rule(&mut rewriter, &mut arena, vec![n.clone()], body.clone());
 
         assert_eq!(vars, vec![n]);
         assert_eq!(residual, body);
@@ -291,7 +299,9 @@ mod tests {
         let f_n: DataExpression = DataApplication::with_args(&f_symbol(), &[DataExpression::from(n.clone())]).into();
         let body = eq(n.clone().into(), f_n);
 
-        let (vars, residual, _bindings) = apply_one_point_rule(&mut rewriter, vec![n.clone()], body.clone());
+        let mut arena = BindingArena::default();
+        let (vars, residual, _bindings) =
+            apply_one_point_rule(&mut rewriter, &mut arena, vec![n.clone()], body.clone());
 
         assert_eq!(vars, vec![n]);
         assert_eq!(residual, body);
