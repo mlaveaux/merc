@@ -157,6 +157,27 @@ mod inner {
                 ATerm::constant(symbol)
             })
         }
+
+        /// The inverse of [`Self::to_term`]: reads the kind back from the
+        /// leaf term stored as a `SortCons`'s first argument.
+        fn from_term<'a, 'b, T: Term<'a, 'b>>(term: &'b T) -> ContainerSortKind {
+            DATA_SYMBOLS.with_borrow(|ds| {
+                let symbol = term.get_head_symbol();
+                if symbol == ds.list_container_symbol.copy() {
+                    ContainerSortKind::List
+                } else if symbol == ds.set_container_symbol.copy() {
+                    ContainerSortKind::Set
+                } else if symbol == ds.bag_container_symbol.copy() {
+                    ContainerSortKind::Bag
+                } else if symbol == ds.fset_container_symbol.copy() {
+                    ContainerSortKind::FSet
+                } else if symbol == ds.fbag_container_symbol.copy() {
+                    ContainerSortKind::FBag
+                } else {
+                    unreachable!("not a container-kind term")
+                }
+            })
+        }
     }
 
     /// A container sort `kind(element)`, e.g. `List(Nat)`.
@@ -179,6 +200,11 @@ mod inner {
         /// Returns the sort of the container's elements.
         pub fn element_sort(&self) -> SortExpressionRef<'_> {
             self.term.arg(1).into()
+        }
+
+        /// Returns the kind of container (`List`, `Set`, `Bag`, `FSet`, `FBag`).
+        pub fn kind(&self) -> ContainerSortKind {
+            ContainerSortKind::from_term(&self.term.arg(0))
         }
     }
 
@@ -250,7 +276,9 @@ pub use inner::BasicSortRef;
 pub use inner::ContainerSortKind;
 pub use inner::SortAlias;
 pub use inner::SortArrow;
+pub use inner::SortArrowRef;
 pub use inner::SortCons;
+pub use inner::SortConsRef;
 pub use inner::SortExpression;
 pub use inner::SortExpressionRef;
 
@@ -300,10 +328,25 @@ mod tests {
 
         assert!(is_container_sort(&list_nat));
         assert_eq!(list_nat.element_sort().protect(), basic("Nat"));
+        assert_eq!(list_nat.kind(), ContainerSortKind::List);
         assert_eq!(format!("{list_nat}"), "Nat");
 
         let sort: SortExpression = list_nat.into();
         assert!(is_sort_expression(&sort));
+    }
+
+    #[test]
+    fn test_sort_cons_kind_round_trips_for_every_variant() {
+        for kind in [
+            ContainerSortKind::List,
+            ContainerSortKind::Set,
+            ContainerSortKind::Bag,
+            ContainerSortKind::FSet,
+            ContainerSortKind::FBag,
+        ] {
+            let cons = SortCons::new(kind, basic("Nat"));
+            assert_eq!(cons.kind(), kind);
+        }
     }
 
     #[test]
