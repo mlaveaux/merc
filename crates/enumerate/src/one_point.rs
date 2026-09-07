@@ -63,6 +63,7 @@ fn find_one_point_conjunct(vars: &[DataVariable], body: &DataExpression) -> Opti
         if !is_data_application(&conjunct) || conjunct.data_arguments().len() != 2 {
             continue;
         }
+
         if conjunct.data_function_symbol().name().value() != "==" {
             continue;
         }
@@ -73,6 +74,7 @@ fn find_one_point_conjunct(vars: &[DataVariable], body: &DataExpression) -> Opti
         if let Some(pair) = one_point_candidate(vars, &lhs, &rhs) {
             return Some(pair);
         }
+        
         if let Some(pair) = one_point_candidate(vars, &rhs, &lhs) {
             return Some(pair);
         }
@@ -97,36 +99,52 @@ fn one_point_candidate(
     Some((variable, other.clone()))
 }
 
-/// Splits `body` into its top-level `&&`-conjuncts, recursively flattening
-/// nested conjunctions left to right. A non-`&&` term is a single-element
-/// result.
-fn split_conjuncts(body: &DataExpression) -> Vec<DataExpression> {
-    let mut result = Vec::new();
+/// Yields `body`'s top-level `&&`-conjuncts, left to right, flattening nested
+/// conjunctions lazily as they're consumed. A non-`&&` term yields itself as a
+/// single leaf.
+///
+/// Iterative rather than recursive, like `tools/mcrl2`'s `PbesFlattenIter`
+/// (same stack-based chain-flatten shape) — but this crate `forbid`s unsafe
+/// code, so the stack owns protected `DataExpression`s instead of bare term
+/// addresses, and there's no reusable-buffer variant: `split_conjuncts` runs
+/// at most once per one-point-rule iteration or ordering decision, nowhere
+/// near hot enough to justify that complexity.
+pub(crate) fn split_conjuncts(body: &DataExpression) -> impl Iterator<Item = DataExpression> {
     let mut stack = vec![body.clone()];
-    while let Some(term) = stack.pop() {
-        if is_data_application(&term)
-            && term.data_arguments().len() == 2
-            && term.data_function_symbol().name().value() == "&&"
-        {
-            stack.push(term.data_arg(1).protect());
-            stack.push(term.data_arg(0).protect());
-        } else {
-            result.push(term);
+    std::iter::from_fn(move || {
+        while let Some(term) = stack.pop() {
+            if is_data_application(&term)
+                && term.data_arguments().len() == 2
+                && term.data_function_symbol().name().value() == "&&"
+            {
+                stack.push(term.data_arg(1).protect());
+                stack.push(term.data_arg(0).protect());
+            } else {
+                return Some(term);
+            }
         }
-    }
-    result
+        None
+    })
 }
 
 /// Returns whether `term` mentions any variable in `vars`.
 fn mentions_any(term: &DataExpression, vars: &[DataVariable]) -> bool {
+    let free = free_variables(term);
+    vars.iter().any(|v| free.contains(v))
+}
+
+/// Returns every variable occurring free in `term`.
+pub(crate) fn free_variables(term: &DataExpression) -> AHashSet<DataVariable> {
     let mut free = AHashSet::new();
+
     let _: Option<()> = visit_data_expr(&term.copy(), (), |expr: &DataExpressionRef<'_>, context| {
         if is_data_variable(expr) {
             free.insert(DataVariableRef::from(Term::copy(expr)).protect());
         }
         ControlFlow::Continue(Step::Into(context))
     });
-    vars.iter().any(|v| free.contains(v))
+
+    free
 }
 
 #[cfg(test)]
