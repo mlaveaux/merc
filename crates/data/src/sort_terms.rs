@@ -144,6 +144,19 @@ mod inner {
     }
 
     #[merc_ignore]
+    impl fmt::Display for ContainerSortKind {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(match self {
+                ContainerSortKind::List => "List",
+                ContainerSortKind::Set => "Set",
+                ContainerSortKind::Bag => "Bag",
+                ContainerSortKind::FSet => "FSet",
+                ContainerSortKind::FBag => "FBag",
+            })
+        }
+    }
+
+    #[merc_ignore]
     impl ContainerSortKind {
         fn to_term(self) -> ATerm {
             DATA_SYMBOLS.with_borrow(|ds| {
@@ -210,7 +223,7 @@ mod inner {
 
     impl fmt::Display for SortCons {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.element_sort())
+            write!(f, "{}({})", self.kind(), self.element_sort())
         }
     }
 
@@ -329,7 +342,7 @@ mod tests {
         assert!(is_container_sort(&list_nat));
         assert_eq!(list_nat.element_sort().protect(), basic("Nat"));
         assert_eq!(list_nat.kind(), ContainerSortKind::List);
-        assert_eq!(format!("{list_nat}"), "Nat");
+        assert_eq!(format!("{list_nat}"), "List(Nat)");
 
         let sort: SortExpression = list_nat.into();
         assert!(is_sort_expression(&sort));
@@ -337,15 +350,16 @@ mod tests {
 
     #[test]
     fn test_sort_cons_kind_round_trips_for_every_variant() {
-        for kind in [
-            ContainerSortKind::List,
-            ContainerSortKind::Set,
-            ContainerSortKind::Bag,
-            ContainerSortKind::FSet,
-            ContainerSortKind::FBag,
+        for (kind, keyword) in [
+            (ContainerSortKind::List, "List"),
+            (ContainerSortKind::Set, "Set"),
+            (ContainerSortKind::Bag, "Bag"),
+            (ContainerSortKind::FSet, "FSet"),
+            (ContainerSortKind::FBag, "FBag"),
         ] {
             let cons = SortCons::new(kind, basic("Nat"));
             assert_eq!(cons.kind(), kind);
+            assert_eq!(format!("{cons}"), format!("{keyword}(Nat)"));
         }
     }
 
