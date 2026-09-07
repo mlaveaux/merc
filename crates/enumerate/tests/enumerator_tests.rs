@@ -1,27 +1,3 @@
-//! End-to-end tests for [`Enumerator`], see `docs/enumeration-crate-plan.md`.
-//!
-//! These use [`InnermostRewriter`], not [`merc_sabre::SabreRewriter`], and
-//! declare a small hand-rolled recursive sort (`D`, with `dzero`/`dsucc`,
-//! mirroring `Nat`'s own shape) rather than using the real `Nat`. Both are
-//! working around the same discovery made while writing these tests:
-//! lowering *any* spec always pulls in the whole built-in library
-//! (`crates/syntax/spec/*.mcrl2` — confirmed by printing
-//! `spec.equations().len()`: it was 331 even for this file's tiny `D`-only
-//! spec), and `SabreRewriter::new` — which builds its `SetAutomaton` with
-//! `apma: false` — took upwards of 3 CPU-minutes and still hadn't returned
-//! over that many rules, while `InnermostRewriter::new` (`apma: true`) built
-//! the *same* rule set in well under a second. So this is specifically an
-//! `apma: false` `SetAutomaton::new` construction-time characteristic, not a
-//! general `merc_sabre` slowness, and not a defect in this crate — but it is
-//! worth flagging as a real risk for the eventual Phase 3 `merc_lps_data`,
-//! where `SabreRewriter` is exactly the engine wanted for its faster
-//! *rewriting*, is still only built once per exploration run, but LPSs
-//! overwhelmingly use `Nat`. `D` additionally sidesteps needing the real
-//! `Nat`/`Pos` machine-word encoding to cooperate with an enumerator built
-//! purely from raw constructor terms (see `EnumerationPlans`'s doc comment on why
-//! enumeration must go through constructors, never `@word`, and
-//! `docs/enumeration-crate-plan.md` §1.2).
-
 use std::ops::ControlFlow;
 
 use ahash::AHashSet;
@@ -136,18 +112,7 @@ fn test_enumerate_finds_every_bounded_solution() {
 fn test_enumerate_never_truncates_past_the_default_limits() {
     // The specific behaviour requested alongside this implementation:
     // `Enumerator::enumerate` (the `sum`-exploration path) must ignore
-    // `EnumerationLimits` entirely and keep progressing, because a truncated
-    // `sum` silently drops transitions and produces a wrong LTS — see
-    // `docs/enumeration-crate-plan.md` §4.6/§7.2 and `EnumerationLimits`'s own
-    // doc comment.
-    //
-    // Exercised with a deliberately tiny custom limit rather than the (much
-    // larger) default: parsing a numeral this crate's tests can embed as
-    // nested `dsucc(...)` text is itself recursive-descent, and a numeral
-    // anywhere near the *default* `max_items` (1000) overflows the parser's
-    // stack — a `merc_syntax` characteristic unrelated to this crate, tracked
-    // by `docs/stack-overflow-recursion-audit.md`. A small custom limit still
-    // proves the point: `enumerate` must not stop at *any* configured bound.
+    // `EnumerationLimits` entirely and keep progressing.
     let target = 20;
     let tiny_limits = EnumerationLimits {
         max_items: 3,
@@ -227,10 +192,7 @@ fn test_enumerate_is_fair_across_two_infinite_variables() {
 fn test_enumerate_applies_the_one_point_rule() {
     // `b == true` narrows `b` to a single substitution instead of a search
     // over `Bool`, leaving only the (still genuinely searched) `n < 3` over
-    // `D` — see `docs/enumeration-crate-plan.md` §6.3/§8.4. Real `==`
-    // semantics only need to exist for `Bool` here (`bool.mcrl2`'s own
-    // `b == true = b` etc.), not for the custom sort `D`, so this stays clear
-    // of whatever `==` would even mean for a plain (non-`struct`) user sort.
+    // `D`.
     let spec = lower(
         "map goal: Bool # D -> Bool;
          var b: Bool;
@@ -271,6 +233,41 @@ fn test_enumerate_applies_the_one_point_rule() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
+fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
+    // `m` never occurs in `goal`'s body at all — a vacuous bound variable.
+    let tiny_limits = EnumerationLimits {
+        max_items: 20,
+        max_depth: 64,
+    };
+
+    let spec = lower(&format!(
+        "map goal: D # D -> Bool;
+         var m, n: D;
+         eqn goal(m, n) = eq(n, {});", // `eq`, not `==`: keep the one-point rule out of this.
+        numeral_source(3)
+    ));
+    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
+    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
+    let plans = EnumerationPlans::build(&spec);
+
+    let (vars, body) = goal(&spec, "goal");
+    assert_eq!(
+        vars[0].name().to_string(),
+        "m",
+        "test assumes `m` is listed before `n` in `vars`"
+    );
+
+    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars)).with_limits(tiny_limits);
+    match enumerator.find_witness(&vars, &body, QuantifierKind::Exists) {
+        WitnessOutcome::Found(values) => assert_eq!(values[1], numeral(3)),
+        other => panic!(
+            "expected a witness (ordering should promote the constrained `n` ahead of vacuous `m`), got {other:?}"
+        ),
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
 fn test_find_witness_exists_finds_a_small_witness() {
     let spec = lower(&format!(
         "map goal: D -> Bool;
@@ -294,9 +291,7 @@ fn test_find_witness_exists_finds_a_small_witness() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_find_witness_gives_up_past_the_bound() {
-    // The witness exists (`eq(n, target)`) but lies beyond the (deliberately
-    // tiny, for the same parser-recursion-depth reason as
-    // `test_enumerate_never_truncates_past_the_default_limits`) configured
+    // The witness exists (`eq(n, target)`) but lies beyond the configured
     // `max_items`, so the bounded search must give up rather than claim
     // `NoneExists` — for `∃` that distinction is `false` versus "unknown".
     let target = 20;

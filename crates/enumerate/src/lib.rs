@@ -7,6 +7,7 @@ mod enumerator;
 mod fresh;
 mod naive_enumerator;
 mod one_point;
+mod ordering;
 
 pub use enumeration_plan::ConstructorPlan;
 pub use enumeration_plan::EnumerationPlan;

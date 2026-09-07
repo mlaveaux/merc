@@ -18,6 +18,7 @@ use crate::enumeration_plan::NotEnumerableReason;
 use crate::enumeration_plan::SortEnumerability;
 use crate::fresh::FreshVariableGenerator;
 use crate::one_point::apply_one_point_rule;
+use crate::ordering::order_variables_by_constraints;
 
 /// Configures how far [`Enumerator::find_witness`] searches before giving up.
 ///
@@ -173,6 +174,7 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
 
         let body = self.rewriter.rewrite(body);
         let (remaining, body, initial_bindings) = apply_one_point_rule(self.rewriter, vars.to_vec(), body);
+        let remaining = order_variables_by_constraints(remaining, &body);
 
         self.drive(
             vars,
@@ -211,6 +213,7 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
 
         let body = self.rewriter.rewrite(body);
         let (remaining, body, initial_bindings) = apply_one_point_rule(self.rewriter, vars.to_vec(), body);
+        let remaining = order_variables_by_constraints(remaining, &body);
 
         let mut found: Option<Vec<DataExpression>> = None;
         let outcome = self.drive(
@@ -243,6 +246,14 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
     /// Expands `remaining_vars` breadth-first, pruning any branch whose body
     /// has already rewritten to `reject` regardless of its still-free
     /// variables, and reports every leaf (fully ground) branch to `on_leaf`.
+    ///
+    /// `remaining_vars` is expected to already be in the order the caller
+    /// wants variables expanded in — both callers pass it through
+    /// [`order_variables_by_constraints`] first (§6.3). Fresh variables
+    /// introduced while expanding a constructor are still appended at the
+    /// tail of each work item's own remaining list (§4.1/§4.5), so this
+    /// ordering only ever affects which of the *original* variables is
+    /// expanded first, not the fresh ones a variable's own expansion spawns.
     ///
     /// `all_vars` is the *original* variable list (before the one-point rule
     /// may have removed some of them) — every one of them is resolved into the
@@ -283,6 +294,7 @@ impl<'a, R: RewriteEngine> Enumerator<'a, R> {
                 let solution = Solution {
                     values: &self.solution_buf,
                 };
+                
                 match on_leaf(&item.body, &solution) {
                     ControlFlow::Break(()) => return Outcome::Stopped,
                     ControlFlow::Continue(()) => continue,
