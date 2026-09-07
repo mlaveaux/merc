@@ -136,9 +136,33 @@ fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
     });
 }
 
+/// `bounded sum enumeration`'s workload, but driven through one `Enumerator`
+/// reused across every `bencher.iter()` call instead of building a fresh one
+/// each time.
+fn criterion_benchmark_bounded_enumeration_reused(c: &mut Criterion) {
+    let spec = lower(PRELUDE);
+    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
+    let plans = EnumerationPlans::build(&spec);
+    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
+    let (vars, body) = lt_goal(50);
+
+    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    c.bench_function("bounded sum enumeration, one Enumerator reused (n < 50)", |bencher| {
+        bencher.iter(|| {
+            let mut count = 0usize;
+            enumerator.enumerate(&vars, &body, |_solution| {
+                count += 1;
+                ControlFlow::Continue(())
+            });
+            black_box(count);
+        });
+    });
+}
+
 criterion_group!(
     benches,
     criterion_benchmark_bounded_enumeration,
+    criterion_benchmark_bounded_enumeration_reused,
     criterion_benchmark_enumeration_plans_build,
     criterion_benchmark_finite_sort_cache_hit,
 );
