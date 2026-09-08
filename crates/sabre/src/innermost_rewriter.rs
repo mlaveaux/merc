@@ -75,10 +75,6 @@ impl InnermostRewriter {
             )
         });
 
-        info!(
-            "{} rewrites, {} single steps, {} symbol comparisons and {} condition cache hits",
-            stats.recursions, stats.rewrite_steps, stats.symbol_comparisons, stats.condition_cache_hits
-        );
         (result, stats)
     }
 
