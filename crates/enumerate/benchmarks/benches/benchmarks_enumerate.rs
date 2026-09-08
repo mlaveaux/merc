@@ -2,6 +2,7 @@
 
 use std::hint::black_box;
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use criterion::Criterion;
 use criterion::criterion_group;
@@ -77,7 +78,7 @@ fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
 fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let mut group = c.benchmark_group("bounded sum enumeration");
     for bound in [10, 50, 200] {
@@ -85,12 +86,18 @@ fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
         group.bench_function(format!("n < {bound}"), |bencher| {
             bencher.iter(|| {
                 let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-                let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+                let mut enumerator = Enumerator::new(plans.clone());
                 let mut count = 0usize;
-                enumerator.enumerate(&vars, &body, |_solution| {
-                    count += 1;
-                    ControlFlow::Continue(())
-                });
+                enumerator.enumerate(
+                    &mut rewriter,
+                    &mut generator_for(&vars),
+                    &vars,
+                    &body,
+                    |_rewriter, _solution| -> ControlFlow<()> {
+                        count += 1;
+                        ControlFlow::Continue(())
+                    },
+                );
                 black_box(count);
             });
         });
@@ -113,7 +120,7 @@ fn criterion_benchmark_enumeration_plans_build(c: &mut Criterion) {
 fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
 
     let b = DataVariable::with_sort("b", SortExpression::from(BasicSort::new("Bool")).copy());
@@ -123,14 +130,20 @@ fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
     let body: DataExpression =
         DataFunctionSymbol::with_sort("true", SortExpression::from(BasicSort::new("Bool")).copy()).into();
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans);
     c.bench_function("Bool sum enumeration (cached after first call)", |bencher| {
         bencher.iter(|| {
             let mut count = 0usize;
-            enumerator.enumerate(&vars, &body, |_solution| {
-                count += 1;
-                ControlFlow::Continue(())
-            });
+            enumerator.enumerate(
+                &mut rewriter,
+                &mut generator_for(&vars),
+                &vars,
+                &body,
+                |_rewriter, _solution| -> ControlFlow<()> {
+                    count += 1;
+                    ControlFlow::Continue(())
+                },
+            );
             black_box(count);
         });
     });
@@ -142,18 +155,24 @@ fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
 fn criterion_benchmark_bounded_enumeration_reused(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
     let (vars, body) = lt_goal(50);
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans);
     c.bench_function("bounded sum enumeration, one Enumerator reused (n < 50)", |bencher| {
         bencher.iter(|| {
             let mut count = 0usize;
-            enumerator.enumerate(&vars, &body, |_solution| {
-                count += 1;
-                ControlFlow::Continue(())
-            });
+            enumerator.enumerate(
+                &mut rewriter,
+                &mut generator_for(&vars),
+                &vars,
+                &body,
+                |_rewriter, _solution| -> ControlFlow<()> {
+                    count += 1;
+                    ControlFlow::Continue(())
+                },
+            );
             black_box(count);
         });
     });
