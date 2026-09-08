@@ -61,6 +61,35 @@ impl RewriteSubstitution for HashMap<DataVariable, DataExpression> {
     }
 }
 
+/// A substitution given as two parallel slices, useful for the handful of
+/// bindings a single search branch or LPS successor introduces.
+pub struct SliceSubstitution<'a> {
+    pub variables: &'a [DataVariable],
+    pub values: &'a [DataExpression],
+}
+
+impl RewriteSubstitution for SliceSubstitution<'_> {
+    fn get<'a>(&'a self, variable: &DataVariableRef<'_>) -> Option<DataExpressionRef<'a>> {
+        self.variables
+            .iter()
+            .position(|v| v.copy() == *variable)
+            .map(|index| self.values[index].copy())
+    }
+}
+
+/// Layers one substitution over another without merging them into a single
+/// collection.
+pub struct Chained<'a, A, B> {
+    pub first: &'a A,
+    pub second: &'a B,
+}
+
+impl<A: RewriteSubstitution, B: RewriteSubstitution> RewriteSubstitution for Chained<'_, A, B> {
+    fn get<'a>(&'a self, variable: &DataVariableRef<'_>) -> Option<DataExpressionRef<'a>> {
+        self.first.get(variable).or_else(|| self.second.get(variable))
+    }
+}
+
 /// Replaces every free variable of `t` by its image under `sigma`.
 ///
 /// The result is not normalised: rewrite rules can fire across the substitution boundary, so
@@ -115,7 +144,9 @@ mod tests {
     use merc_data::DataExpression;
     use merc_data::DataVariable;
 
+    use crate::utilities::Chained;
     use crate::utilities::EmptySubstitution;
+    use crate::utilities::SliceSubstitution;
     use crate::utilities::apply_substitution;
 
     /// Parses `input` treating every name in `variables` as a variable.
@@ -171,5 +202,40 @@ mod tests {
         let input = term("f(x, g(y))", &["x", "y"]);
 
         assert_eq!(apply_substitution(&input, &EmptySubstitution), input);
+    }
+
+    #[test]
+    fn test_slice_substitution_replaces_variables() {
+        let variables = [DataVariable::new("x"), DataVariable::new("y")];
+        let values = [term("a", &[]), term("b", &[])];
+        let sigma = SliceSubstitution {
+            variables: &variables,
+            values: &values,
+        };
+
+        assert_eq!(
+            apply_substitution(&term("f(x, y)", &["x", "y"]), &sigma),
+            term("f(a, b)", &[])
+        );
+    }
+
+    #[test]
+    fn test_chained_prefers_first_substitution() {
+        let variables = [DataVariable::new("x")];
+        let values = [term("a", &[])];
+        let first = SliceSubstitution {
+            variables: &variables,
+            values: &values,
+        };
+        let second = substitution(&[("x", "b"), ("y", "c")]);
+        let sigma = Chained {
+            first: &first,
+            second: &second,
+        };
+
+        assert_eq!(
+            apply_substitution(&term("f(x, y)", &["x", "y"]), &sigma),
+            term("f(a, c)", &[])
+        );
     }
 }
