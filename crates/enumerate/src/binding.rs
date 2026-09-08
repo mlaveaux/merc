@@ -1,3 +1,7 @@
+#![forbid(unsafe_code)]
+
+use std::rc::Rc;
+
 use ahash::HashMap;
 use merc_aterm::Term;
 use merc_data::DataApplication;
@@ -30,7 +34,8 @@ use merc_sabre::utilities::RewriteSubstitution;
 pub(crate) struct BindingChain(Option<u32>);
 
 struct BindingNode {
-    variable: DataVariable,
+    /// `Rc` rather than an owned `DataVariable`.
+    variable: Rc<DataVariable>,
     value: DataExpression,
     parent: BindingChain,
 }
@@ -60,7 +65,7 @@ impl BindingArena {
     pub(crate) fn extend(
         &mut self,
         parent: BindingChain,
-        variable: DataVariable,
+        variable: Rc<DataVariable>,
         value: DataExpression,
     ) -> BindingChain {
         let index = u32::try_from(self.nodes.len()).expect("more binding-chain nodes than fit in a u32");
@@ -203,6 +208,8 @@ impl RewriteSubstitution for ArenaSubstitution<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use merc_data::BasicSort;
     use merc_data::DataApplication;
     use merc_data::DataExpression;
@@ -246,9 +253,9 @@ mod tests {
 
         let mut arena = BindingArena::default();
         let chain = BindingChain::default();
-        let chain = arena.extend(chain, v.clone(), v_value);
-        let chain = arena.extend(chain, y1, a.clone());
-        let chain = arena.extend(chain, y2, b.clone());
+        let chain = arena.extend(chain, Rc::new(v.clone()), v_value);
+        let chain = arena.extend(chain, Rc::new(y1), a.clone());
+        let chain = arena.extend(chain, Rc::new(y2), b.clone());
 
         let mut rewriter = rewriter();
         let mut resolved = Vec::new();

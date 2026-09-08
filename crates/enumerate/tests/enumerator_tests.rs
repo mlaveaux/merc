@@ -259,8 +259,11 @@ fn test_enumerate_applies_the_one_point_rule() {
 #[cfg_attr(miri, ignore)]
 fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
     // `m` never occurs in `goal`'s body at all — a vacuous bound variable.
+    // The budget is the exact number of work items the search needs *with*
+    // the reordering; without it, expanding the vacuous `m` first costs two
+    // more, so a looser budget would make this test pass either way.
     let tiny_limits = EnumerationLimits {
-        max_items: 20,
+        max_items: 10,
         max_depth: 64,
     };
 
@@ -395,10 +398,18 @@ fn test_find_witness_forall_holds_over_a_finite_sort() {
 #[cfg_attr(miri, ignore)]
 fn test_find_witness_forall_is_not_broken_by_the_one_point_rule() {
     // `∀ n:D . n == dzero` is false — `dsucc(dzero)` is a counterexample.
+    // `==` on `D` is otherwise uninterpreted, so the equations below are what
+    // let the ground instances decide; `n == dzero` itself still survives
+    // normalisation, which is what offers the one-point rule its bait.
     let spec = lower(
         "map goal: D -> Bool;
          var n: D;
-         eqn goal(n) = n == dzero;",
+             i, j: D;
+         eqn goal(n) = n == dzero;
+             dzero == dzero = true;
+             dsucc(i) == dzero = false;
+             dzero == dsucc(j) = false;
+             dsucc(i) == dsucc(j) = i == j;",
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
