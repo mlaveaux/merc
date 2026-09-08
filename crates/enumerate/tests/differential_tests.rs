@@ -2,19 +2,11 @@
 //! must agree on the same result set for the same goal, even though they use
 //! completely different algorithms (incremental breadth-first work queue vs.
 //! brute-force full instantiation — see [`NaiveEnumerator`]'s doc comment).
-//! Two independent implementations agreeing is much stronger evidence than
-//! either alone, the same role `merc_sabre::NaiveRewriter` plays for the
-//! rewrite engines.
 //!
-//! See `enumerator_tests.rs` for why this uses a small hand-rolled sort `D`
-//! rather than the real `Nat`, and builds it once via [`lower`] rather than
-//! per random goal: random goals are built directly through the
-//! `merc_data`/`merc_sabre` API (never parsed as source text), both to avoid
-//! `merc_syntax`'s parser overhead 200-odd times over and, more importantly,
-//! because embedding a random goal in source text would need to re-run
-//! `merc_typecheck` per goal — and this crate's own sort/rewrite objects
-//! (`EnumerationPlans`, `RewriteSpecification`) only need building once for a fixed
-//! spec, exactly like a real caller would build them once per run.
+//! Random goals are built through the `merc_data`/`merc_sabre` API rather than
+//! parsed as source text, so that `merc_syntax`/`merc_typecheck` do not have
+//! to run once per goal; see `enumerator_tests.rs` for why the sort is a small
+//! hand-rolled `D` rather than the real `Nat`.
 
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -109,13 +101,10 @@ fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
 }
 
 /// One randomly generated `op(var, numeral(bound))` conjunct (`op` is `lt` or
-/// `eq`). Restricted to this shape (rather than arbitrary boolean
-/// combinations) so every generated goal is *provably* decidable within a
-/// small, known bound: `lt(x, dzero) = false` unconditionally, regardless of
+/// `eq`). Restricted to this shape so every generated goal is provably
+/// decidable within a known bound: `lt(x, dzero) = false` holds regardless of
 /// how `x` is later instantiated, so a clause with bound `k` can never
-/// contribute a solution beyond `k` — see `docs/enumeration-crate-plan.md`
-/// §5.1 step 6 and §7.2's discussion of what makes a `sum`-style search
-/// actually terminate.
+/// contribute a solution beyond `k`.
 struct Clause {
     variable: DataVariable,
     is_lt: bool,
@@ -157,14 +146,9 @@ fn conjunction(terms: &[DataExpression]) -> DataExpression {
 /// and asserts they find the same solution set.
 ///
 /// The three [`InnermostRewriter`]s are built once, outside `random_test`'s
-/// loop, and reused across every random goal: `InnermostRewriter::new` builds
-/// a `SetAutomaton` over *every* equation `spec` carries — 331 of them even
-/// for this file's tiny `D`-only spec, since lowering always pulls in the
-/// whole built-in library (see `enumerator_tests.rs`'s module doc comment) —
-/// and rebuilding that per goal, 200-odd times over, was the actual cost of
-/// an earlier version of this test (confirmed by timing it: >1 CPU-minute for
-/// 200 goals with per-goal rewriters, well under a second with these shared
-/// ones). A real caller builds a rewriter once per run for the same reason.
+/// loop: `InnermostRewriter::new` compiles a `SetAutomaton` over every
+/// equation `spec` carries, including the whole lowered built-in library, so
+/// rebuilding one per goal dominates the test's runtime.
 #[allow(clippy::too_many_arguments)]
 fn check_one_random_goal(
     rng: &mut StdRng,
@@ -186,10 +170,10 @@ fn check_one_random_goal(
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
     let outcome = enumerator.enumerate(
         enumerator_rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, solution| {
+        |_rewriter, solution| -> ControlFlow<()> {
             enumerator_results.insert(solution.values().to_vec());
             ControlFlow::Continue(())
         },
@@ -271,10 +255,10 @@ fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
     let outcome = enumerator.enumerate(
         &mut enumerator_rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, solution| {
+        |_rewriter, solution| -> ControlFlow<()> {
             enumerator_results.insert(solution.values().to_vec());
             ControlFlow::Continue(())
         },

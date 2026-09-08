@@ -10,18 +10,14 @@ use crate::one_point::split_conjuncts;
 
 /// Reorders `vars` so that variables constrained by more of `body`'s top-level
 /// `&&`-conjuncts — and especially those that are the *only* one of `vars`
-/// still free in some conjunct — are enumerated first.
+/// still free in some conjunct — are enumerated first: binding a sole survivor
+/// makes its conjunct ground immediately, so the search's reject predicate can
+/// prune the branch a step sooner.
 ///
-/// Binding a variable that is the sole survivor in a conjunct turns that
-/// conjunct ground immediately, so the search's reject predicate can decide it
-/// (and prune the branch) one step sooner than it otherwise would. This is a
-/// static approximation, computed once per goal from the (already
-/// one-point-reduced) body — it does not account for what a conjunct
-/// evaluates *to*, only how many of `vars` it still mentions.
-///
-/// Ties (including every variable when `body` has no top-level `&&` at all)
-/// keep their relative order from `vars`, so this never reorders a goal it
-/// cannot say anything useful about.
+/// A static approximation, computed once per goal from the (already
+/// one-point-reduced) body: it counts how many of `vars` each conjunct still
+/// mentions, never what a conjunct evaluates to. Ties keep their relative order
+/// from `vars`, so a goal it can say nothing about is left alone.
 pub(crate) fn order_variables_by_constraints(vars: Vec<DataVariable>, body: &DataExpression) -> Vec<DataVariable> {
     if vars.len() <= 1 {
         return vars;
