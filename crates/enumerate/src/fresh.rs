@@ -8,6 +8,8 @@ use merc_data::SortExpressionRef;
 /// caller-supplied set of names already in scope.
 pub struct FreshVariableGenerator {
     used: AHashSet<String>,
+    /// `used`'s state at construction, restored by [`Self::reset`].
+    initial_used: AHashSet<String>,
     /// The next index to try per `base`, for cheap generation of fresh names.
     next_index: HashMap<String, u64>,
 }
@@ -15,10 +17,25 @@ pub struct FreshVariableGenerator {
 impl FreshVariableGenerator {
     /// Builds a generator that avoids every name in `used`.
     pub fn new(used: impl IntoIterator<Item = String>) -> Self {
+        let used: AHashSet<String> = used.into_iter().collect();
+        let initial_used = used.clone();
         FreshVariableGenerator {
-            used: used.into_iter().collect(),
+            used,
+            initial_used,
             next_index: HashMap::new(),
         }
+    }
+
+    /// Restores this generator to the state [`Self::new`] left it in,
+    /// discarding every name generated since.
+    ///
+    /// Lets a generator seeded once (e.g. from every name that could ever be
+    /// in scope across a whole LPS) be reused indefinitely — one call per
+    /// state during exploration — without `used` growing without bound as
+    /// more variables are generated over time.
+    pub fn reset(&mut self) {
+        self.used.clone_from(&self.initial_used);
+        self.next_index.clear();
     }
 
     /// Generates a fresh variable of `sort`, named `base` suffixed with the

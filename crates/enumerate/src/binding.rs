@@ -13,12 +13,8 @@ use merc_sabre::utilities::RewriteSubstitution;
 
 /// A cheap, `Copy` handle into a [`BindingArena`]: the variable bindings
 /// chosen so far along one branch of the enumeration search, recorded as a
-/// linked list of `(variable, value)` nodes stored in the arena rather than
-/// individually heap-allocated. Extending a chain ([`BindingArena::extend`])
-/// is an amortized `Vec::push`, not a per-node allocation — which matters
-/// because `Enumerator::drive`'s breadth-first queue holds many outstanding
-/// branches at once, each extending a shared prefix of bindings on every
-/// step.
+/// linked list of `(variable, value)` nodes stored in the arena. Branches
+/// share a common prefix, so extending one leaves every sibling valid.
 ///
 /// A bound variable's image may itself mention a variable bound *later* in
 /// the same chain (e.g. `v ↦ c(y1, y2)` where `y1`/`y2` are fresh variables
@@ -42,9 +38,7 @@ struct BindingNode {
 /// Backing store for every [`BindingChain`] produced during one search.
 /// Owned by [`Enumerator`](crate::Enumerator) and [`BindingArena::clear`]ed
 /// at the start of each `enumerate`/`find_witness` call, so the backing
-/// `Vec`'s capacity is reused across calls instead of being reallocated from
-/// scratch every time — what matters for a caller (e.g. LPS `sum`-successor
-/// exploration) driving many searches through one long-lived `Enumerator`.
+/// `Vec`'s capacity carries over to the next search.
 #[derive(Default)]
 pub(crate) struct BindingArena {
     nodes: Vec<BindingNode>,
@@ -82,11 +76,8 @@ impl BindingArena {
     /// The image may itself still mention other variables bound later in the
     /// chain; see [`BindingArena::resolve_all`] to fully resolve it.
     ///
-    /// Takes a [`DataVariableRef`] rather than an owned [`DataVariable`] so a
-    /// caller holding only a reference (e.g. [`RewriteSubstitution::get`],
-    /// called once per free variable of every term the search normalises)
-    /// need not `protect` it — comparing two term references is a pointer
-    /// comparison and never touches the protection set.
+    /// Takes a [`DataVariableRef`] so callers on the hot path
+    /// ([`RewriteSubstitution::get`]) need not `protect` the key.
     fn lookup(&self, chain: BindingChain, variable: &DataVariableRef<'_>) -> Option<&DataExpression> {
         let mut current = chain.0;
         while let Some(index) = current {
@@ -102,15 +93,11 @@ impl BindingArena {
     /// Resolves every variable in `vars` to its fully ground, ready-to-report
     /// value, in the same order as `vars`, appending them to `out`.
     ///
-    /// `out` is cleared first, but its capacity carries over, so a caller
-    /// resolving into the same buffer on every leaf (e.g. `Enumerator::drive`'s
-    /// `solution_buf`) allocates once rather than on every solution.
+    /// `out` is cleared first, but its capacity carries over.
     ///
     /// Each variable's stored image may itself mention other bound variables
     /// (see [`BindingChain`]'s doc comment); this recursively substitutes
-    /// those away, memoising each variable's resolved value so a value shared
-    /// by several `vars` (or reachable along several binding paths) is only
-    /// resolved once.
+    /// those away, memoising each variable's resolved value.
     ///
     /// # Panics
     ///
@@ -134,12 +121,8 @@ impl BindingArena {
         }
     }
 
-    /// Memoised on `Term::index` (the variable's position in the global term
-    /// pool) rather than a cloned [`DataVariable`]: since terms are maximally
-    /// shared, the index is already a unique, `protect`-free key — structural
-    /// equality implies pointer identity, so two occurrences of the same
-    /// variable share one index — which matters because this is the memo's
-    /// cache-hit path, taken every time a variable recurs in the goal.
+    /// Memoised on `Term::index`: maximal sharing makes a variable's position
+    /// in the global term pool a unique, `protect`-free key.
     fn resolve_variable<R: RewriteEngine>(
         &mut self,
         rewriter: &mut R,
@@ -159,19 +142,16 @@ impl BindingArena {
         resolved
     }
 
-    /// Generic over [`Term`] rather than fixed to [`DataExpression`] so a
-    /// recursive call on a subterm can pass the [`ATermRef`](merc_aterm::ATermRef)
-    /// yielded by `arguments()` straight through, instead of `protect`ing
-    /// every argument up front just to obtain an owned value to recurse on.
+    /// Returns a normal form: every reconstructed application is rewritten
+    /// again, since substituting already-normal arguments into a constructor
+    /// can still leave the composite reducible (`@succ_nat` applied to a
+    /// normalised machine-word `Nat` digit still needs its carry-propagating
+    /// equation to fire). Callers splice the result in as a
+    /// [`RewriteSubstitution`] image, which requires it.
     ///
-    /// Rewrites every application it reconstructs before returning it:
-    /// substituting an already-normal argument into a constructor can still
-    /// leave the composite reducible (e.g. `@succ_nat` applied to an
-    /// already-normalised machine-word `Nat` digit still needs its own
-    /// carry-propagating equation to fire), so normalising only the leaves
-    /// bound in the arena is not enough to guarantee the value handed back to
-    /// the caller — who treats it as a [`RewriteSubstitution`] image
-    /// elsewhere — is itself a normal form.
+    /// Generic over [`Term`] so a recursive call can take the
+    /// [`ATermRef`](merc_aterm::ATermRef) from `arguments()` without
+    /// `protect`ing it first.
     fn resolve_term<'a, 'b, T: Term<'a, 'b>, R: RewriteEngine>(
         &mut self,
         rewriter: &mut R,
@@ -202,18 +182,14 @@ impl BindingArena {
         rewriter.rewrite(&application)
     }
 
-    /// Returns a [`RewriteSubstitution`] view of `chain`, usable to normalise
-    /// a term in one step without building a throwaway `HashMap` per
-    /// substitution — `Enumerator::drive` rewrites the search's goal body
-    /// this way on every work-item expansion, so avoiding an allocation
-    /// there matters.
+    /// Returns a [`RewriteSubstitution`] view of `chain`, with no intervening
+    /// collection to build.
     pub(crate) fn substitution(&self, chain: BindingChain) -> ArenaSubstitution<'_> {
         ArenaSubstitution { arena: self, chain }
     }
 }
 
-/// A [`RewriteSubstitution`] backed directly by a [`BindingArena`] chain,
-/// with no intermediate collection.
+/// A [`RewriteSubstitution`] backed directly by a [`BindingArena`] chain.
 pub(crate) struct ArenaSubstitution<'a> {
     arena: &'a BindingArena,
     chain: BindingChain,
