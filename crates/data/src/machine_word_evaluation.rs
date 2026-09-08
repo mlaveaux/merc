@@ -1,14 +1,12 @@
 use merc_aterm::ATermRef;
 use merc_number::machine_word as mw;
 
-use crate::BasicSort;
 use crate::DataExpression;
 use crate::DataExpressionRef;
-use crate::DataFunctionSymbol;
 use crate::DataFunctionSymbolRef;
 use crate::MachineNumber;
 use crate::MachineNumberRef;
-use crate::SortExpression;
+use crate::bool_literal;
 use crate::is_data_application;
 use crate::is_data_function_symbol;
 use crate::is_data_machine_number;
@@ -334,13 +332,6 @@ fn machine_number(value: u64) -> DataExpression {
     MachineNumber::new(value).into()
 }
 
-/// Builds the `Bool` literal `true` or `false`, matching the representation used
-/// by the IR lowering (a nullary function symbol of sort `Bool`).
-fn bool_literal(value: bool) -> DataExpression {
-    let bool_sort = SortExpression::from(BasicSort::new("Bool"));
-    DataFunctionSymbol::with_sort(if value { "true" } else { "false" }, bool_sort.copy()).into()
-}
-
 /// Reads a machine number argument as its `u64` value, or `None` when the
 /// argument is not (yet) a concrete machine number.
 fn as_word(arg: &DataExpressionRef<'_>) -> Option<u64> {
@@ -370,11 +361,11 @@ fn as_bool(arg: &DataExpressionRef<'_>) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use crate::DataApplication;
+    use crate::DataFunctionSymbol;
+    use crate::bool_literal;
 
     use super::DataExpression;
-    use super::DataFunctionSymbol;
     use super::MachineWordOp;
-    use super::bool_literal;
     use super::machine_number;
     use super::try_evaluate_machine_word;
 
