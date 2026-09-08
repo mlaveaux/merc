@@ -1,4 +1,5 @@
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use merc_data::DataApplication;
 use merc_data::DataExpression;
@@ -27,7 +28,7 @@ fn enumerate_finds_every_solution_for_real_machine_word_nat() {
 
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let goal_symbol = spec
         .mappings()
@@ -48,13 +49,19 @@ fn enumerate_finds_every_solution_for_real_machine_word_nat() {
         &[DataExpression::from(m_var.clone())],
     ));
 
-    let generator = FreshVariableGenerator::new(std::iter::once(m_var.name().to_string()));
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator);
+    let mut generator = FreshVariableGenerator::new(std::iter::once(m_var.name().to_string()));
+    let mut enumerator = Enumerator::new(plans);
     let mut solutions = Vec::new();
-    let outcome = enumerator.enumerate(&[m_var], &body, |sol| {
-        solutions.push(sol.values().to_vec());
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut rewriter,
+        &mut generator,
+        &[m_var],
+        &body,
+        |_rewriter, sol| -> ControlFlow<()> {
+            solutions.push(sol.values().to_vec());
+            ControlFlow::Continue(())
+        },
+    );
     assert!(matches!(outcome, merc_enumerate::Outcome::Exhausted), "{outcome:?}");
     assert_eq!(solutions.len(), 3, "expected m = 0, 1, 2, got {solutions:?}");
 

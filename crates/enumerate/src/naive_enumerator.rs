@@ -13,16 +13,12 @@ use crate::enumerator::bool_literal;
 use crate::enumerator::cartesian_product;
 
 /// A deliberately simple, unoptimized enumerator, for differential and
-/// property-based testing.
+/// property-based testing against [`Enumerator`](crate::Enumerator).
 ///
-/// # Details
-///
-/// This takes the obviously-correct approach: materialise every ground term of
-/// each variable's sort up to a size bound, substitute *all* variables at once,
-/// and rewrite once per combination. No incremental normalisation, no early
-/// rejection, no one-point rule, no fairness scheme to get right — just brute
-/// force. Two independent algorithms agreeing on the same result set is much
-/// stronger evidence of correctness than either alone.
+/// Materialises every ground term of each variable's sort up to a size bound,
+/// substitutes *all* variables at once, and rewrites once per combination: no
+/// incremental normalisation, no early rejection, no one-point rule, no
+/// fairness scheme.
 ///
 /// Only ever finds solutions reachable within `max_size` constructor
 /// applications per variable, so it is a *reference for bounded goals*, not a

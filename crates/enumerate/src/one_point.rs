@@ -19,17 +19,17 @@ use crate::binding::BindingChain;
 /// a top-level `&&`-conjunct `x == e` / `e == x` where `x` is one of the
 /// still-unbound variables and `e` mentions none of them, binds `x := e`
 /// directly instead of enumerating its sort, and rewrites the residual body
-/// under that binding — which is what lets a *chain* of one-point conjuncts (`n
-/// == 5 && m == n + 1`) resolve in one pass: after `n` is substituted away the
-/// second conjunct becomes `m == 5 + 1`, itself a one-point conjunct on the
-/// next iteration.
+/// under that binding.
 ///
 /// Returns the narrowed variable list, the rewritten residual body, and the
 /// accumulated bindings.
 ///
-/// `body` must already be in normal form. Every subterm of a normal form is
-/// itself a normal form, which is what makes the `e` side of a matched conjunct
-/// usable directly as a substitution image without re-rewriting it.
+/// `body` must already be in normal form: every subterm of a normal form is
+/// itself one, which is what makes the `e` side of a matched conjunct usable
+/// directly as a substitution image without re-rewriting it.
+///
+/// See `docs/developer/enumeration.md` on the merc website for what this
+/// static, once-per-goal pass does and does not reach.
 pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
     rewriter: &mut R,
     arena: &mut BindingArena,
@@ -100,12 +100,8 @@ fn one_point_candidate(
 /// conjunctions lazily as they're consumed. A non-`&&` term yields itself as a
 /// single leaf.
 ///
-/// Iterative rather than recursive, like `tools/mcrl2`'s `PbesFlattenIter`
-/// (same stack-based chain-flatten shape) — but this crate `forbid`s unsafe
-/// code, so the stack owns protected `DataExpression`s instead of bare term
-/// addresses, and there's no reusable-buffer variant: `split_conjuncts` runs
-/// at most once per one-point-rule iteration or ordering decision, nowhere
-/// near hot enough to justify that complexity.
+/// Iterative rather than recursive: a conjunction chain can be arbitrarily
+/// deep.
 pub(crate) fn split_conjuncts(body: &DataExpression) -> impl Iterator<Item = DataExpression> {
     let mut stack = vec![body.clone()];
     std::iter::from_fn(move || {

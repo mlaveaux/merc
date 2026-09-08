@@ -97,10 +97,10 @@ fn test_enumerate_finds_every_bounded_solution() {
     let mut results: Vec<DataExpression> = Vec::new();
     let outcome = enumerator.enumerate(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, solution| {
+        |_rewriter, solution| -> ControlFlow<()> {
             results.push(solution.values()[0].clone());
             ControlFlow::Continue(())
         },
@@ -117,9 +117,8 @@ fn test_enumerate_finds_every_bounded_solution() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_enumerate_never_truncates_past_the_default_limits() {
-    // The specific behaviour requested alongside this implementation:
     // `Enumerator::enumerate` (the `sum`-exploration path) must ignore
-    // `EnumerationLimits` entirely and keep progressing.
+    // `EnumerationLimits` entirely: a truncated result is an unsound LTS.
     let target = 20;
     let tiny_limits = EnumerationLimits {
         max_items: 3,
@@ -142,10 +141,10 @@ fn test_enumerate_never_truncates_past_the_default_limits() {
     let mut count = 0usize;
     let outcome = enumerator.enumerate(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, _solution| {
+        |_rewriter, _solution| -> ControlFlow<()> {
             count += 1;
             ControlFlow::Continue(())
         },
@@ -192,10 +191,10 @@ fn test_enumerate_is_fair_across_two_infinite_variables() {
     let mut results: AHashSet<(DataExpression, DataExpression)> = AHashSet::new();
     let outcome = enumerator.enumerate(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, solution| {
+        |_rewriter, solution| -> ControlFlow<()> {
             let values = solution.values();
             results.insert((values[0].clone(), values[1].clone()));
             ControlFlow::Continue(())
@@ -228,10 +227,10 @@ fn test_enumerate_applies_the_one_point_rule() {
     let mut results: Vec<(DataExpression, DataExpression)> = Vec::new();
     let outcome = enumerator.enumerate(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
-        |_rewriter, solution| {
+        |_rewriter, solution| -> ControlFlow<()> {
             let values = solution.values();
             results.push((values[0].clone(), values[1].clone()));
             ControlFlow::Continue(())
@@ -285,7 +284,7 @@ fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
     let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
     match enumerator.find_witness(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
         QuantifierKind::Exists,
@@ -315,7 +314,7 @@ fn test_find_witness_exists_finds_a_small_witness() {
     let mut enumerator = Enumerator::new(plans);
     match enumerator.find_witness(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
         QuantifierKind::Exists,
@@ -352,7 +351,7 @@ fn test_find_witness_gives_up_past_the_bound() {
     let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
     match enumerator.find_witness(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
         QuantifierKind::Exists,
@@ -382,12 +381,75 @@ fn test_find_witness_forall_holds_over_a_finite_sort() {
     let mut enumerator = Enumerator::new(plans);
     match enumerator.find_witness(
         &mut rewriter,
-        generator_for(&vars),
+        &mut generator_for(&vars),
         &vars,
         &body,
         QuantifierKind::Forall,
     ) {
         WitnessOutcome::NoneExists => {}
         other => panic!("expected NoneExists (the quantifier holds), got {other:?}"),
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_find_witness_forall_is_not_broken_by_the_one_point_rule() {
+    // `∀ n:D . n == dzero` is false — `dsucc(dzero)` is a counterexample.
+    let spec = lower(
+        "map goal: D -> Bool;
+         var n: D;
+         eqn goal(n) = n == dzero;",
+    );
+    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
+    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
+
+    let (vars, body) = goal(&spec, "goal");
+
+    let mut enumerator = Enumerator::new(plans);
+    match enumerator.find_witness(
+        &mut rewriter,
+        &mut generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Forall,
+    ) {
+        WitnessOutcome::Found(values) => {
+            assert_ne!(values[0], numeral(0), "dzero is not a counterexample to `n == dzero`");
+        }
+        other => panic!("expected a counterexample to `forall n. n == dzero`, got {other:?}"),
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_find_witness_forall_does_not_claim_an_undecided_body_holds() {
+    // `p` has no equations, so `p(true)`/`p(false)` are stuck: neither is the
+    // literal `false` (no counterexample found) nor the literal `true` (no
+    // proof either). `NoneExists` means "the quantifier holds", which is not
+    // something this search established — `GaveUp` is the honest answer, per
+    // `WitnessOutcome::GaveUp`'s own doc comment.
+    let spec = lower(
+        "map goal: Bool -> Bool;
+             p: Bool -> Bool;
+         var b: Bool;
+         eqn goal(b) = p(b);",
+    );
+    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
+    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
+
+    let (vars, body) = goal(&spec, "goal");
+
+    let mut enumerator = Enumerator::new(plans);
+    match enumerator.find_witness(
+        &mut rewriter,
+        &mut generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Forall,
+    ) {
+        WitnessOutcome::GaveUp => {}
+        other => panic!("expected GaveUp for an undecidable body, got {other:?}"),
     }
 }
