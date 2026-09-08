@@ -1,15 +1,41 @@
 use std::cell::RefCell;
 use std::mem::ManuallyDrop;
 
+use merc_aterm::ATerm;
 use merc_aterm::Symb;
 use merc_aterm::Symbol;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::is_int_term;
 
+use crate::BasicSort;
+use crate::DataExpression;
+use crate::DataFunctionSymbol;
+use crate::SortExpression;
+
 thread_local! {
     /// Thread local storage that stores various default terms representing data symbols.
     pub(crate) static DATA_SYMBOLS: RefCell<DataSymbols> = RefCell::new(DataSymbols::new());
+
+    /// The canonical `Bool` literals `true`/`false`.
+    static TRUE_LITERAL: ManuallyDrop<ATerm> = ManuallyDrop::new(bool_literal_term("true"));
+    static FALSE_LITERAL: ManuallyDrop<ATerm> = ManuallyDrop::new(bool_literal_term("false"));
+}
+
+/// Builds the nullary `Bool` function symbol term named `name` (`"true"` or `"false"`).
+fn bool_literal_term(name: &str) -> ATerm {
+    let bool_sort = SortExpression::from(BasicSort::new("Bool"));
+    let literal: DataExpression = DataFunctionSymbol::with_sort(name, bool_sort.copy()).into();
+    literal.into()
+}
+
+/// Returns the canonical `Bool` literal `true`/`false`.
+pub fn bool_literal(value: bool) -> DataExpression {
+    if value {
+        TRUE_LITERAL.with(|term| (**term).clone().into())
+    } else {
+        FALSE_LITERAL.with(|term| (**term).clone().into())
+    }
 }
 
 /// Defines default symbols and terms for data elements.
@@ -18,8 +44,9 @@ thread_local! {
 /// The set is kept complete on purpose, so some symbols are declared here before anything reads
 /// them; those carry an `allow(dead_code)`.
 ///
-/// All `Symbol` fields are wrapped in `ManuallyDrop` so that their destructors never run at thread
-/// exit.
+/// All `Symbol` and `ATerm` fields are wrapped in `ManuallyDrop` so that their destructors never
+/// run at thread exit: a term or symbol must never be dropped after its owning thread-local term
+/// pool has already been torn down, and thread-local destruction order is unspecified.
 pub(crate) struct DataSymbols {
     // Sorts
     pub basic_sort_symbol: ManuallyDrop<Symbol>,
