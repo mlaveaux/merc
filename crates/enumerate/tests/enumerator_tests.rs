@@ -1,4 +1,5 @@
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use ahash::AHashSet;
 use merc_data::DataExpression;
@@ -88,16 +89,22 @@ fn test_enumerate_finds_every_bounded_solution() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans);
     let mut results: Vec<DataExpression> = Vec::new();
-    let outcome = enumerator.enumerate(&vars, &body, |solution| {
-        results.push(solution.values()[0].clone());
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, solution| {
+            results.push(solution.values()[0].clone());
+            ControlFlow::Continue(())
+        },
+    );
 
     assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
 
@@ -127,16 +134,22 @@ fn test_enumerate_never_truncates_past_the_default_limits() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars)).with_limits(tiny_limits);
+    let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
     let mut count = 0usize;
-    let outcome = enumerator.enumerate(&vars, &body, |_solution| {
-        count += 1;
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, _solution| {
+            count += 1;
+            ControlFlow::Continue(())
+        },
+    );
 
     assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
     assert_eq!(
@@ -171,17 +184,23 @@ fn test_enumerate_is_fair_across_two_infinite_variables() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans);
     let mut results: AHashSet<(DataExpression, DataExpression)> = AHashSet::new();
-    let outcome = enumerator.enumerate(&vars, &body, |solution| {
-        let values = solution.values();
-        results.insert((values[0].clone(), values[1].clone()));
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, solution| {
+            let values = solution.values();
+            results.insert((values[0].clone(), values[1].clone()));
+            ControlFlow::Continue(())
+        },
+    );
 
     assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
     assert_eq!(results.len(), 9, "{results:?}");
@@ -201,17 +220,23 @@ fn test_enumerate_applies_the_one_point_rule() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans);
     let mut results: Vec<(DataExpression, DataExpression)> = Vec::new();
-    let outcome = enumerator.enumerate(&vars, &body, |solution| {
-        let values = solution.values();
-        results.push((values[0].clone(), values[1].clone()));
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, solution| {
+            let values = solution.values();
+            results.push((values[0].clone(), values[1].clone()));
+            ControlFlow::Continue(())
+        },
+    );
 
     assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
 
@@ -248,7 +273,7 @@ fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
     assert_eq!(
@@ -257,8 +282,14 @@ fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
         "test assumes `m` is listed before `n` in `vars`"
     );
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars)).with_limits(tiny_limits);
-    match enumerator.find_witness(&vars, &body, QuantifierKind::Exists) {
+    let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
+    match enumerator.find_witness(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Exists,
+    ) {
         WitnessOutcome::Found(values) => assert_eq!(values[1], numeral(3)),
         other => panic!(
             "expected a witness (ordering should promote the constrained `n` ahead of vacuous `m`), got {other:?}"
@@ -277,12 +308,18 @@ fn test_find_witness_exists_finds_a_small_witness() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
-    match enumerator.find_witness(&vars, &body, QuantifierKind::Exists) {
+    let mut enumerator = Enumerator::new(plans);
+    match enumerator.find_witness(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Exists,
+    ) {
         WitnessOutcome::Found(values) => assert_eq!(values, vec![numeral(7)]),
         other => panic!("expected a witness, got {other:?}"),
     }
@@ -308,12 +345,18 @@ fn test_find_witness_gives_up_past_the_bound() {
     ));
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars)).with_limits(tiny_limits);
-    match enumerator.find_witness(&vars, &body, QuantifierKind::Exists) {
+    let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
+    match enumerator.find_witness(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Exists,
+    ) {
         WitnessOutcome::GaveUp => {}
         other => panic!("expected GaveUp, got {other:?}"),
     }
@@ -332,12 +375,18 @@ fn test_find_witness_forall_holds_over_a_finite_sort() {
     );
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
 
-    let mut enumerator = Enumerator::new(&mut rewriter, &plans, generator_for(&vars));
-    match enumerator.find_witness(&vars, &body, QuantifierKind::Forall) {
+    let mut enumerator = Enumerator::new(plans);
+    match enumerator.find_witness(
+        &mut rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        QuantifierKind::Forall,
+    ) {
         WitnessOutcome::NoneExists => {}
         other => panic!("expected NoneExists (the quantifier holds), got {other:?}"),
     }

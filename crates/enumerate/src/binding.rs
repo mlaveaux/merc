@@ -1,5 +1,4 @@
 use ahash::HashMap;
-use ahash::HashMapExt;
 use merc_aterm::Term;
 use merc_data::DataApplication;
 use merc_data::DataExpression;
@@ -49,6 +48,8 @@ struct BindingNode {
 #[derive(Default)]
 pub(crate) struct BindingArena {
     nodes: Vec<BindingNode>,
+    /// Scratch memo table for [`BindingArena::resolve_all`].
+    memo: HashMap<usize, DataExpression>,
 }
 
 impl BindingArena {
@@ -119,16 +120,16 @@ impl BindingArena {
     /// consumed from the work queue — is bound by the time a branch reaches a
     /// leaf.
     pub(crate) fn resolve_all<R: RewriteEngine>(
-        &self,
+        &mut self,
         rewriter: &mut R,
         chain: BindingChain,
         vars: &[DataVariable],
         out: &mut Vec<DataExpression>,
     ) {
         out.clear();
-        let mut memo: HashMap<usize, DataExpression> = HashMap::new();
+        self.memo.clear();
         for v in vars {
-            let resolved = self.resolve_variable(rewriter, chain, v.copy(), &mut memo);
+            let resolved = self.resolve_variable(rewriter, chain, v.copy());
             out.push(resolved);
         }
     }
@@ -140,13 +141,12 @@ impl BindingArena {
     /// variable share one index — which matters because this is the memo's
     /// cache-hit path, taken every time a variable recurs in the goal.
     fn resolve_variable<R: RewriteEngine>(
-        &self,
+        &mut self,
         rewriter: &mut R,
         chain: BindingChain,
         variable: DataVariableRef<'_>,
-        memo: &mut HashMap<usize, DataExpression>,
     ) -> DataExpression {
-        if let Some(resolved) = memo.get(&variable.index()) {
+        if let Some(resolved) = self.memo.get(&variable.index()) {
             return resolved.clone();
         }
 
@@ -154,8 +154,8 @@ impl BindingArena {
             .lookup(chain, &variable)
             .unwrap_or_else(|| panic!("{variable:?} is not bound in this BindingChain"))
             .clone();
-        let resolved = self.resolve_term(rewriter, chain, &image, memo);
-        memo.insert(variable.index(), resolved.clone());
+        let resolved = self.resolve_term(rewriter, chain, &image);
+        self.memo.insert(variable.index(), resolved.clone());
         resolved
     }
 
@@ -173,18 +173,17 @@ impl BindingArena {
     /// the caller — who treats it as a [`RewriteSubstitution`] image
     /// elsewhere — is itself a normal form.
     fn resolve_term<'a, 'b, T: Term<'a, 'b>, R: RewriteEngine>(
-        &self,
+        &mut self,
         rewriter: &mut R,
         chain: BindingChain,
         term: &'b T,
-        memo: &mut HashMap<usize, DataExpression>,
     ) -> DataExpression {
         if is_closed(term) {
             return term.protect().into();
         }
         if is_data_variable(term) {
             let variable: DataVariableRef<'_> = term.copy().into();
-            return self.resolve_variable(rewriter, chain, variable, memo);
+            return self.resolve_variable(rewriter, chain, variable);
         }
 
         // A term that is not closed and not a bare variable must be an
@@ -197,7 +196,7 @@ impl BindingArena {
         let arguments: Vec<DataExpression> = term
             .arguments()
             .skip(1)
-            .map(|argument| self.resolve_term(rewriter, chain, &argument, memo))
+            .map(|argument| self.resolve_term(rewriter, chain, &argument))
             .collect();
         let application: DataExpression = DataApplication::with_args(&head, &arguments).into();
         rewriter.rewrite(&application)
