@@ -49,12 +49,16 @@ impl Default for EnumerationLimits {
 }
 
 /// Why an [`Enumerator::enumerate`] call stopped.
+///
+/// `B` is the consumer callback's [`ControlFlow::Break`] payload (`()` if it
+/// never breaks with one), so a caller can thread e.g. a `Result` straight
+/// out of [`Outcome::Stopped`] instead of latching it in a captured variable.
 #[derive(Debug)]
-pub enum Outcome {
+pub enum Outcome<B = ()> {
     /// Every solution was reported; the search space is exhausted.
     Exhausted,
-    /// The consumer callback returned [`ControlFlow::Break`].
-    Stopped,
+    /// The consumer callback returned [`ControlFlow::Break`], carrying its payload.
+    Stopped(B),
     /// [`EnumerationLimits::max_items`] or `max_depth` was hit somewhere in
     /// the search; results are incomplete.
     LimitReached,
@@ -91,9 +95,8 @@ pub enum QuantifierKind {
 /// A ground solution reported by [`Enumerator::enumerate`]: the bound
 /// variables' values, in the same order as the `vars` argument.
 ///
-/// Borrows the enumerator's reused scratch buffer rather than owning a fresh
-/// `Vec` per solution, so consuming a solution costs no aterm protection-set
-/// traffic beyond the values themselves.
+/// Borrows the enumerator's scratch buffer, so it is only valid for the
+/// duration of the consumer callback it is handed to.
 pub struct Solution<'s> {
     values: &'s [DataExpression],
 }
@@ -123,28 +126,21 @@ struct WorkItem {
 pub struct Enumerator {
     plans: Rc<EnumerationPlans>,
     limits: EnumerationLimits,
-    /// Finite sorts' materialised element list.
+    /// Finite sorts' materialised element list. Tied to the rewriter that
+    /// produced them, so it must not outlive a change of `RewriteEngine`.
     finite_elements: HashMap<EnumerationPlanId, Vec<DataExpression>>,
-    /// Reused across leaves to report a [`Solution`] without allocating..
+    /// Scratch buffers, reused across calls rather than reallocated per search.
     solution_buf: Vec<DataExpression>,
-    /// Backing store for every [`BindingChain`] a search produces.
     bindings_arena: BindingArena,
-    /// [`Enumerator::drive`]'s work queue, kept here rather than allocated
-    /// fresh per call, for the same reason as `bindings_arena`.
     queue: VecDeque<WorkItem>,
 }
 
 impl Enumerator {
     /// Builds an enumerator with the default [`EnumerationLimits`].
     ///
-    /// Takes `plans` as an `Rc` rather than a borrow so `Enumerator` itself
-    /// carries no lifetime parameter: it can then be stored as a plain field
-    /// (e.g. in a per-thread exploration context) instead of being tied to
-    /// one stack frame. Holds no rewriter or [`FreshVariableGenerator`]
-    /// though: unlike `plans` and its scratch buffers, neither is reusable
-    /// across calls against different rewriters or generators, so both are
-    /// passed to [`Enumerator::enumerate`]/[`Enumerator::find_witness`]
-    /// instead of stored.
+    /// The `Rc` keeps `Enumerator` free of a lifetime parameter, so it can be
+    /// stored as a plain field. The rewriter and [`FreshVariableGenerator`]
+    /// are borrowed per call instead, since they may differ between searches.
     pub fn new(plans: Rc<EnumerationPlans>) -> Self {
         Enumerator {
             plans,
@@ -173,16 +169,16 @@ impl Enumerator {
     /// comment for why. Intended for `sum`-variable successor generation,
     /// where every solution is wanted and a truncated result would be an
     /// unsound state space.
-    pub fn enumerate<R: RewriteEngine, F>(
+    pub fn enumerate<R: RewriteEngine, F, B>(
         &mut self,
         rewriter: &mut R,
-        mut generator: FreshVariableGenerator,
+        generator: &mut FreshVariableGenerator,
         vars: &[DataVariable],
         body: &DataExpression,
         mut consume: F,
-    ) -> Outcome
+    ) -> Outcome<B>
     where
-        F: FnMut(&mut R, &Solution<'_>) -> ControlFlow<()>,
+        F: FnMut(&mut R, &Solution<'_>) -> ControlFlow<B>,
     {
         let true_literal = bool_literal(true);
         let false_literal = bool_literal(false);
@@ -195,7 +191,7 @@ impl Enumerator {
 
         self.drive(
             rewriter,
-            &mut generator,
+            generator,
             vars,
             remaining,
             body,
@@ -222,7 +218,7 @@ impl Enumerator {
     pub fn find_witness<R: RewriteEngine>(
         &mut self,
         rewriter: &mut R,
-        mut generator: FreshVariableGenerator,
+        generator: &mut FreshVariableGenerator,
         vars: &[DataVariable],
         body: &DataExpression,
         kind: QuantifierKind,
@@ -241,7 +237,7 @@ impl Enumerator {
         let mut found: Option<Vec<DataExpression>> = None;
         let outcome = self.drive(
             rewriter,
-            &mut generator,
+            generator,
             vars,
             remaining,
             body,
@@ -262,7 +258,7 @@ impl Enumerator {
             (_, Some(values)) => WitnessOutcome::Found(values),
             (Outcome::Exhausted, None) => WitnessOutcome::NoneExists,
             (Outcome::LimitReached, None) | (Outcome::NotEnumerable(..), None) => WitnessOutcome::GaveUp,
-            (Outcome::Stopped, None) => {
+            (Outcome::Stopped(()), None) => {
                 unreachable!("Stopped only occurs when on_leaf returns Break, which only happens once `found` is set")
             }
         }
@@ -286,7 +282,7 @@ impl Enumerator {
     /// are bound in `initial_bindings` just as surely as the ones the search
     /// itself binds.
     #[allow(clippy::too_many_arguments)]
-    fn drive<R: RewriteEngine>(
+    fn drive<R: RewriteEngine, B>(
         &mut self,
         rewriter: &mut R,
         generator: &mut FreshVariableGenerator,
@@ -296,8 +292,8 @@ impl Enumerator {
         initial_bindings: BindingChain,
         reject: &DataExpression,
         bounded: bool,
-        mut on_leaf: impl FnMut(&mut R, &DataExpression, &Solution<'_>) -> ControlFlow<()>,
-    ) -> Outcome {
+        mut on_leaf: impl FnMut(&mut R, &DataExpression, &Solution<'_>) -> ControlFlow<B>,
+    ) -> Outcome<B> {
         let limits = self.limits;
         let mut processed: usize = 0;
         let mut truncated = false;
@@ -323,7 +319,7 @@ impl Enumerator {
                 };
 
                 match on_leaf(rewriter, &item.body, &solution) {
-                    ControlFlow::Break(()) => return Outcome::Stopped,
+                    ControlFlow::Break(b) => return Outcome::Stopped(b),
                     ControlFlow::Continue(()) => continue,
                 }
             }
@@ -340,10 +336,8 @@ impl Enumerator {
                     return Outcome::NotEnumerable(variable, reason);
                 }
                 SortEnumerability::Finite => {
-                    // Borrows `self.finite_elements` only; disjoint from the
-                    // `self.bindings_arena`/`self.queue` fields mutated
-                    // below, so no per-item `Vec` clone is needed just to
-                    // satisfy the borrow checker.
+                    // A free function over the single field, so the elements
+                    // stay borrowed while the other fields are mutated below.
                     let elements = cached_finite_elements(&mut self.finite_elements, rewriter, &self.plans, sort_id);
                     for element in elements {
                         let new_bindings = self
@@ -364,11 +358,8 @@ impl Enumerator {
                         continue;
                     }
 
-                    // `self.plans` is an `Rc`, so cloning it is a refcount
-                    // bump rather than a deep copy — `constructors` can then
-                    // be iterated through the clone while other fields of
-                    // `self` are mutated below to build each candidate's
-                    // fresh variables and rewrite the body.
+                    // Iterate the constructors through an owned handle, so the
+                    // other fields of `self` stay mutable in the loop body.
                     let plans = self.plans.clone();
                     for constructor in plans.plan(sort_id).constructors() {
                         if bounded {
@@ -391,12 +382,10 @@ impl Enumerator {
                         } else {
                             DataApplication::with_args(constructor.symbol(), &arguments).into()
                         };
-                        // `rewrite_with`'s substitution images must already be normal forms
-                        // (they are spliced in without being rewritten again) — a constructor
-                        // application is not automatically one (e.g. `@c0`/`@succ_nat(_)` under
-                        // a machine-word `Nat` encoding still need rewriting into digit form),
-                        // matching what `materialize_finite_elements` already does for finite
-                        // sorts.
+                        // `rewrite_with` splices substitution images in without rewriting them,
+                        // so they must already be normal forms — a constructor application is
+                        // not automatically one (`@c0`/`@succ_nat(_)` under a machine-word
+                        // `Nat` encoding still rewrite into digit form).
                         let value = rewriter.rewrite(&value);
 
                         let new_bindings = self.bindings_arena.extend(item.bindings, variable.clone(), value);
@@ -467,12 +456,11 @@ fn materialize_finite_elements<R: RewriteEngine>(
     result
 }
 
-/// Rewrites `body` under `bindings`, via the arena's [`RewriteSubstitution`]
-/// view rather than a throwaway `HashMap` singleton — `bindings` extends the
-/// branch's whole chain, but `body` only still mentions the variable just
-/// bound (every earlier one was already substituted away in a prior step),
-/// so this is equivalent to a singleton substitution and avoids allocating
-/// one per work item.
+/// Rewrites `body` under `bindings`.
+///
+/// `bindings` is the branch's whole chain, but `body` only still mentions the
+/// variable just bound — every earlier one was substituted away in a prior
+/// step — so this is equivalent to a singleton substitution.
 fn rewrite_bound<R: RewriteEngine>(
     rewriter: &mut R,
     bindings_arena: &BindingArena,
@@ -490,10 +478,10 @@ pub(crate) fn bool_literal(value: bool) -> DataExpression {
     DataFunctionSymbol::with_sort(name, bool_sort.copy()).into()
 }
 
-/// Returns the cartesian product of `lists`, as one combination per element
-/// of the result, each holding one element from every list in order. Empty
-/// for an empty `lists`... actually returns a single empty combination, the
-/// identity for the product, which is what an arity-0 caller needs.
+/// Returns the cartesian product of `lists`: one combination per element of
+/// the result, each holding one element from every list in order. An empty
+/// `lists` yields a single empty combination — the identity of the product,
+/// which is what an arity-0 constructor needs.
 pub(crate) fn cartesian_product(lists: &[Vec<DataExpression>]) -> Vec<Vec<DataExpression>> {
     let mut result: Vec<Vec<DataExpression>> = vec![Vec::new()];
     for list in lists {
