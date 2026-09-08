@@ -15,6 +15,9 @@ use merc_data::is_data_variable;
 use merc_sabre::RewriteEngine;
 use merc_sabre::utilities::RewriteSubstitution;
 
+use crate::arena_list::ArenaList;
+use crate::arena_list::ArenaListHandle;
+
 /// A cheap, `Copy` handle into a [`BindingArena`]: the variable bindings
 /// chosen so far along one branch of the enumeration search, recorded as a
 /// linked list of `(variable, value)` nodes stored in the arena. Branches
@@ -31,33 +34,32 @@ use merc_sabre::utilities::RewriteSubstitution;
 /// bindings to fully ground values goes through [`BindingArena::resolve_all`]
 /// instead, which follows the chain recursively.
 #[derive(Clone, Copy, Default)]
-pub(crate) struct BindingChain(Option<u32>);
+pub(crate) struct BindingChain(ArenaListHandle);
 
-struct BindingNode {
+struct Binding {
     /// `Rc` rather than an owned `DataVariable`.
     variable: Rc<DataVariable>,
     value: DataExpression,
-    parent: BindingChain,
 }
 
 /// Backing store for every [`BindingChain`] produced during one search.
 /// Owned by [`Enumerator`](crate::Enumerator) and [`BindingArena::clear`]ed
 /// at the start of each `enumerate`/`find_witness` call, so the backing
-/// `Vec`'s capacity carries over to the next search.
+/// storage's capacity carries over to the next search.
 #[derive(Default)]
 pub(crate) struct BindingArena {
-    nodes: Vec<BindingNode>,
+    chain: ArenaList<Binding>,
     /// Scratch memo table for [`BindingArena::resolve_all`].
     memo: HashMap<usize, DataExpression>,
 }
 
 impl BindingArena {
-    /// Drops every node, keeping the backing `Vec`'s capacity. Must be called
-    /// before starting a new search: every [`BindingChain`] handed out
+    /// Drops every node, keeping the backing storage's capacity. Must be
+    /// called before starting a new search: every [`BindingChain`] handed out
     /// before a `clear` indexes into the discarded nodes and must not be used
     /// afterwards.
     pub(crate) fn clear(&mut self) {
-        self.nodes.clear();
+        self.chain.clear();
     }
 
     /// Returns a new chain with `variable ↦ value` recorded in front of
@@ -68,13 +70,7 @@ impl BindingArena {
         variable: Rc<DataVariable>,
         value: DataExpression,
     ) -> BindingChain {
-        let index = u32::try_from(self.nodes.len()).expect("more binding-chain nodes than fit in a u32");
-        self.nodes.push(BindingNode {
-            variable,
-            value,
-            parent,
-        });
-        BindingChain(Some(index))
+        BindingChain(self.chain.push(parent.0, Binding { variable, value }))
     }
 
     /// Returns the immediate image bound to `variable` along `chain`, if any.
@@ -85,12 +81,11 @@ impl BindingArena {
     /// ([`RewriteSubstitution::get`]) need not `protect` the key.
     fn lookup(&self, chain: BindingChain, variable: &DataVariableRef<'_>) -> Option<&DataExpression> {
         let mut current = chain.0;
-        while let Some(index) = current {
-            let node = &self.nodes[index as usize];
-            if node.variable.copy() == *variable {
-                return Some(&node.value);
+        while let Some((binding, parent)) = self.chain.pop(current) {
+            if binding.variable.copy() == *variable {
+                return Some(&binding.value);
             }
-            current = node.parent.0;
+            current = parent;
         }
         None
     }
