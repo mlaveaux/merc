@@ -17,6 +17,7 @@
 //! spec, exactly like a real caller would build them once per run.
 
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use ahash::AHashSet;
 use merc_data::BasicSort;
@@ -167,7 +168,7 @@ fn conjunction(terms: &[DataExpression]) -> DataExpression {
 #[allow(clippy::too_many_arguments)]
 fn check_one_random_goal(
     rng: &mut StdRng,
-    plans: &EnumerationPlans,
+    plans: &Rc<EnumerationPlans>,
     enumerator_rewriter: &mut InnermostRewriter,
     naive_rewriter: &mut InnermostRewriter,
     checker: &mut InnermostRewriter,
@@ -181,12 +182,18 @@ fn check_one_random_goal(
     let clauses: Vec<Clause> = vars.iter().map(|v| random_clause(rng, v.clone(), MAX_BOUND)).collect();
     let body = conjunction(&clauses.iter().map(Clause::to_term).collect::<Vec<_>>());
 
-    let mut enumerator = Enumerator::new(enumerator_rewriter, plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans.clone());
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
-    let outcome = enumerator.enumerate(&vars, &body, |solution| {
-        enumerator_results.insert(solution.values().to_vec());
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        enumerator_rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, solution| {
+            enumerator_results.insert(solution.values().to_vec());
+            ControlFlow::Continue(())
+        },
+    );
     assert!(
         matches!(outcome, Outcome::Exhausted),
         "Enumerator: {outcome:?}, goal: {body}"
@@ -222,7 +229,7 @@ fn check_one_random_goal(
 fn test_enumerator_agrees_with_naive_enumerator() {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
     let mut enumerator_rewriter = InnermostRewriter::new(&rewrite_spec);
     let mut naive_rewriter = InnermostRewriter::new(&rewrite_spec);
     let mut checker = InnermostRewriter::new(&rewrite_spec);
@@ -239,7 +246,7 @@ fn test_enumerator_agrees_with_naive_enumerator() {
 fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = EnumerationPlans::build(&spec);
+    let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let n = DataVariable::with_sort("n", d_sort().copy());
     let vars = vec![n.clone()];
@@ -260,12 +267,18 @@ fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     ]);
 
     let mut enumerator_rewriter = InnermostRewriter::new(&rewrite_spec);
-    let mut enumerator = Enumerator::new(&mut enumerator_rewriter, &plans, generator_for(&vars));
+    let mut enumerator = Enumerator::new(plans.clone());
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
-    let outcome = enumerator.enumerate(&vars, &body, |solution| {
-        enumerator_results.insert(solution.values().to_vec());
-        ControlFlow::Continue(())
-    });
+    let outcome = enumerator.enumerate(
+        &mut enumerator_rewriter,
+        generator_for(&vars),
+        &vars,
+        &body,
+        |_rewriter, solution| {
+            enumerator_results.insert(solution.values().to_vec());
+            ControlFlow::Continue(())
+        },
+    );
     assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
     assert!(enumerator_results.is_empty(), "{enumerator_results:?}");
 
