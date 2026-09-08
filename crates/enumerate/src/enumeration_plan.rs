@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use ahash::HashMap;
 use ahash::HashMapExt;
 use merc_aterm::Term;

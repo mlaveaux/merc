@@ -1,15 +1,20 @@
+#![forbid(unsafe_code)]
+
+use std::ops::ControlFlow;
+
 use ahash::AHashSet;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use merc_data::DataApplication;
 use merc_data::DataExpression;
 use merc_data::DataVariable;
+use merc_data::bool_literal;
 use merc_sabre::RewriteEngine;
 
 use crate::enumeration_plan::EnumerationPlanId;
 use crate::enumeration_plan::EnumerationPlans;
 use crate::enumeration_plan::SortEnumerability;
-use crate::enumerator::bool_literal;
+use crate::enumerator::QuantifierKind;
 use crate::enumerator::cartesian_product;
 
 /// A deliberately simple, unoptimized enumerator, for differential and
@@ -48,6 +53,55 @@ impl<'a, R: RewriteEngine> NaiveEnumerator<'a, R> {
     /// Returns every ground substitution of `vars` for which `rewrite(body, σ)`
     /// is the `Bool` literal `true`, as a *set*.
     pub fn enumerate_all(&mut self, vars: &[DataVariable], body: &DataExpression) -> AHashSet<Vec<DataExpression>> {
+        let true_literal = bool_literal(true);
+        let mut results = AHashSet::new();
+        self.for_each_combination(vars, body, |combination, value| {
+            if value == true_literal {
+                results.insert(combination.to_vec());
+            }
+            ControlFlow::Continue(())
+        });
+        results
+    }
+
+    /// Brute-force counterpart of [`Enumerator::find_witness`](crate::Enumerator::find_witness):
+    /// the first combination within `max_size` whose body rewrites to the
+    /// literal that decides `kind` — `true` for `∃`, `false` for `∀`.
+    ///
+    /// `None` means "no such combination *within the size bound*", never "no
+    /// such combination": a caller comparing this against the real enumerator
+    /// may only conclude in one direction from it.
+    pub fn find_witness(
+        &mut self,
+        vars: &[DataVariable],
+        body: &DataExpression,
+        kind: QuantifierKind,
+    ) -> Option<Vec<DataExpression>> {
+        let target = match kind {
+            QuantifierKind::Exists => bool_literal(true),
+            QuantifierKind::Forall => bool_literal(false),
+        };
+
+        let mut witness = None;
+        self.for_each_combination(vars, body, |combination, value| {
+            if value == target {
+                witness = Some(combination.to_vec());
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        witness
+    }
+
+    /// Substitutes every combination of ground terms within the size bound
+    /// into `body` and hands each one, with its rewritten value, to `visit`.
+    fn for_each_combination(
+        &mut self,
+        vars: &[DataVariable],
+        body: &DataExpression,
+        mut visit: impl FnMut(&[DataExpression], DataExpression) -> ControlFlow<()>,
+    ) {
         let per_variable: Vec<Vec<DataExpression>> = vars
             .iter()
             .map(|v| match self.plans.get(&v.sort()) {
@@ -56,19 +110,17 @@ impl<'a, R: RewriteEngine> NaiveEnumerator<'a, R> {
             })
             .collect();
 
-        let true_literal = bool_literal(true);
-        let mut results = AHashSet::new();
         for combination in cartesian_product(&per_variable) {
             let mut sigma = HashMap::new();
             for (variable, value) in vars.iter().zip(&combination) {
                 sigma.insert(variable.clone(), value.clone());
             }
 
-            if self.rewriter.rewrite_with(body, &sigma) == true_literal {
-                results.insert(combination);
+            let value = self.rewriter.rewrite_with(body, &sigma);
+            if visit(&combination, value).is_break() {
+                return;
             }
         }
-        results
     }
 
     /// Every ground term of `sort_id` reachable within `size` constructor

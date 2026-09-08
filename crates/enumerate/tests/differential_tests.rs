@@ -20,6 +20,9 @@ use merc_data::DataVariable;
 use merc_data::Mcrl2DataSpecification;
 use merc_data::SortArrow;
 use merc_data::SortExpression;
+use merc_data::bool_literal;
+use merc_data::make_and;
+use merc_data::make_equal;
 use merc_enumerate::EnumerationPlans;
 use merc_enumerate::Enumerator;
 use merc_enumerate::FreshVariableGenerator;
@@ -48,6 +51,10 @@ const PRELUDE: &str = "
         eq(dsucc(x), dzero) = false;
         eq(dzero, dsucc(y)) = false;
         eq(dsucc(x), dsucc(y)) = eq(x, y);
+        dzero == dzero = true;
+        dsucc(x) == dzero = false;
+        dzero == dsucc(y) = false;
+        dsucc(x) == dsucc(y) = x == y;
 ";
 
 fn lower(source: &str) -> Mcrl2DataSpecification {
@@ -87,58 +94,88 @@ fn eq_symbol() -> DataFunctionSymbol {
     DataFunctionSymbol::with_sort("eq", sort.copy())
 }
 
-fn and_symbol() -> DataFunctionSymbol {
-    let sort: SortExpression = SortArrow::new(&[bool_sort(), bool_sort()], bool_sort()).into();
-    DataFunctionSymbol::with_sort("&&", sort.copy())
-}
-
-fn true_literal() -> DataExpression {
-    DataFunctionSymbol::with_sort("true", bool_sort().copy()).into()
-}
-
 fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
     FreshVariableGenerator::new(vars.iter().map(|v| v.name().to_string()))
 }
 
-/// One randomly generated `op(var, numeral(bound))` conjunct (`op` is `lt` or
-/// `eq`). Restricted to this shape so every generated goal is provably
-/// decidable within a known bound: `lt(x, dzero) = false` holds regardless of
-/// how `x` is later instantiated, so a clause with bound `k` can never
-/// contribute a solution beyond `k`.
+/// Which binary predicate a generated clause uses.
+///
+/// `==` is included because it is the shape the one-point rule keys on: it
+/// survives normalisation while its argument is still free (`D` has no
+/// built-in equality equations, so [`PRELUDE`] supplies them), yet decides on
+/// ground terms.
+#[derive(Clone, Copy)]
+enum Predicate {
+    Lt,
+    Eq,
+    Equality,
+}
+
+impl Predicate {
+    fn symbol(self) -> Option<DataFunctionSymbol> {
+        match self {
+            Predicate::Lt => Some(lt_symbol()),
+            Predicate::Eq => Some(eq_symbol()),
+            Predicate::Equality => None,
+        }
+    }
+
+    fn apply(self, lhs: DataExpression, rhs: DataExpression) -> DataExpression {
+        match self.symbol() {
+            Some(symbol) => DataApplication::with_args(&symbol, &[lhs, rhs]).into(),
+            None => make_equal(d_sort(), lhs, rhs),
+        }
+    }
+}
+
+/// One randomly generated `op(var, numeral(bound))` conjunct. Restricted to
+/// this shape so every generated goal is provably decidable within a known
+/// bound: `lt(x, dzero) = false` holds regardless of how `x` is later
+/// instantiated, so a clause with bound `k` can never contribute a solution
+/// beyond `k`, and `eq`/`==` pin their variable outright.
 struct Clause {
     variable: DataVariable,
-    is_lt: bool,
+    predicate: Predicate,
     bound: u32,
 }
 
 impl Clause {
     fn to_term(&self) -> DataExpression {
-        let symbol = if self.is_lt { lt_symbol() } else { eq_symbol() };
-        DataApplication::with_args(
-            &symbol,
-            &[DataExpression::from(self.variable.clone()), numeral(self.bound)],
-        )
-        .into()
+        self.predicate
+            .apply(DataExpression::from(self.variable.clone()), numeral(self.bound))
     }
 }
 
 fn random_clause(rng: &mut StdRng, variable: DataVariable, max_bound: u32) -> Clause {
     Clause {
         variable,
-        is_lt: rng.random_bool(0.5),
+        predicate: match rng.random_range(0..3) {
+            0 => Predicate::Lt,
+            1 => Predicate::Eq,
+            _ => Predicate::Equality,
+        },
         bound: rng.random_range(0..=max_bound),
     }
+}
+
+/// A randomly generated clause relating two *different* variables, e.g.
+/// `lt(var0, var1)`.
+///
+/// Every variable already carries its own bounding clause, so conjoining one
+/// of these only ever removes solutions and cannot make the goal unbounded.
+fn random_cross_clause(rng: &mut StdRng, left: &DataVariable, right: &DataVariable) -> DataExpression {
+    let predicate = match rng.random_range(0..3) {
+        0 => Predicate::Lt,
+        1 => Predicate::Eq,
+        _ => Predicate::Equality,
+    };
+    predicate.apply(DataExpression::from(left.clone()), DataExpression::from(right.clone()))
 }
 
 /// Conjoins `terms` with `&&`, left to right. Panics on an empty slice (every
 /// goal here has at least one variable).
 fn conjunction(terms: &[DataExpression]) -> DataExpression {
-    let and = and_symbol();
-    terms
-        .iter()
-        .cloned()
-        .reduce(|acc, term| DataApplication::with_args(&and, &[acc, term]).into())
-        .expect("at least one clause")
+    terms.iter().cloned().reduce(make_and).expect("at least one clause")
 }
 
 /// Generates a random 1- or 2-variable goal, runs both an [`Enumerator`] and
@@ -164,7 +201,13 @@ fn check_one_random_goal(
         .map(|i| DataVariable::with_sort(format!("var{i}").as_str(), d_sort().copy()))
         .collect();
     let clauses: Vec<Clause> = vars.iter().map(|v| random_clause(rng, v.clone(), MAX_BOUND)).collect();
-    let body = conjunction(&clauses.iter().map(Clause::to_term).collect::<Vec<_>>());
+    let mut terms: Vec<DataExpression> = clauses.iter().map(Clause::to_term).collect();
+    if let [left, right] = vars.as_slice()
+        && rng.random_bool(0.5)
+    {
+        terms.push(random_cross_clause(rng, left, right));
+    }
+    let body = conjunction(&terms);
 
     let mut enumerator = Enumerator::new(plans.clone());
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
@@ -202,7 +245,7 @@ fn check_one_random_goal(
         }
         assert_eq!(
             checker.rewrite_with(&body, &sigma),
-            true_literal(),
+            bool_literal(true),
             "reported solution {solution:?} does not satisfy `{body}`"
         );
     }
@@ -238,13 +281,13 @@ fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     let body = conjunction(&[
         Clause {
             variable: n.clone(),
-            is_lt: false,
+            predicate: Predicate::Equality,
             bound: 1,
         }
         .to_term(),
         Clause {
             variable: n,
-            is_lt: true,
+            predicate: Predicate::Lt,
             bound: 0,
         }
         .to_term(),

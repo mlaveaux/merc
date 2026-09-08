@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use ahash::AHashSet;
 use ahash::HashMap;
 use ahash::HashMapExt;
@@ -8,21 +10,19 @@ use merc_data::SortExpressionRef;
 /// caller-supplied set of names already in scope.
 pub struct FreshVariableGenerator {
     used: AHashSet<String>,
-    /// `used`'s state at construction, restored by [`Self::reset`].
-    initial_used: AHashSet<String>,
     /// The next index to try per `base`, for cheap generation of fresh names.
     next_index: HashMap<String, u64>,
+    /// Names inserted into `used` since the last [`Self::reset`].
+    generated_since_reset: Vec<String>,
 }
 
 impl FreshVariableGenerator {
     /// Builds a generator that avoids every name in `used`.
     pub fn new(used: impl IntoIterator<Item = String>) -> Self {
-        let used: AHashSet<String> = used.into_iter().collect();
-        let initial_used = used.clone();
         FreshVariableGenerator {
-            used,
-            initial_used,
+            used: used.into_iter().collect(),
             next_index: HashMap::new(),
+            generated_since_reset: Vec::new(),
         }
     }
 
@@ -34,7 +34,9 @@ impl FreshVariableGenerator {
     /// state during exploration — without `used` growing without bound as
     /// more variables are generated over time.
     pub fn reset(&mut self) {
-        self.used.clone_from(&self.initial_used);
+        for name in self.generated_since_reset.drain(..) {
+            self.used.remove(&name);
+        }
         self.next_index.clear();
     }
 
@@ -58,6 +60,7 @@ impl FreshVariableGenerator {
         }
 
         self.used.insert(name.clone());
+        self.generated_since_reset.push(name.clone());
         DataVariable::with_sort(name.as_str(), sort)
     }
 }
@@ -78,6 +81,20 @@ mod tests {
         let mut generator = FreshVariableGenerator::new(["v0".to_string(), "v1".to_string()]);
         let fresh = generator.generate("v", nat().copy());
         assert_eq!(fresh.name(), "v2");
+    }
+
+    #[test]
+    fn test_reset_undoes_generated_names_but_keeps_the_seed() {
+        let mut generator = FreshVariableGenerator::new(["v0".to_string()]);
+        let first = generator.generate("v", nat().copy());
+        assert_eq!(first.name(), "v1");
+
+        generator.reset();
+
+        // The seed name is still avoided, but the generated one is forgotten,
+        // so the same fresh name is produced again.
+        let second = generator.generate("v", nat().copy());
+        assert_eq!(second.name(), "v1");
     }
 
     #[test]

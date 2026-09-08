@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::cmp::Reverse;
 
 use ahash::HashMap;
@@ -8,39 +10,48 @@ use merc_data::DataVariable;
 use crate::one_point::free_variables;
 use crate::one_point::split_conjuncts;
 
-/// Reorders `vars` so that variables constrained by more of `body`'s top-level
-/// `&&`-conjuncts — and especially those that are the *only* one of `vars`
-/// still free in some conjunct — are enumerated first: binding a sole survivor
-/// makes its conjunct ground immediately, so the search's reject predicate can
-/// prune the branch a step sooner.
-///
-/// A static approximation, computed once per goal from the (already
-/// one-point-reduced) body: it counts how many of `vars` each conjunct still
-/// mentions, never what a conjunct evaluates to. Ties keep their relative order
-/// from `vars`, so a goal it can say nothing about is left alone.
-pub(crate) fn order_variables_by_constraints(vars: Vec<DataVariable>, body: &DataExpression) -> Vec<DataVariable> {
-    if vars.len() <= 1 {
-        return vars;
-    }
+/// Per-variable `(solo_count, mention_count)` computed by
+/// [`compute_variable_ranks`]: how many of `body`'s top-level `&&`-conjuncts
+/// mention a variable, and how many it is the *sole* survivor of.
+pub(crate) type VariableRanks = HashMap<DataVariable, (usize, usize)>;
 
-    let mut mention_count: HashMap<DataVariable, usize> = HashMap::new();
-    let mut solo_count: HashMap<DataVariable, usize> = HashMap::new();
+/// Computes, for each of `vars`, how many of `body`'s top-level
+/// `&&`-conjuncts still mention it, and how many it is the *only* one of
+/// `vars` still free in — the input [`apply_variable_ranks`] needs to put
+/// variables constrained by more of the goal first: binding a sole survivor
+/// makes its conjunct ground immediately, so the search's reject predicate
+/// can prune the branch a step sooner.
+///
+/// A static approximation: it counts how many of `vars` each conjunct still
+/// mentions, never what a conjunct evaluates to.
+pub(crate) fn compute_variable_ranks(vars: &[DataVariable], body: &DataExpression) -> VariableRanks {
+    let mut ranks: VariableRanks = HashMap::new();
 
     for conjunct in split_conjuncts(body) {
         let free = free_variables(&conjunct);
         let mentioned: Vec<&DataVariable> = vars.iter().filter(|v| free.contains(*v)).collect();
         for variable in &mentioned {
-            *mention_count.entry((*variable).clone()).or_insert(0) += 1;
+            ranks.entry((*variable).clone()).or_insert((0, 0)).1 += 1;
         }
         if let [only] = mentioned.as_slice() {
-            *solo_count.entry((*only).clone()).or_insert(0) += 1;
+            ranks.entry((*only).clone()).or_insert((0, 0)).0 += 1;
         }
+    }
+
+    ranks
+}
+
+/// Reorders `vars` by `ranks` (see [`compute_variable_ranks`]): a higher solo
+/// count sorts first, ties broken by mention count, remaining ties keeping
+/// `vars`'s original relative order.
+pub(crate) fn apply_variable_ranks(vars: Vec<DataVariable>, ranks: &VariableRanks) -> Vec<DataVariable> {
+    if vars.len() <= 1 {
+        return vars;
     }
 
     let mut indexed: Vec<(usize, DataVariable)> = vars.into_iter().enumerate().collect();
     indexed.sort_by_key(|(original_index, variable)| {
-        let solo = solo_count.get(variable).copied().unwrap_or(0);
-        let mentions = mention_count.get(variable).copied().unwrap_or(0);
+        let (solo, mentions) = ranks.get(variable).copied().unwrap_or((0, 0));
         (Reverse(solo), Reverse(mentions), *original_index)
     });
     indexed.into_iter().map(|(_, variable)| variable).collect()
@@ -55,8 +66,15 @@ mod tests {
     use merc_data::DataVariable;
     use merc_data::SortArrow;
     use merc_data::SortExpression;
+    use merc_data::make_and;
 
-    use super::order_variables_by_constraints;
+    use super::apply_variable_ranks;
+    use super::compute_variable_ranks;
+
+    fn order_variables_by_constraints(vars: Vec<DataVariable>, body: &DataExpression) -> Vec<DataVariable> {
+        let ranks = compute_variable_ranks(&vars, body);
+        apply_variable_ranks(vars, &ranks)
+    }
 
     fn d_sort() -> SortExpression {
         SortExpression::from(BasicSort::new("D"))
@@ -71,8 +89,7 @@ mod tests {
     }
 
     fn and(lhs: DataExpression, rhs: DataExpression) -> DataExpression {
-        let sort: SortExpression = SortArrow::new(&[bool_sort(), bool_sort()], bool_sort()).into();
-        DataApplication::with_args(&DataFunctionSymbol::with_sort("&&", sort.copy()), &[lhs, rhs]).into()
+        make_and(lhs, rhs)
     }
 
     fn unary_pred(name: &str, argument: DataExpression) -> DataExpression {

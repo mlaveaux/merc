@@ -4,12 +4,13 @@ use std::rc::Rc;
 
 use ahash::HashMap;
 use ahash::HashMapExt;
-use merc_data::BasicSort;
+use merc_aterm::Protected;
+use merc_aterm::Term;
 use merc_data::DataApplication;
 use merc_data::DataExpression;
-use merc_data::DataFunctionSymbol;
 use merc_data::DataVariable;
-use merc_data::SortExpression;
+use merc_data::DataVariableRef;
+use merc_data::bool_literal;
 use merc_sabre::RewriteEngine;
 
 use crate::binding::BindingArena;
@@ -19,8 +20,12 @@ use crate::enumeration_plan::EnumerationPlans;
 use crate::enumeration_plan::NotEnumerableReason;
 use crate::enumeration_plan::SortEnumerability;
 use crate::fresh::FreshVariableGenerator;
+use crate::one_point::OnePointPolarity;
 use crate::one_point::apply_one_point_rule;
-use crate::ordering::order_variables_by_constraints;
+use crate::ordering::VariableRanks;
+use crate::ordering::apply_variable_ranks;
+use crate::ordering::compute_variable_ranks;
+use crate::remaining::RemainingList;
 
 /// Configures how far [`Enumerator::find_witness`] searches before giving up.
 ///
@@ -62,6 +67,9 @@ pub enum Outcome<B = ()> {
     /// [`EnumerationLimits::max_items`] or `max_depth` was hit somewhere in
     /// the search; results are incomplete.
     LimitReached,
+    /// A fully ground branch's body rewrote to neither `true` nor `false`
+    /// (carried here), so it decided nothing.
+    Undecided(DataExpression),
     /// `variable`'s sort cannot be enumerated at all (`reason`), so the whole
     /// search is abandoned.
     NotEnumerable(DataVariable, NotEnumerableReason),
@@ -75,10 +83,11 @@ pub enum WitnessOutcome {
     Found(Vec<DataExpression>),
     /// The search was exhausted and no witness exists.
     NoneExists,
-    /// The search hit a limit, or a variable's sort was not enumerable, before
-    /// finding a witness or exhausting the space. The caller must not treat
-    /// this as [`WitnessOutcome::NoneExists`]: for `∀`, that distinction is
-    /// exactly `true` versus "unknown".
+    /// The search hit a limit, a variable's sort was not enumerable, or some
+    /// ground body rewrote to neither `true` nor `false`, before finding a
+    /// witness or exhausting the space. The caller must not treat this as
+    /// [`WitnessOutcome::NoneExists`]: for `∀`, that distinction is exactly
+    /// `true` versus "unknown".
     GaveUp,
 }
 
@@ -110,8 +119,9 @@ impl Solution<'_> {
 
 /// One unfinished branch of the search.
 struct WorkItem {
-    /// the variables still to be instantiated
-    remaining: Vec<DataVariable>,
+    /// The variables still to be instantiated, in enumeration order, as a
+    /// [`RemainingList`] of indices into [`Enumerator::var_pool`].
+    remaining: RemainingList,
     /// the goal body already rewritten under the current bindings
     body: DataExpression,
     /// a `Copy` handle into the enumerator's `BindingArena`
@@ -129,6 +139,14 @@ pub struct Enumerator {
     /// Finite sorts' materialised element list. Tied to the rewriter that
     /// produced them, so it must not outlive a change of `RewriteEngine`.
     finite_elements: HashMap<EnumerationPlanId, Vec<DataExpression>>,
+    /// The `Bool` literals
+    true_literal: DataExpression,
+    false_literal: DataExpression,
+    /// Backing store `WorkItem.remaining`'s indices point into for the
+    /// current `drive` call.
+    var_pool: Protected<Vec<DataVariableRef<'static>>>,
+    /// Caches [`compute_variable_ranks`]'s result.
+    ordering_cache: HashMap<(usize, usize), VariableRanks>,
     /// Scratch buffers, reused across calls rather than reallocated per search.
     solution_buf: Vec<DataExpression>,
     bindings_arena: BindingArena,
@@ -146,6 +164,10 @@ impl Enumerator {
             plans,
             limits: EnumerationLimits::default(),
             finite_elements: HashMap::new(),
+            true_literal: bool_literal(true),
+            false_literal: bool_literal(false),
+            var_pool: Protected::new(Vec::new()),
+            ordering_cache: HashMap::new(),
             solution_buf: Vec::new(),
             bindings_arena: BindingArena::default(),
             queue: VecDeque::new(),
@@ -175,19 +197,37 @@ impl Enumerator {
         generator: &mut FreshVariableGenerator,
         vars: &[DataVariable],
         body: &DataExpression,
-        mut consume: F,
+        consume: F,
     ) -> Outcome<B>
     where
         F: FnMut(&mut R, &Solution<'_>) -> ControlFlow<B>,
     {
-        let true_literal = bool_literal(true);
-        let false_literal = bool_literal(false);
-
-        self.bindings_arena.clear();
         let body = rewriter.rewrite(body);
-        let (remaining, body, initial_bindings) =
-            apply_one_point_rule(rewriter, &mut self.bindings_arena, vars.to_vec(), body);
-        let remaining = order_variables_by_constraints(remaining, &body);
+        self.enumerate_normalized(rewriter, generator, vars, body, consume)
+    }
+
+    /// Same as [`Self::enumerate`], but for a `body` the caller has already
+    /// rewritten to normal form.
+    pub fn enumerate_normalized<R: RewriteEngine, F, B>(
+        &mut self,
+        rewriter: &mut R,
+        generator: &mut FreshVariableGenerator,
+        vars: &[DataVariable],
+        body: DataExpression,
+        consume: F,
+    ) -> Outcome<B>
+    where
+        F: FnMut(&mut R, &Solution<'_>) -> ControlFlow<B>,
+    {
+        self.bindings_arena.clear();
+        let (remaining, body, initial_bindings) = apply_one_point_rule(
+            rewriter,
+            &mut self.bindings_arena,
+            vars.to_vec(),
+            body,
+            OnePointPolarity::Existential,
+        );
+        let remaining = self.order_variables(vars, remaining, &body);
 
         self.drive(
             rewriter,
@@ -196,15 +236,9 @@ impl Enumerator {
             remaining,
             body,
             initial_bindings,
-            &false_literal,
-            false,
-            |rewriter, leaf_body, solution| {
-                if *leaf_body == true_literal {
-                    consume(rewriter, solution)
-                } else {
-                    ControlFlow::Continue(())
-                }
-            },
+            false, // reject on `false`, accept on `true`
+            false, // unbounded
+            consume,
         )
     }
 
@@ -223,16 +257,18 @@ impl Enumerator {
         body: &DataExpression,
         kind: QuantifierKind,
     ) -> WitnessOutcome {
-        let (identity, absorbing) = match kind {
-            QuantifierKind::Exists => (bool_literal(false), bool_literal(true)),
-            QuantifierKind::Forall => (bool_literal(true), bool_literal(false)),
+        // `reject_is_true` says which literal settles the quantifier for a
+        // branch without deciding it; the other produces the witness.
+        let (reject_is_true, polarity) = match kind {
+            QuantifierKind::Exists => (false, OnePointPolarity::Existential),
+            QuantifierKind::Forall => (true, OnePointPolarity::Universal),
         };
 
         self.bindings_arena.clear();
         let body = rewriter.rewrite(body);
         let (remaining, body, initial_bindings) =
-            apply_one_point_rule(rewriter, &mut self.bindings_arena, vars.to_vec(), body);
-        let remaining = order_variables_by_constraints(remaining, &body);
+            apply_one_point_rule(rewriter, &mut self.bindings_arena, vars.to_vec(), body, polarity);
+        let remaining = self.order_variables(vars, remaining, &body);
 
         let mut found: Option<Vec<DataExpression>> = None;
         let outcome = self.drive(
@@ -242,45 +278,72 @@ impl Enumerator {
             remaining,
             body,
             initial_bindings,
-            &identity,
+            reject_is_true,
             true,
-            |_rewriter, leaf_body, solution| {
-                if *leaf_body == absorbing {
-                    found = Some(solution.values().to_vec());
-                    ControlFlow::Break(())
-                } else {
-                    ControlFlow::Continue(())
-                }
+            |_rewriter, solution| {
+                found = Some(solution.values().to_vec());
+                ControlFlow::Break(())
             },
         );
 
         match (outcome, found) {
             (_, Some(values)) => WitnessOutcome::Found(values),
             (Outcome::Exhausted, None) => WitnessOutcome::NoneExists,
-            (Outcome::LimitReached, None) | (Outcome::NotEnumerable(..), None) => WitnessOutcome::GaveUp,
+            (Outcome::LimitReached, None) | (Outcome::NotEnumerable(..), None) | (Outcome::Undecided(_), None) => {
+                WitnessOutcome::GaveUp
+            }
             (Outcome::Stopped(()), None) => {
                 unreachable!("Stopped only occurs when on_leaf returns Break, which only happens once `found` is set")
             }
         }
     }
 
+    /// Orders the remaining variables for enumeration based on precomputed ranks.
+    fn order_variables(
+        &mut self,
+        vars: &[DataVariable],
+        remaining: Vec<DataVariable>,
+        body: &DataExpression,
+    ) -> Vec<DataVariable> {
+        if remaining.len() <= 1 {
+            return remaining;
+        }
+
+        let key = (vars.as_ptr() as usize, body.index());
+        let ranks = self
+            .ordering_cache
+            .entry(key)
+            .or_insert_with(|| compute_variable_ranks(&remaining, body));
+        apply_variable_ranks(remaining, ranks)
+    }
+
     /// Expands `remaining_vars` breadth-first, pruning any branch whose body
     /// has already rewritten to `reject` regardless of its still-free
-    /// variables, and reports every leaf (fully ground) branch to `on_leaf`.
+    /// variables, and reports every leaf (fully ground) branch whose body is
+    /// `accept` to `on_leaf`.
     ///
-    /// `remaining_vars` is expected to already be in the order the caller
-    /// wants variables expanded in — both callers pass it through
-    /// [`order_variables_by_constraints`] first (§6.3). Fresh variables
-    /// introduced while expanding a constructor are still appended at the
-    /// tail of each work item's own remaining list (§4.1/§4.5), so this
-    /// ordering only ever affects which of the *original* variables is
-    /// expanded first, not the fresh ones a variable's own expansion spawns.
+    /// A leaf that is neither `reject` nor `accept` decided nothing, so the
+    /// search reports [`Outcome::Undecided`] rather than
+    /// [`Outcome::Exhausted`]: the two are indistinguishable from inside the
+    /// search, and only the caller knows whether an under-approximated result
+    /// set is acceptable.
+    ///
+    /// `remaining_vars` is expected to already be in the order the caller wants
+    /// variables expanded in — both callers pass it through
+    /// [`Self::order_variables`] first (§6.3). Fresh variables introduced while
+    /// expanding a constructor are still appended at the tail of each work
+    /// item's own remaining list (§4.1/§4.5), so this ordering only ever
+    /// affects which of the *original* variables is expanded first, not the
+    /// fresh ones a variable's own expansion spawns.
     ///
     /// `all_vars` is the *original* variable list (before the one-point rule
     /// may have removed some of them) — every one of them is resolved into the
     /// [`Solution`] handed to `on_leaf`, since one-point-eliminated variables
     /// are bound in `initial_bindings` just as surely as the ones the search
     /// itself binds.
+    ///
+    /// `reject_is_true` selects which of the enumerator's cached `Bool`
+    /// literals is the rejecting one.
     #[allow(clippy::too_many_arguments)]
     fn drive<R: RewriteEngine, B>(
         &mut self,
@@ -290,17 +353,38 @@ impl Enumerator {
         remaining_vars: Vec<DataVariable>,
         body: DataExpression,
         initial_bindings: BindingChain,
-        reject: &DataExpression,
+        reject_is_true: bool,
         bounded: bool,
-        mut on_leaf: impl FnMut(&mut R, &DataExpression, &Solution<'_>) -> ControlFlow<B>,
+        mut on_leaf: impl FnMut(&mut R, &Solution<'_>) -> ControlFlow<B>,
     ) -> Outcome<B> {
         let limits = self.limits;
         let mut processed: usize = 0;
         let mut truncated = false;
+        let mut undecided: Option<DataExpression> = None;
+        let (reject, accept) = if reject_is_true {
+            (&self.true_literal, &self.false_literal)
+        } else {
+            (&self.false_literal, &self.true_literal)
+        };
 
         self.queue.clear();
+        // Held for the whole call rather than re-acquired per access: per
+        // `Protected::write`'s own safety note, the GC only ever touches this
+        // container once the guard is dropped, so holding it across the
+        // search is exactly the intended usage, not a per-access lock.
+        let mut var_pool = self.var_pool.write();
+        var_pool.clear();
+        let mut initial_indices = Vec::with_capacity(remaining_vars.len());
+        for variable in &remaining_vars {
+            // SAFETY: the resulting ref is pushed into `var_pool` immediately below.
+            let var_ref = unsafe { var_pool.protect(variable) };
+            initial_indices.push(u32::try_from(var_pool.len()).expect("more variables than fit in a u32"));
+            var_pool.push(var_ref.into());
+        }
+        drop(remaining_vars);
+
         self.queue.push_back(WorkItem {
-            remaining: remaining_vars,
+            remaining: RemainingList::new(initial_indices),
             body,
             bindings: initial_bindings,
             depth: 0,
@@ -311,21 +395,44 @@ impl Enumerator {
                 continue;
             }
 
+            // Counted here rather than per constructor expansion, so the bound
+            // covers every branch the search takes, not only the ones over an
+            // infinite sort.
+            if bounded {
+                if processed >= limits.max_items {
+                    return Outcome::LimitReached;
+                }
+                processed += 1;
+            }
+
             if item.remaining.is_empty() {
+                if item.body != *accept {
+                    undecided.get_or_insert_with(|| item.body.clone());
+                    continue;
+                }
+
                 self.bindings_arena
                     .resolve_all(rewriter, item.bindings, all_vars, &mut self.solution_buf);
                 let solution = Solution {
                     values: &self.solution_buf,
                 };
 
-                match on_leaf(rewriter, &item.body, &solution) {
+                match on_leaf(rewriter, &solution) {
                     ControlFlow::Break(b) => return Outcome::Stopped(b),
                     ControlFlow::Continue(()) => continue,
                 }
             }
 
-            let variable = item.remaining[0].clone();
-            let rest = &item.remaining[1..];
+            // Only a constructor expansion nests deeper.
+            if bounded && item.depth >= limits.max_depth {
+                truncated = true;
+                continue;
+            }
+
+            // Protected (an individual protection-set insertion) once per
+            // work item processed.
+            let (variable_index, rest) = item.remaining.pop_front().expect("checked non-empty above");
+            let variable: DataVariable = var_pool[variable_index as usize].protect();
 
             let Some(sort_id) = self.plans.get(&variable.sort()) else {
                 return Outcome::NotEnumerable(variable, NotEnumerableReason::UnknownSort);
@@ -339,13 +446,15 @@ impl Enumerator {
                     // A free function over the single field, so the elements
                     // stay borrowed while the other fields are mutated below.
                     let elements = cached_finite_elements(&mut self.finite_elements, rewriter, &self.plans, sort_id);
+                    // Protected once
+                    let variable = Rc::new(variable);
                     for element in elements {
                         let new_bindings = self
                             .bindings_arena
                             .extend(item.bindings, variable.clone(), element.clone());
                         let new_body = rewrite_bound(rewriter, &self.bindings_arena, &item.body, new_bindings);
                         self.queue.push_back(WorkItem {
-                            remaining: rest.to_vec(),
+                            remaining: rest.clone(),
                             body: new_body,
                             bindings: new_bindings,
                             depth: item.depth,
@@ -353,28 +462,23 @@ impl Enumerator {
                     }
                 }
                 SortEnumerability::InfiniteEnumerable => {
-                    if bounded && item.depth >= limits.max_depth {
-                        truncated = true;
-                        continue;
-                    }
-
                     // Iterate the constructors through an owned handle, so the
                     // other fields of `self` stay mutable in the loop body.
                     let plans = self.plans.clone();
+                    // Shared across every constructor, same reasoning as the
+                    // `Finite` arm above.
+                    let variable = Rc::new(variable);
                     for constructor in plans.plan(sort_id).constructors() {
-                        if bounded {
-                            if processed >= limits.max_items {
-                                return Outcome::LimitReached;
-                            }
-                            processed += 1;
-                        }
-
-                        let mut fresh_vars = Vec::with_capacity(constructor.arity());
+                        let mut fresh_indices = Vec::with_capacity(constructor.arity());
                         let mut arguments = Vec::with_capacity(constructor.arity());
                         for &argument_sort in constructor.arguments() {
                             let fresh = generator.generate("v", plans.plan(argument_sort).sort().copy());
                             arguments.push(DataExpression::from(fresh.clone()));
-                            fresh_vars.push(fresh);
+                            // SAFETY: the resulting ref is pushed into `var_pool` immediately below.
+                            let fresh_ref = unsafe { var_pool.protect(&fresh) };
+                            fresh_indices
+                                .push(u32::try_from(var_pool.len()).expect("more variables than fit in a u32"));
+                            var_pool.push(fresh_ref.into());
                         }
 
                         let value: DataExpression = if arguments.is_empty() {
@@ -391,11 +495,8 @@ impl Enumerator {
                         let new_bindings = self.bindings_arena.extend(item.bindings, variable.clone(), value);
                         let new_body = rewrite_bound(rewriter, &self.bindings_arena, &item.body, new_bindings);
 
-                        let mut new_remaining = rest.to_vec();
-                        new_remaining.extend(fresh_vars);
-
                         self.queue.push_back(WorkItem {
-                            remaining: new_remaining,
+                            remaining: rest.with_appended(fresh_indices),
                             body: new_body,
                             bindings: new_bindings,
                             depth: item.depth + 1,
@@ -407,6 +508,8 @@ impl Enumerator {
 
         if truncated {
             Outcome::LimitReached
+        } else if let Some(body) = undecided {
+            Outcome::Undecided(body)
         } else {
             Outcome::Exhausted
         }
@@ -468,14 +571,6 @@ fn rewrite_bound<R: RewriteEngine>(
     bindings: BindingChain,
 ) -> DataExpression {
     rewriter.rewrite_with(body, &bindings_arena.substitution(bindings))
-}
-
-/// Returns the canonical `Bool` literal `true`/`false` (mCRL2's
-/// `sort_bool::true_`/`false_`).
-pub(crate) fn bool_literal(value: bool) -> DataExpression {
-    let name = if value { "true" } else { "false" };
-    let bool_sort = SortExpression::from(BasicSort::new("Bool"));
-    DataFunctionSymbol::with_sort(name, bool_sort.copy()).into()
 }
 
 /// Returns the cartesian product of `lists`: one combination per element of
