@@ -2,9 +2,14 @@ use std::ops::ControlFlow;
 use std::rc::Rc;
 
 use ahash::AHashSet;
+use merc_aterm::Term;
 use merc_data::DataExpression;
+use merc_data::DataExpressionRef;
 use merc_data::DataVariable;
+use merc_data::DataVariableRef;
 use merc_data::Mcrl2DataSpecification;
+use merc_data::is_data_variable;
+use merc_data::visit_data_expr;
 use merc_enumerate::EnumerationLimits;
 use merc_enumerate::EnumerationPlans;
 use merc_enumerate::Enumerator;
@@ -12,10 +17,25 @@ use merc_enumerate::FreshVariableGenerator;
 use merc_enumerate::Outcome;
 use merc_enumerate::QuantifierKind;
 use merc_enumerate::WitnessOutcome;
+use merc_enumerate::simplify_one_point;
 use merc_sabre::InnermostRewriter;
+use merc_sabre::RewriteEngine;
 use merc_sabre::RewriteSpecification;
 use merc_syntax::UntypedDataSpecification;
 use merc_typecheck::DataSpecification;
+use merc_utilities::Step;
+
+/// Every variable occurring free in `term`.
+fn free_variables(term: &DataExpression) -> AHashSet<DataVariable> {
+    let mut free = AHashSet::new();
+    let _: Option<()> = visit_data_expr(&term.copy(), (), |expr: &DataExpressionRef<'_>, context| {
+        if is_data_variable(expr) {
+            free.insert(DataVariableRef::from(Term::copy(expr)).protect());
+        }
+        ControlFlow::Continue(Step::Into(context))
+    });
+    free
+}
 
 /// `D`'s shape mirrors `Nat`'s (`dzero`/`dsucc`, `lt`/`eq` defined by
 /// recursion on both constructors), so it exercises the same "infinite
@@ -207,7 +227,7 @@ fn test_enumerate_is_fair_across_two_infinite_variables() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn test_enumerate_applies_the_one_point_rule() {
+fn test_compile_one_point_then_enumerate_normalized_matches_direct_enumeration() {
     // `b == true` narrows `b` to a single substitution instead of a search
     // over `Bool`, leaving only the (still genuinely searched) `n < 3` over
     // `D`.
@@ -222,37 +242,54 @@ fn test_enumerate_applies_the_one_point_rule() {
     let plans = Rc::new(EnumerationPlans::build(&spec));
 
     let (vars, body) = goal(&spec, "goal");
+    let normalized_body = rewriter.rewrite(&body);
+    let b = vars[0].clone();
 
-    let mut enumerator = Enumerator::new(plans);
-    let mut results: Vec<(DataExpression, DataExpression)> = Vec::new();
-    let outcome = enumerator.enumerate(
-        &mut rewriter,
-        &mut generator_for(&vars),
-        &vars,
-        &body,
-        |_rewriter, solution| -> ControlFlow<()> {
-            let values = solution.values();
-            results.push((values[0].clone(), values[1].clone()));
-            ControlFlow::Continue(())
-        },
-    );
-
-    assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
+    let mut condition = normalized_body;
+    let mut rest = [DataExpression::from(b.clone())];
+    simplify_one_point(&mut rewriter, &vars, &mut condition, &mut rest);
+    let other = rest[0].clone();
 
     let true_literal: DataExpression = merc_data::DataFunctionSymbol::with_sort(
         "true",
         merc_data::SortExpression::from(merc_data::BasicSort::new("Bool")).copy(),
     )
     .into();
-    let expected: AHashSet<(DataExpression, DataExpression)> =
-        (0..3).map(|n| (true_literal.clone(), numeral(n))).collect();
-    let actual: AHashSet<(DataExpression, DataExpression)> = results.iter().cloned().collect();
-    assert_eq!(actual, expected, "{results:?}");
     assert_eq!(
-        results.len(),
-        3,
-        "one-point elimination of `b` must not multiply out solutions: {results:?}"
+        other, true_literal,
+        "`b`'s eliminated binding must be substituted into every other term, not just `terms[0]`"
     );
+
+    // `compile_one_point` doesn't report which of `vars` it eliminated, so a
+    // caller re-derives it by re-scanning the rewritten terms — here, just
+    // `condition`, since `other` is not itself an enumeration goal.
+    let free = free_variables(&condition);
+    let remaining_vars: Vec<DataVariable> = vars.iter().filter(|v| free.contains(*v)).cloned().collect();
+    assert_eq!(
+        remaining_vars.iter().map(|v| v.name().to_string()).collect::<Vec<_>>(),
+        vec!["n"],
+        "only `n` should still be free in the residual condition once `b` is compiled away"
+    );
+
+    let mut enumerator = Enumerator::new(plans);
+    let mut results: Vec<DataExpression> = Vec::new();
+    let outcome = enumerator.enumerate_normalized(
+        &mut rewriter,
+        &mut generator_for(&vars),
+        &remaining_vars,
+        condition,
+        |_rewriter, solution| -> ControlFlow<()> {
+            results.push(solution.values()[0].clone());
+            ControlFlow::Continue(())
+        },
+    );
+
+    assert!(matches!(outcome, Outcome::Exhausted), "{outcome:?}");
+
+    let expected: AHashSet<DataExpression> = (0..3).map(numeral).collect();
+    let actual: AHashSet<DataExpression> = results.iter().cloned().collect();
+    assert_eq!(actual, expected, "{results:?}");
+    assert_eq!(results.len(), 3, "solutions must be pairwise distinct: {results:?}");
 }
 
 #[test]

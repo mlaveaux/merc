@@ -1,14 +1,19 @@
 #![forbid(unsafe_code)]
 
 use std::ops::ControlFlow;
-use std::rc::Rc;
 
 use ahash::AHashSet;
 use merc_aterm::Term;
+use merc_data::AndExpression;
 use merc_data::DataExpression;
 use merc_data::DataExpressionRef;
 use merc_data::DataVariable;
 use merc_data::DataVariableRef;
+use merc_data::EqualExpression;
+use merc_data::ImpliesExpression;
+use merc_data::NotEqualExpression;
+use merc_data::NotExpression;
+use merc_data::OrExpression;
 use merc_data::is_and;
 use merc_data::is_data_variable;
 use merc_data::is_equal;
@@ -22,12 +27,57 @@ use merc_utilities::Step;
 
 use crate::binding::BindingArena;
 use crate::binding::BindingChain;
+use crate::binding::BindingGuard;
 
 /// Which quantifier's one-point identity [`apply_one_point_rule`] may use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OnePointPolarity {
     Existential,
     Universal,
+}
+
+/// Runs [`apply_one_point_rule`] to a fixpoint under existential polarity —
+/// the shape relevant to eliminating a `sum` variable ahead of successor
+/// generation — once, ahead of the per-state/per-call use a dynamic
+/// [`crate::Enumerator::enumerate`] would otherwise repeat every time (e.g.
+/// once per LPS summand when the LPS is loaded, rather than re-analysed on
+/// every state; see `merc_lps::explore`).
+///
+/// `condition` is the goal body to search for one-point (dis)equations over
+/// `vars`, rewritten to its residual form in place. `rest` is *not* searched
+/// — e.g. an LPS summand's action arguments or assignment right-hand sides —
+/// but still has each eliminated variable's binding substituted in, since a
+/// binding's value mentions only variables *outside* `vars` (e.g. an LPS's
+/// process parameters, see [`apply_one_point_rule`]) and so is already
+/// meaningful outside the body it was found in.
+///
+/// `condition` must already be in normal form; see [`apply_one_point_rule`].
+pub fn simplify_one_point<R: RewriteEngine>(
+    rewriter: &mut R,
+    vars: &[DataVariable],
+    condition: &mut DataExpression,
+    rest: &mut [DataExpression],
+) {
+    let mut arena = BindingArena::default();
+    let mut guard = arena.chain.write();
+    let (_remaining_vars, residual, bindings) = apply_one_point_rule(
+        rewriter,
+        &mut guard,
+        vars.to_vec(),
+        condition.clone(),
+        OnePointPolarity::Existential,
+    );
+    *condition = residual;
+
+    // Every binding's value mentions only variables outside `vars` (never
+    // another eliminated variable — each was substituted into the residual
+    // body, and hence into any later match, as soon as it was found), so one
+    // simultaneous substitution pass over each remaining term is already a
+    // fixpoint; no need to interleave it with `apply_one_point_rule`'s loop.
+    let substitution = BindingArena::substitution(&guard, bindings);
+    for term in rest {
+        *term = rewriter.rewrite_with(term, &substitution);
+    }
 }
 
 /// Applies the one-point rule for `polarity` to `(vars, body)` to a fixpoint:
@@ -47,7 +97,7 @@ pub(crate) enum OnePointPolarity {
 /// static, once-per-goal pass does and does not reach.
 pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
     rewriter: &mut R,
-    arena: &mut BindingArena,
+    guard: &mut BindingGuard<'_>,
     mut vars: Vec<DataVariable>,
     mut body: DataExpression,
     polarity: OnePointPolarity,
@@ -61,8 +111,8 @@ pub(crate) fn apply_one_point_rule<R: RewriteEngine>(
             .expect("find_one_point_equation only returns variables from `vars`");
         vars.remove(position);
 
-        bindings = arena.extend(bindings, Rc::new(variable), value);
-        body = rewriter.rewrite_with(&body, &arena.substitution(bindings));
+        bindings = BindingArena::extend(guard, bindings, &variable.copy(), &value.copy());
+        body = rewriter.rewrite_with(&body, &BindingArena::substitution(guard, bindings));
     }
 
     (vars, body, bindings)
@@ -80,8 +130,8 @@ fn find_one_point_equation(
     polarity: OnePointPolarity,
 ) -> Option<(DataVariable, DataExpression)> {
     let (connective, extract): (BinaryDecomposer, BinaryDecomposer) = match polarity {
-        OnePointPolarity::Existential => (is_and, as_equation),
-        OnePointPolarity::Universal => (is_or, as_disequation),
+        OnePointPolarity::Existential => (and_operands, as_equation),
+        OnePointPolarity::Universal => (or_operands, as_disequation),
     };
 
     for branch in split_on(body, connective) {
@@ -100,23 +150,48 @@ fn find_one_point_equation(
     None
 }
 
+/// Returns the two sides of `term` if it is a conjunction (`lhs && rhs`).
+fn and_operands(term: &DataExpression) -> Option<(DataExpression, DataExpression)> {
+    if !is_and(term) {
+        return None;
+    }
+    let and = AndExpression::from(term.clone());
+    Some((and.lhs().protect(), and.rhs().protect()))
+}
+
+/// Returns the two sides of `term` if it is a disjunction (`lhs || rhs`).
+fn or_operands(term: &DataExpression) -> Option<(DataExpression, DataExpression)> {
+    if !is_or(term) {
+        return None;
+    }
+    let or = OrExpression::from(term.clone());
+    Some((or.lhs().protect(), or.rhs().protect()))
+}
+
 /// Returns the two sides of `term` if it states an equality (`e1 == e2`).
 fn as_equation(term: &DataExpression) -> Option<(DataExpression, DataExpression)> {
-    is_equal(term)
+    if !is_equal(term) {
+        return None;
+    }
+    let equal = EqualExpression::from(term.clone());
+    Some((equal.lhs().protect(), equal.rhs().protect()))
 }
 
 /// Returns the two sides of the equality `term` *denies*.
 fn as_disequation(term: &DataExpression) -> Option<(DataExpression, DataExpression)> {
-    if let Some(sides) = is_not_equal(term) {
-        return Some(sides);
+    if is_not_equal(term) {
+        let not_equal = NotEqualExpression::from(term.clone());
+        return Some((not_equal.lhs().protect(), not_equal.rhs().protect()));
     }
 
-    if let Some((antecedent, _)) = is_implies(term) {
-        return as_equation(&antecedent);
+    if is_implies(term) {
+        let implies = ImpliesExpression::from(term.clone());
+        return as_equation(&implies.lhs().protect());
     }
 
-    if let Some(operand) = is_not(term) {
-        return as_equation(&operand);
+    if is_not(term) {
+        let not = NotExpression::from(term.clone());
+        return as_equation(&not.operand().protect());
     }
 
     None
@@ -143,7 +218,7 @@ fn one_point_candidate(
 /// conjunctions lazily as they're consumed. A non-`&&` term yields itself as a
 /// single leaf.
 pub(crate) fn split_conjuncts(body: &DataExpression) -> impl Iterator<Item = DataExpression> {
-    split_on(body, is_and)
+    split_on(body, and_operands)
 }
 
 /// Yields the leaves of `body`'s top-level `connective` chain, left to right,
@@ -206,6 +281,7 @@ mod tests {
 
     use crate::binding::BindingArena;
     use crate::binding::BindingChain;
+    use crate::binding::BindingGuard;
 
     use super::OnePointPolarity;
     use super::apply_one_point_rule;
@@ -282,12 +358,14 @@ mod tests {
     /// Resolves `variable`'s binding out of `bindings` to a ground value.
     fn resolved(
         rewriter: &mut SabreRewriter,
-        arena: &mut BindingArena,
+        memo: &mut ahash::HashMap<usize, DataExpression>,
+        scratch: &mut bumpalo::Bump,
+        guard: &BindingGuard<'_>,
         bindings: BindingChain,
         variable: DataVariable,
     ) -> DataExpression {
         let mut values = Vec::new();
-        arena.resolve_all(rewriter, bindings, &[variable], &mut values);
+        BindingArena::resolve_all_into(memo, scratch, guard, rewriter, bindings, &[variable], &mut values);
         values.pop().expect("one variable resolves to one value")
     }
 
@@ -299,16 +377,20 @@ mod tests {
         let body = or(not(eq(n.clone().into(), constant("five"))), true_lit());
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, _residual, bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body,
             OnePointPolarity::Universal,
         );
 
         assert!(vars.is_empty(), "the universal rule must bind `n`");
-        assert_eq!(resolved(&mut rewriter, &mut arena, bindings, n), constant("five"));
+        assert_eq!(
+            resolved(&mut rewriter, &mut arena.memo, &mut arena.scratch, &guard, bindings, n),
+            constant("five")
+        );
     }
 
     #[test]
@@ -319,16 +401,20 @@ mod tests {
         let body = implies(eq(n.clone().into(), constant("five")), true_lit());
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, _residual, bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body,
             OnePointPolarity::Universal,
         );
 
         assert!(vars.is_empty(), "the universal rule must bind `n`");
-        assert_eq!(resolved(&mut rewriter, &mut arena, bindings, n), constant("five"));
+        assert_eq!(
+            resolved(&mut rewriter, &mut arena.memo, &mut arena.scratch, &guard, bindings, n),
+            constant("five")
+        );
     }
 
     #[test]
@@ -340,9 +426,10 @@ mod tests {
         let body = and(eq(n.clone().into(), constant("five")), true_lit());
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, _bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body.clone(),
             OnePointPolarity::Universal,
@@ -360,9 +447,10 @@ mod tests {
         let body = or(not(eq(n.clone().into(), constant("five"))), true_lit());
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, _bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body.clone(),
             OnePointPolarity::Existential,
@@ -379,9 +467,10 @@ mod tests {
         let body = and(eq(n.clone().into(), constant("five")), true_lit());
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body,
             OnePointPolarity::Existential,
@@ -390,7 +479,15 @@ mod tests {
         assert!(vars.is_empty());
         assert_eq!(residual, true_lit());
         let mut resolved = Vec::new();
-        arena.resolve_all(&mut rewriter, bindings, &[n], &mut resolved);
+        BindingArena::resolve_all_into(
+            &mut arena.memo,
+            &mut arena.scratch,
+            &guard,
+            &mut rewriter,
+            bindings,
+            &[n],
+            &mut resolved,
+        );
         assert_eq!(resolved, vec![constant("five")]);
     }
 
@@ -408,9 +505,10 @@ mod tests {
         );
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone(), m.clone()],
             body,
             OnePointPolarity::Existential,
@@ -419,7 +517,15 @@ mod tests {
         assert!(vars.is_empty());
         assert_eq!(residual, true_lit());
         let mut resolved = Vec::new();
-        arena.resolve_all(&mut rewriter, bindings, &[n, m], &mut resolved);
+        BindingArena::resolve_all_into(
+            &mut arena.memo,
+            &mut arena.scratch,
+            &guard,
+            &mut rewriter,
+            bindings,
+            &[n, m],
+            &mut resolved,
+        );
         assert_eq!(resolved, vec![constant("five"), constant("five")]);
     }
 
@@ -430,9 +536,10 @@ mod tests {
         let body: DataExpression = DataApplication::with_args(&f_symbol(), &[DataExpression::from(n.clone())]).into();
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, _bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body.clone(),
             OnePointPolarity::Existential,
@@ -451,9 +558,10 @@ mod tests {
         let body = eq(n.clone().into(), f_n);
 
         let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
         let (vars, residual, _bindings) = apply_one_point_rule(
             &mut rewriter,
-            &mut arena,
+            &mut guard,
             vec![n.clone()],
             body.clone(),
             OnePointPolarity::Existential,
