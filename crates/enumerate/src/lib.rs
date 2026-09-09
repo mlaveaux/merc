@@ -1,10 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-// `enumerator` is the one module allowed `unsafe` (for `Protected`'s
-// container-registration API); every other module forbids it individually
-// (see each file's own `#![forbid(unsafe_code)]`), since a crate-level
-// `forbid` here would apply to `enumerator` too and cannot be downgraded by
-// a child module.
+mod arena_list;
 mod binding;
 mod enumeration_plan;
 mod enumerator;
@@ -28,3 +24,4 @@ pub use enumerator::Solution;
 pub use enumerator::WitnessOutcome;
 pub use fresh::FreshVariableGenerator;
 pub use naive_enumerator::NaiveEnumerator;
+pub use one_point::simplify_one_point;

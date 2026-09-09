@@ -19,6 +19,7 @@ merc_sabre.workspace = true
 merc_utilities.workspace = true
 
 ahash.workspace = true
+bumpalo.workspace = true
 log.workspace = true
 
 [dev-dependencies]

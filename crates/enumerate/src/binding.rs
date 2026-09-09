@@ -23,23 +23,10 @@ use merc_sabre::utilities::RewriteSubstitution;
 use crate::arena_list::ArenaList;
 use crate::arena_list::ArenaListHandle;
 
-/// A cheap, `Copy` handle into a [`BindingArena`]: the variable bindings
-/// chosen so far along one branch of the enumeration search, recorded as a
-/// linked list of `(variable, value)` nodes stored in the arena. Branches
-/// share a common prefix, so extending one leaves every sibling valid.
-///
-/// # Details
-///
-/// A bound variable's image may itself mention a variable bound *later* in
-/// the same chain (e.g. `v ↦ c(y1, y2)` where `y1`/`y2` are fresh variables
-/// introduced to expand `v`, and are only bound in subsequent work items) —
-/// so looking a variable up (via [`BindingArena::substitution`]) returns only
-/// its immediate image, not a ground term: splicing that in once can leave
-/// `y1`/`y2` as new free variables in the result. That is fine for
-/// normalising the search's own goal body step by step, since the enumerator
-/// binds those variables in a later step too. Resolving a *finished*
-/// branch's bindings to fully ground values instead goes through
-/// [`BindingArena::resolve_all`], which follows the chain recursively.
+/// The variable bindings chosen so far along one branch of the enumeration
+/// search, recorded as a linked list of `(variable, value)` nodes stored in the
+/// arena. Branches share a common prefix, so extending one leaves every sibling
+/// valid.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BindingChain(ArenaListHandle);
 
@@ -47,6 +34,192 @@ pub(crate) struct BindingChain(ArenaListHandle);
 pub(crate) struct Binding<'a> {
     variable: DataVariableRef<'a>,
     value: DataExpressionRef<'a>,
+}
+
+/// A held write guard onto a [`BindingArena`]'s chain, obtained once per
+/// search.
+pub(crate) type BindingGuard<'a> = ProtectedWriteGuard<'a, ArenaList<Binding<'static>>>;
+
+/// Backing store for every [`BindingChain`] produced during one search.
+///
+/// # Details
+///
+/// A bound variable's image may itself mention a variable bound *later* in the
+/// same chain (e.g. `v ↦ c(y1, y2)` where `y1`/`y2` are fresh variables
+/// introduced to expand `v`. Use [`BindingArena::resolve_all`] to obtain fully
+/// ground values.
+pub(crate) struct BindingArena {
+    pub(crate) chain: Protected<ArenaList<Binding<'static>>>,
+    /// Scratch memo table for [`BindingArena::resolve_all`].
+    pub(crate) memo: HashMap<usize, DataExpression>,
+    /// Scratch arena for the argument slices.
+    pub(crate) scratch: Bump,
+}
+
+impl Default for BindingArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 
+pub(crate) struct BindingContext<'a> {
+    memo: &'a mut HashMap<usize, DataExpression>,
+    scratch: &'a mut Bump,
+}
+
+impl BindingArena {
+    pub(crate) fn new() -> Self {
+        BindingArena {
+            chain: Protected::new(ArenaList::default()),
+            memo: HashMap::new(),
+            scratch: Bump::new(),
+        }
+    }
+
+    /// Drops every node, keeping the backing storage's capacity. Must be
+    /// called before starting a new search: every [`BindingChain`] handed out
+    /// before a `clear` indexes into the discarded nodes and must not be used
+    /// afterwards.
+    pub(crate) fn clear(&mut self) {
+        self.chain.write().clear();
+        self.memo.clear();
+    }
+
+    /// Returns a new chain with `variable ↦ value` recorded in front of
+    /// `parent`. `parent` remains valid (siblings share it).
+    pub(crate) fn extend(
+        guard: &mut BindingGuard<'_>,
+        parent: BindingChain,
+        variable: &DataVariableRef<'_>,
+        value: &DataExpressionRef<'_>,
+    ) -> BindingChain {
+        // SAFETY: both resulting refs are inserted into `guard`'s container
+        // immediately below via `push`.
+        let variable_ref = unsafe { guard.protect(variable) };
+        let value_ref = unsafe { guard.protect(value) };
+        BindingChain(guard.push(parent.0, Binding::new(variable_ref.into(), value_ref.into())))
+    }
+
+    /// Returns the immediate image bound to `variable` along `chain`, if any.
+    fn lookup<'g, 'h>(
+        guard: &'g BindingGuard<'h>,
+        chain: BindingChain,
+        variable: &DataVariableRef<'_>,
+    ) -> Option<DataExpressionRef<'g>> {
+        let mut current = chain.0;
+        while let Some((binding, parent)) = guard.pop(current) {
+            if binding.variable.copy() == *variable {
+                return Some(binding.value.copy());
+            }
+
+            current = parent;
+        }
+        None
+    }
+
+    /// Resolves every variable in `vars` to its fully ground, ready-to-report
+    /// value, in the same order as `vars`, appending them to `out`.
+    ///
+    /// `out` is cleared first, but its capacity carries over.
+    ///
+    /// Each variable's stored image may itself mention other bound variables
+    /// (see [`BindingChain`]'s doc comment); this recursively substitutes
+    /// those away, memoising each variable's resolved value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any variable in `vars` is not bound along `chain`.
+    pub(crate) fn resolve_all_into<R: RewriteEngine>(
+        guard: &BindingGuard<'_>,
+        rewriter: &mut R,
+        context: &mut BindingContext<'_>,
+        chain: BindingChain,
+        vars: &[DataVariable],
+        out: &mut Vec<DataExpression>,
+    ) {
+        out.clear();
+
+        for v in vars {
+            let resolved = Self::resolve_variable(&mut context.memo, &context.scratch, guard, rewriter, chain, v.copy());
+            out.push(resolved);
+        }
+    }
+
+    /// Memoised on `Term::index`: maximal sharing makes a variable's position
+    /// in the global term pool a unique, `protect`-free key.
+    fn resolve_variable<R: RewriteEngine>(
+        memo: &mut HashMap<usize, DataExpression>,
+        scratch: &Bump,
+        guard: &BindingGuard<'_>,
+        rewriter: &mut R,
+        chain: BindingChain,
+        variable: DataVariableRef<'_>,
+    ) -> DataExpression {
+        if let Some(resolved) = memo.get(&variable.index()) {
+            return resolved.clone();
+        }
+
+        let image = Self::lookup(guard, chain, &variable)
+            .unwrap_or_else(|| panic!("{variable:?} is not bound in this BindingChain"));
+        let resolved = Self::resolve_term(guard, &mut BindingContext { memo, scratch }, rewriter, chain, &image);
+        memo.insert(variable.index(), resolved.clone());
+        resolved
+    }
+
+    /// Returns a normal form: every reconstructed application is rewritten
+    /// again, since substituting already-normal arguments into a constructor
+    /// can still leave the composite reducible (`@succ_nat` applied to a
+    /// normalised machine-word `Nat` digit still needs its carry-propagating
+    /// equation to fire). Callers splice the result in as a
+    /// [`RewriteSubstitution`] image, which requires it.
+    ///
+    /// Generic over [`Term`] so a recursive call can take the
+    /// [`ATermRef`](merc_aterm::ATermRef) from `arguments()` without
+    /// `protect`ing it first.
+    fn resolve_term<'a, 'b, T: Term<'a, 'b>, R: RewriteEngine>(
+        guard: &BindingGuard<'_>,
+        context: &mut BindingContext<'_>,
+        rewriter: &mut R,
+        chain: BindingChain,
+        term: &'b T,
+    ) -> DataExpression {
+        if is_closed(term) {
+            return term.protect().into();
+        }
+
+        if is_data_variable(term) {
+            let variable: DataVariableRef<'_> = term.copy().into();
+            return Self::resolve_variable(&mut context.memo, &context.scratch, guard, rewriter, chain, variable);
+        }
+
+        // A term that is not closed and not a bare variable must be an
+        // application (binders never occur here; the enumerator only ever
+        // builds constructor applications and plain variables): at the raw
+        // term level `arg(0)` is the head symbol and the rest are the actual
+        // arguments, so the head needs no `protect` either — it never
+        // outlives this call.
+        let head: DataFunctionSymbolRef<'_> = term.arg(0).into();
+        let arguments = context.scratch.alloc_slice_fill_iter(
+            term.arguments()
+                .skip(1)
+                .map(|argument| Self::resolve_term(guard, context, rewriter, chain, &argument)),
+        );
+        let application: DataExpression = DataApplication::with_args(&head, arguments).into();
+        rewriter.rewrite(&application)
+    }
+
+    /// Returns a [`RewriteSubstitution`] view of `chain`, with no intervening
+    /// collection to build.
+    pub(crate) fn substitution<'g, 'h>(guard: &'g BindingGuard<'h>, chain: BindingChain) -> ArenaSubstitution<'g, 'h> {
+        ArenaSubstitution::new(guard, chain)
+    }
+}
+
+impl<'a> Binding<'a> {
+    fn new(variable: DataVariableRef<'a>, value: DataExpressionRef<'a>) -> Self {
+        Binding { variable, value }
+    }
 }
 
 impl Markable for Binding<'_> {
@@ -86,201 +259,16 @@ unsafe impl Transmutable for Binding<'static> {
     }
 }
 
-/// A held write guard onto a [`BindingArena`]'s chain, obtained once per
-/// search.
-pub(crate) type BindingGuard<'a> = ProtectedWriteGuard<'a, ArenaList<Binding<'static>>>;
-
-/// Backing store for every [`BindingChain`] produced during one search.
-pub(crate) struct BindingArena {
-    pub(crate) chain: Protected<ArenaList<Binding<'static>>>,
-    /// Scratch memo table for [`BindingArena::resolve_all`].
-    pub(crate) memo: HashMap<usize, DataExpression>,
-    /// Scratch arena for the argument slices.
-    pub(crate) scratch: Bump,
-}
-
-impl Default for BindingArena {
-    fn default() -> Self {
-        BindingArena {
-            chain: Protected::new(ArenaList::default()),
-            memo: HashMap::new(),
-            scratch: Bump::new(),
-        }
-    }
-}
-
-impl BindingArena {
-    /// Drops every node, keeping the backing storage's capacity. Must be
-    /// called before starting a new search: every [`BindingChain`] handed out
-    /// before a `clear` indexes into the discarded nodes and must not be used
-    /// afterwards.
-    ///
-    /// Unlike every other operation here, this takes `&mut self` directly: it
-    /// runs once, before any [`BindingGuard`] for this search has been taken,
-    /// so there is no outstanding borrow of `chain` to collide with.
-    pub(crate) fn clear(&mut self) {
-        self.chain.write().clear();
-        self.memo.clear();
-    }
-
-    /// Returns a new chain with `variable ↦ value` recorded in front of
-    /// `parent`. `parent` remains valid (siblings share it).
-    pub(crate) fn extend(
-        guard: &mut BindingGuard<'_>,
-        parent: BindingChain,
-        variable: &DataVariableRef<'_>,
-        value: &DataExpressionRef<'_>,
-    ) -> BindingChain {
-        // SAFETY: both resulting refs are inserted into `guard`'s container
-        // immediately below via `push`.
-        let variable_ref = unsafe { guard.protect(variable) };
-        let value_ref = unsafe { guard.protect(value) };
-        BindingChain(guard.push(
-            parent.0,
-            Binding {
-                variable: variable_ref.into(),
-                value: value_ref.into(),
-            },
-        ))
-    }
-
-    /// Returns the immediate image bound to `variable` along `chain`, if any.
-    /// The image may itself still mention other variables bound later in the
-    /// chain; see [`BindingArena::resolve_all`] to fully resolve it.
-    ///
-    /// Takes a [`DataVariableRef`] so callers on the hot path
-    /// ([`RewriteSubstitution::get`]) need not `protect` the key.
-    fn lookup<'g, 'h>(
-        guard: &'g BindingGuard<'h>,
-        chain: BindingChain,
-        variable: &DataVariableRef<'_>,
-    ) -> Option<DataExpressionRef<'g>> {
-        let mut current = chain.0;
-        while let Some((binding, parent)) = guard.pop(current) {
-            if binding.variable.copy() == *variable {
-                return Some(binding.value.copy());
-            }
-            current = parent;
-        }
-        None
-    }
-
-    /// Resolves every variable in `vars` to its fully ground, ready-to-report
-    /// value, in the same order as `vars`, appending them to `out`.
-    ///
-    /// `out` is cleared first, but its capacity carries over.
-    ///
-    /// Each variable's stored image may itself mention other bound variables
-    /// (see [`BindingChain`]'s doc comment); this recursively substitutes
-    /// those away, memoising each variable's resolved value.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any variable in `vars` is not bound along `chain`, which
-    /// would be an [`Enumerator`](crate::Enumerator) bug: every variable
-    /// passed to the search — whether eliminated by the one-point rule or
-    /// consumed from the work queue — is bound by the time a branch reaches a
-    /// leaf.
-    pub(crate) fn resolve_all<R: RewriteEngine>(
-        memo: &mut HashMap<usize, DataExpression>,
-        scratch: &mut Bump,
-        guard: &BindingGuard<'_>,
-        rewriter: &mut R,
-        chain: BindingChain,
-        vars: &[DataVariable],
-        out: &mut Vec<DataExpression>,
-    ) {
-        out.clear();
-        memo.clear();
-        scratch.reset();
-        for v in vars {
-            let resolved = Self::resolve_variable(memo, scratch, guard, rewriter, chain, v.copy());
-            out.push(resolved);
-        }
-    }
-
-    /// Memoised on `Term::index`: maximal sharing makes a variable's position
-    /// in the global term pool a unique, `protect`-free key.
-    fn resolve_variable<R: RewriteEngine>(
-        memo: &mut HashMap<usize, DataExpression>,
-        scratch: &Bump,
-        guard: &BindingGuard<'_>,
-        rewriter: &mut R,
-        chain: BindingChain,
-        variable: DataVariableRef<'_>,
-    ) -> DataExpression {
-        if let Some(resolved) = memo.get(&variable.index()) {
-            return resolved.clone();
-        }
-
-        let image = Self::lookup(guard, chain, &variable)
-            .unwrap_or_else(|| panic!("{variable:?} is not bound in this BindingChain"));
-        let resolved = Self::resolve_term(memo, scratch, guard, rewriter, chain, &image);
-        memo.insert(variable.index(), resolved.clone());
-        resolved
-    }
-
-    /// Returns a normal form: every reconstructed application is rewritten
-    /// again, since substituting already-normal arguments into a constructor
-    /// can still leave the composite reducible (`@succ_nat` applied to a
-    /// normalised machine-word `Nat` digit still needs its carry-propagating
-    /// equation to fire). Callers splice the result in as a
-    /// [`RewriteSubstitution`] image, which requires it.
-    ///
-    /// Generic over [`Term`] so a recursive call can take the
-    /// [`ATermRef`](merc_aterm::ATermRef) from `arguments()` without
-    /// `protect`ing it first.
-    fn resolve_term<'a, 'b, T: Term<'a, 'b>, R: RewriteEngine>(
-        memo: &mut HashMap<usize, DataExpression>,
-        scratch: &Bump,
-        guard: &BindingGuard<'_>,
-        rewriter: &mut R,
-        chain: BindingChain,
-        term: &'b T,
-    ) -> DataExpression {
-        if is_closed(term) {
-            return term.protect().into();
-        }
-        if is_data_variable(term) {
-            let variable: DataVariableRef<'_> = term.copy().into();
-            return Self::resolve_variable(memo, scratch, guard, rewriter, chain, variable);
-        }
-
-        // A term that is not closed and not a bare variable must be an
-        // application (binders never occur here; the enumerator only ever
-        // builds constructor applications and plain variables): at the raw
-        // term level `arg(0)` is the head symbol and the rest are the actual
-        // arguments, so the head needs no `protect` either — it never
-        // outlives this call.
-        //
-        // The argument slice is bump-allocated rather than collected into a
-        // `Vec`: `with_args` copies it straight into the global term pool, so
-        // nothing here needs to outlive this call. `Bump::alloc_slice_fill_iter`
-        // only needs `&Bump` (its bump pointer is a `Cell`, not a `RefCell`),
-        // so the recursive `resolve_term` calls driving the iterator can
-        // themselves allocate into `scratch` without conflicting with this
-        // still-in-progress allocation.
-        let head: DataFunctionSymbolRef<'_> = term.arg(0).into();
-        let arguments = scratch.alloc_slice_fill_iter(
-            term.arguments()
-                .skip(1)
-                .map(|argument| Self::resolve_term(memo, scratch, guard, rewriter, chain, &argument)),
-        );
-        let application: DataExpression = DataApplication::with_args(&head, arguments).into();
-        rewriter.rewrite(&application)
-    }
-
-    /// Returns a [`RewriteSubstitution`] view of `chain`, with no intervening
-    /// collection to build.
-    pub(crate) fn substitution<'g, 'h>(guard: &'g BindingGuard<'h>, chain: BindingChain) -> ArenaSubstitution<'g, 'h> {
-        ArenaSubstitution { guard, chain }
-    }
-}
-
 /// A [`RewriteSubstitution`] backed directly by a [`BindingArena`] chain.
 pub(crate) struct ArenaSubstitution<'g, 'h> {
     guard: &'g BindingGuard<'h>,
     chain: BindingChain,
+}
+
+impl<'g, 'h> ArenaSubstitution<'g, 'h> {
+    fn new(guard: &'g BindingGuard<'h>, chain: BindingChain) -> Self {
+        ArenaSubstitution { guard, chain }
+    }
 }
 
 impl RewriteSubstitution for ArenaSubstitution<'_, '_> {
@@ -341,7 +329,7 @@ mod tests {
 
         let mut rewriter = rewriter();
         let mut resolved = Vec::new();
-        BindingArena::resolve_all(
+        BindingArena::resolve_all_into(
             &mut arena.memo,
             &mut arena.scratch,
             &guard,
@@ -361,7 +349,7 @@ mod tests {
         let mut resolved = Vec::new();
         let mut arena = BindingArena::default();
         let guard = arena.chain.write();
-        BindingArena::resolve_all(
+        BindingArena::resolve_all_into(
             &mut arena.memo,
             &mut arena.scratch,
             &guard,
