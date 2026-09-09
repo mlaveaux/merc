@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -15,6 +16,7 @@ use merc_sabre::RewriteEngine;
 
 use crate::binding::BindingArena;
 use crate::binding::BindingChain;
+use crate::binding::BindingGuard;
 use crate::enumeration_plan::EnumerationPlanId;
 use crate::enumeration_plan::EnumerationPlans;
 use crate::enumeration_plan::NotEnumerableReason;
@@ -25,6 +27,7 @@ use crate::one_point::apply_one_point_rule;
 use crate::ordering::VariableRanks;
 use crate::ordering::apply_variable_ranks;
 use crate::ordering::compute_variable_ranks;
+use crate::remaining::RemainingArena;
 use crate::remaining::RemainingList;
 
 /// Configures how far [`Enumerator::find_witness`] searches before giving up.
@@ -150,7 +153,14 @@ pub struct Enumerator {
     /// Scratch buffers, reused across calls rather than reallocated per search.
     solution_buf: Vec<DataExpression>,
     bindings_arena: BindingArena,
+    remaining_arena: RemainingArena,
     queue: VecDeque<WorkItem>,
+    /// Scratch buffers for one constructor expansion's fresh arguments and
+    /// their `var_pool` indices, reused across every constructor of every
+    /// [`SortEnumerability::InfiniteEnumerable`] variable in the search
+    /// rather than reallocated per constructor.
+    constructor_args_buf: Vec<DataExpression>,
+    fresh_indices_buf: Vec<u32>,
 }
 
 impl Enumerator {
@@ -170,7 +180,10 @@ impl Enumerator {
             ordering_cache: HashMap::new(),
             solution_buf: Vec::new(),
             bindings_arena: BindingArena::default(),
+            remaining_arena: RemainingArena::default(),
             queue: VecDeque::new(),
+            constructor_args_buf: Vec::new(),
+            fresh_indices_buf: Vec::new(),
         }
     }
 
@@ -220,22 +233,15 @@ impl Enumerator {
         F: FnMut(&mut R, &Solution<'_>) -> ControlFlow<B>,
     {
         self.bindings_arena.clear();
-        let (remaining, body, initial_bindings) = apply_one_point_rule(
-            rewriter,
-            &mut self.bindings_arena,
-            vars.to_vec(),
-            body,
-            OnePointPolarity::Existential,
-        );
-        let remaining = self.order_variables(vars, remaining, &body);
+        let remaining = self.order_variables(vars, vars, &body);
 
         self.drive(
             rewriter,
             generator,
             vars,
-            remaining,
+            &remaining,
             body,
-            initial_bindings,
+            BindingChain::default(),
             false, // reject on `false`, accept on `true`
             false, // unbounded
             consume,
@@ -266,16 +272,20 @@ impl Enumerator {
 
         self.bindings_arena.clear();
         let body = rewriter.rewrite(body);
-        let (remaining, body, initial_bindings) =
-            apply_one_point_rule(rewriter, &mut self.bindings_arena, vars.to_vec(), body, polarity);
-        let remaining = self.order_variables(vars, remaining, &body);
+        // Scoped so this guard is dropped before `drive` below takes its own:
+        // `Protected::write` only ever hands out one guard at a time.
+        let (remaining, body, initial_bindings) = {
+            let mut guard = self.bindings_arena.chain.write();
+            apply_one_point_rule(rewriter, &mut guard, vars.to_vec(), body, polarity)
+        };
+        let remaining = self.order_variables(vars, &remaining, &body);
 
         let mut found: Option<Vec<DataExpression>> = None;
         let outcome = self.drive(
             rewriter,
             generator,
             vars,
-            remaining,
+            &remaining,
             body,
             initial_bindings,
             reject_is_true,
@@ -298,23 +308,30 @@ impl Enumerator {
         }
     }
 
-    /// Orders the remaining variables for enumeration based on precomputed ranks.
-    fn order_variables(
+    /// Orders `remaining` for enumeration based on precomputed ranks.
+    ///
+    /// The overwhelming common case — a single remaining variable, or a body
+    /// this pair has never been seen with before mentioning more than one of
+    /// them — needs no reordering at all, so this borrows `remaining` rather
+    /// than requiring an owned `Vec` from every caller: a search with only
+    /// one variable left to enumerate (true for most LPS summands) pays no
+    /// allocation here whatsoever.
+    fn order_variables<'v>(
         &mut self,
         vars: &[DataVariable],
-        remaining: Vec<DataVariable>,
+        remaining: &'v [DataVariable],
         body: &DataExpression,
-    ) -> Vec<DataVariable> {
+    ) -> Cow<'v, [DataVariable]> {
         if remaining.len() <= 1 {
-            return remaining;
+            return Cow::Borrowed(remaining);
         }
 
         let key = (vars.as_ptr() as usize, body.index());
         let ranks = self
             .ordering_cache
             .entry(key)
-            .or_insert_with(|| compute_variable_ranks(&remaining, body));
-        apply_variable_ranks(remaining, ranks)
+            .or_insert_with(|| compute_variable_ranks(remaining, body));
+        Cow::Owned(apply_variable_ranks(remaining.to_vec(), ranks))
     }
 
     /// Expands `remaining_vars` breadth-first, pruning any branch whose body
@@ -350,7 +367,7 @@ impl Enumerator {
         rewriter: &mut R,
         generator: &mut FreshVariableGenerator,
         all_vars: &[DataVariable],
-        remaining_vars: Vec<DataVariable>,
+        remaining_vars: &[DataVariable],
         body: DataExpression,
         initial_bindings: BindingChain,
         reject_is_true: bool,
@@ -368,23 +385,22 @@ impl Enumerator {
         };
 
         self.queue.clear();
-        // Held for the whole call rather than re-acquired per access: per
-        // `Protected::write`'s own safety note, the GC only ever touches this
-        // container once the guard is dropped, so holding it across the
-        // search is exactly the intended usage, not a per-access lock.
+        self.remaining_arena.clear();
+        // Both guards are held for the whole call rather than re-acquired per
+        // access.
         let mut var_pool = self.var_pool.write();
         var_pool.clear();
+        let mut bindings = self.bindings_arena.chain.write();
         let mut initial_indices = Vec::with_capacity(remaining_vars.len());
-        for variable in &remaining_vars {
+        for variable in remaining_vars {
             // SAFETY: the resulting ref is pushed into `var_pool` immediately below.
             let var_ref = unsafe { var_pool.protect(variable) };
             initial_indices.push(u32::try_from(var_pool.len()).expect("more variables than fit in a u32"));
             var_pool.push(var_ref.into());
         }
-        drop(remaining_vars);
 
         self.queue.push_back(WorkItem {
-            remaining: RemainingList::new(initial_indices),
+            remaining: RemainingList::new(&mut self.remaining_arena, initial_indices),
             body,
             bindings: initial_bindings,
             depth: 0,
@@ -411,8 +427,15 @@ impl Enumerator {
                     continue;
                 }
 
-                self.bindings_arena
-                    .resolve_all(rewriter, item.bindings, all_vars, &mut self.solution_buf);
+                BindingArena::resolve_all_into(
+                    &mut self.bindings_arena.memo,
+                    &mut self.bindings_arena.scratch,
+                    &bindings,
+                    rewriter,
+                    item.bindings,
+                    all_vars,
+                    &mut self.solution_buf,
+                );
                 let solution = Solution {
                     values: &self.solution_buf,
                 };
@@ -429,32 +452,34 @@ impl Enumerator {
                 continue;
             }
 
-            // Protected (an individual protection-set insertion) once per
-            // work item processed.
-            let (variable_index, rest) = item.remaining.pop_front().expect("checked non-empty above");
-            let variable: DataVariable = var_pool[variable_index as usize].protect();
+            // Not protected: `variable_ref` borrows straight from `var_pool`.
+            let (variable_index, rest) = item
+                .remaining
+                .pop_front(&mut self.remaining_arena)
+                .expect("checked non-empty above");
+            let variable_ref = &var_pool[variable_index as usize];
 
-            let Some(sort_id) = self.plans.get(&variable.sort()) else {
-                return Outcome::NotEnumerable(variable, NotEnumerableReason::UnknownSort);
+            let Some(sort_id) = self.plans.get(&variable_ref.sort()) else {
+                return Outcome::NotEnumerable(variable_ref.protect(), NotEnumerableReason::UnknownSort);
             };
 
             match self.plans.plan(sort_id).enumerability() {
                 SortEnumerability::NotEnumerable(reason) => {
-                    return Outcome::NotEnumerable(variable, reason);
+                    return Outcome::NotEnumerable(variable_ref.protect(), reason);
                 }
                 SortEnumerability::Finite => {
                     // A free function over the single field, so the elements
                     // stay borrowed while the other fields are mutated below.
+                    // No mutation of `var_pool` happens in this arm, so
+                    // `variable_ref` stays valid for the whole loop as-is.
                     let elements = cached_finite_elements(&mut self.finite_elements, rewriter, &self.plans, sort_id);
-                    // Protected once
-                    let variable = Rc::new(variable);
                     for element in elements {
-                        let new_bindings = self
-                            .bindings_arena
-                            .extend(item.bindings, variable.clone(), element.clone());
-                        let new_body = rewrite_bound(rewriter, &self.bindings_arena, &item.body, new_bindings);
+                        let element_ref = element.copy();
+                        let new_bindings =
+                            BindingArena::extend(&mut bindings, item.bindings, variable_ref, &element_ref);
+                        let new_body = rewrite_bound(rewriter, &bindings, &item.body, new_bindings);
                         self.queue.push_back(WorkItem {
-                            remaining: rest.clone(),
+                            remaining: rest,
                             body: new_body,
                             bindings: new_bindings,
                             depth: item.depth,
@@ -465,38 +490,46 @@ impl Enumerator {
                     // Iterate the constructors through an owned handle, so the
                     // other fields of `self` stay mutable in the loop body.
                     let plans = self.plans.clone();
-                    // Shared across every constructor, same reasoning as the
-                    // `Finite` arm above.
-                    let variable = Rc::new(variable);
                     for constructor in plans.plan(sort_id).constructors() {
-                        let mut fresh_indices = Vec::with_capacity(constructor.arity());
-                        let mut arguments = Vec::with_capacity(constructor.arity());
+                        self.fresh_indices_buf.clear();
+                        self.constructor_args_buf.clear();
                         for &argument_sort in constructor.arguments() {
                             let fresh = generator.generate("v", plans.plan(argument_sort).sort().copy());
-                            arguments.push(DataExpression::from(fresh.clone()));
+                            self.constructor_args_buf.push(DataExpression::from(fresh.clone()));
                             // SAFETY: the resulting ref is pushed into `var_pool` immediately below.
                             let fresh_ref = unsafe { var_pool.protect(&fresh) };
-                            fresh_indices
+                            self.fresh_indices_buf
                                 .push(u32::try_from(var_pool.len()).expect("more variables than fit in a u32"));
                             var_pool.push(fresh_ref.into());
                         }
 
-                        let value: DataExpression = if arguments.is_empty() {
+                        let value: DataExpression = if self.constructor_args_buf.is_empty() {
                             constructor.symbol().clone().into()
                         } else {
-                            DataApplication::with_args(constructor.symbol(), &arguments).into()
+                            DataApplication::with_args(constructor.symbol(), &self.constructor_args_buf).into()
                         };
                         // `rewrite_with` splices substitution images in without rewriting them,
                         // so they must already be normal forms — a constructor application is
                         // not automatically one (`@c0`/`@succ_nat(_)` under a machine-word
                         // `Nat` encoding still rewrite into digit form).
-                        let value = rewriter.rewrite(&value);
+                        //
+                        // Only `value_ref` (copied straight into `bindings` below) is needed, so
+                        // `rewrite_ref` skips protecting the normal form independently: the
+                        // engines that have no cheaper option (see `RewriteEngine::rewrite_ref`)
+                        // still allocate exactly as before, but `InnermostRewriter` — the one
+                        // every production caller actually uses — does not.
+                        let rewritten = rewriter.rewrite_ref(&value);
+                        let value_ref = rewritten.as_ref();
 
-                        let new_bindings = self.bindings_arena.extend(item.bindings, variable.clone(), value);
-                        let new_body = rewrite_bound(rewriter, &self.bindings_arena, &item.body, new_bindings);
+                        // Re-borrowed from `var_pool` here, rather than reusing
+                        // `variable_ref` from before the match.
+                        let variable_ref = &var_pool[variable_index as usize];
+                        let new_bindings =
+                            BindingArena::extend(&mut bindings, item.bindings, &variable_ref.copy(), &value_ref);
+                        let new_body = rewrite_bound(rewriter, &bindings, &item.body, new_bindings);
 
                         self.queue.push_back(WorkItem {
-                            remaining: rest.with_appended(fresh_indices),
+                            remaining: rest.with_appended(&mut self.remaining_arena, self.fresh_indices_buf.drain(..)),
                             body: new_body,
                             bindings: new_bindings,
                             depth: item.depth + 1,
@@ -566,11 +599,11 @@ fn materialize_finite_elements<R: RewriteEngine>(
 /// step — so this is equivalent to a singleton substitution.
 fn rewrite_bound<R: RewriteEngine>(
     rewriter: &mut R,
-    bindings_arena: &BindingArena,
+    guard: &BindingGuard<'_>,
     body: &DataExpression,
     bindings: BindingChain,
 ) -> DataExpression {
-    rewriter.rewrite_with(body, &bindings_arena.substitution(bindings))
+    rewriter.rewrite_with(body, &BindingArena::substitution(guard, bindings))
 }
 
 /// Returns the cartesian product of `lists`: one combination per element of

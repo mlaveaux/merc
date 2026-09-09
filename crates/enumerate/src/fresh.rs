@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+use std::fmt::Write;
+use std::rc::Rc;
+
 use ahash::AHashSet;
 use ahash::HashMap;
 use ahash::HashMapExt;
@@ -9,20 +12,26 @@ use merc_data::SortExpressionRef;
 /// Generates fresh variable names guaranteed not to collide with a
 /// caller-supplied set of names already in scope.
 pub struct FreshVariableGenerator {
-    used: AHashSet<String>,
+    /// Shared with `generated_since_reset` via `Rc`.
+    used: AHashSet<Rc<str>>,
     /// The next index to try per `base`, for cheap generation of fresh names.
     next_index: HashMap<String, u64>,
     /// Names inserted into `used` since the last [`Self::reset`].
-    generated_since_reset: Vec<String>,
+    generated_since_reset: Vec<Rc<str>>,
+    /// Reused across [`Self::generate`] calls to build candidate names
+    /// without a fresh heap allocation per probe: only the name that is
+    /// actually accepted ever gets turned into an owned [`Rc<str>`].
+    scratch: String,
 }
 
 impl FreshVariableGenerator {
     /// Builds a generator that avoids every name in `used`.
     pub fn new(used: impl IntoIterator<Item = String>) -> Self {
         FreshVariableGenerator {
-            used: used.into_iter().collect(),
+            used: used.into_iter().map(Rc::from).collect(),
             next_index: HashMap::new(),
             generated_since_reset: Vec::new(),
+            scratch: String::new(),
         }
     }
 
@@ -45,13 +54,14 @@ impl FreshVariableGenerator {
     /// already tried for `base`, that keeps it out of the used set.
     pub fn generate(&mut self, base: &str, sort: SortExpressionRef<'_>) -> DataVariable {
         let mut index = self.next_index.get(base).copied().unwrap_or(0);
-        let name = loop {
-            let candidate = format!("{base}{index}");
-            if !self.used.contains(&candidate) {
-                break candidate;
+        loop {
+            self.scratch.clear();
+            write!(self.scratch, "{base}{index}").expect("writing to a String never fails");
+            if !self.used.contains(self.scratch.as_str()) {
+                break;
             }
             index += 1;
-        };
+        }
 
         if let Some(next) = self.next_index.get_mut(base) {
             *next = index + 1;
@@ -59,9 +69,10 @@ impl FreshVariableGenerator {
             self.next_index.insert(base.to_string(), index + 1);
         }
 
+        let name: Rc<str> = Rc::from(self.scratch.as_str());
         self.used.insert(name.clone());
         self.generated_since_reset.push(name.clone());
-        DataVariable::with_sort(name.as_str(), sort)
+        DataVariable::with_sort(name.as_ref(), sort)
     }
 }
 

@@ -63,9 +63,18 @@ impl RewriteSubstitution for HashMap<DataVariable, DataExpression> {
 
 /// A substitution given as two parallel slices, useful for the handful of
 /// bindings a single search branch or LPS successor introduces.
+///
+/// `values` must be at least as long as `variables`; [`Self::get`] panics
+/// otherwise.
 pub struct SliceSubstitution<'a> {
     pub variables: &'a [DataVariable],
     pub values: &'a [DataExpression],
+}
+
+impl<'a> SliceSubstitution<'a> {
+    pub fn new(variables: &'a [DataVariable], values: &'a [DataExpression]) -> Self {
+        SliceSubstitution { variables, values }
+    }
 }
 
 impl RewriteSubstitution for SliceSubstitution<'_> {
@@ -82,6 +91,12 @@ impl RewriteSubstitution for SliceSubstitution<'_> {
 pub struct Chained<'a, A, B> {
     pub first: &'a A,
     pub second: &'a B,
+}
+
+impl<'a, A, B> Chained<'a, A, B> {
+    pub fn new(first: &'a A, second: &'a B) -> Self {
+        Chained { first, second }
+    }
 }
 
 impl<A: RewriteSubstitution, B: RewriteSubstitution> RewriteSubstitution for Chained<'_, A, B> {
@@ -208,10 +223,7 @@ mod tests {
     fn test_slice_substitution_replaces_variables() {
         let variables = [DataVariable::new("x"), DataVariable::new("y")];
         let values = [term("a", &[]), term("b", &[])];
-        let sigma = SliceSubstitution {
-            variables: &variables,
-            values: &values,
-        };
+        let sigma = SliceSubstitution::new(&variables, &values);
 
         assert_eq!(
             apply_substitution(&term("f(x, y)", &["x", "y"]), &sigma),
@@ -223,15 +235,9 @@ mod tests {
     fn test_chained_prefers_first_substitution() {
         let variables = [DataVariable::new("x")];
         let values = [term("a", &[])];
-        let first = SliceSubstitution {
-            variables: &variables,
-            values: &values,
-        };
+        let first = SliceSubstitution::new(&variables, &values);
         let second = substitution(&[("x", "b"), ("y", "c")]);
-        let sigma = Chained {
-            first: &first,
-            second: &second,
-        };
+        let sigma = Chained::new(&first, &second);
 
         assert_eq!(
             apply_substitution(&term("f(x, y)", &["x", "y"]), &sigma),
