@@ -66,6 +66,7 @@ merc_data = { path = "../../crates/data" }
 merc_explore = { path = "../../crates/explore", features = ["clap"] }
 merc_io = { path = "../../crates/io" }
 merc_lps = { path = "crates/merc_lps" }
+merc_lps_native = { package = "merc_lps", path = "../../crates/lps" }
 merc_lts = { path = "../../crates/lts", features = ["clap"] }
 merc_pbes = { path = "crates/merc_pbes" }
 merc_reduction = { path = "../../crates/reduction" }

@@ -1196,6 +1196,7 @@ name = "merc_enumerate"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "bumpalo",
  "log",
  "merc_aterm",
  "merc_data",
@@ -1245,6 +1246,28 @@ dependencies = [
  "streaming-iterator",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "merc_lps"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "delegate",
+ "itertools 0.15.0",
+ "log",
+ "merc_aterm",
+ "merc_collections",
+ "merc_data",
+ "merc_enumerate",
+ "merc_explore",
+ "merc_io",
+ "merc_lts",
+ "merc_macros",
+ "merc_sabre",
+ "merc_syntax",
+ "merc_typecheck",
+ "merc_utilities",
 ]
 
 [[package]]

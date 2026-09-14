@@ -27,6 +27,7 @@ members = [
     "crates/enumerate/benchmarks",
     "crates/explore",
     "crates/io",
+    "crates/lps",
     "crates/lts",
     "crates/lts/benchmarks",
     "crates/macros",
@@ -148,6 +149,7 @@ merc_data = { version = "3.0", path = "crates/data" }
 merc_enumerate = { version = "0.1", path = "crates/enumerate" }
 merc_explore = { version = "2.0", path = "crates/explore" }
 merc_io = { version = "3.0", path = "crates/io" }
+merc_lps = { version = "0.1", path = "crates/lps" }
 merc_lts = { version = "3.0", path = "crates/lts" }
 merc_macros = { version = "2.0", path = "crates/macros" }
 merc_number = { version = "3.0", path = "crates/number" }

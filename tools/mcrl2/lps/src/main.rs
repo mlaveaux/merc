@@ -12,7 +12,9 @@ use merc_explore::ExplorationStrategy;
 use merc_lps::LpsFormat;
 use merc_lts::AutFormat;
 use merc_lts::AutStream;
+use merc_lts::LtsAction;
 use merc_lts::LtsFormat;
+use merc_lts::LtsMultiAction;
 use merc_lts::LtsStream;
 use merc_lts::MutexLtsBuilder;
 use merc_lts::guess_lts_output_format;
@@ -49,6 +51,8 @@ use merc_lps::explore_lps_explicit;
 use merc_lps::explore_lps_explicit_parallel;
 use merc_lps::explore_lps_symbolic;
 use merc_lps::explore_lps_symbolic_to_sym;
+use merc_lps_native::explore_lps;
+use merc_lps_native::read_lps_file;
 
 /// Default number of nodes for the Oxidd LDD manager.
 const DEFAULT_OXIDD_NODE_CAPACITY: usize = 1 << 24;
@@ -101,6 +105,9 @@ enum Commands {
     Explore(ExploreArgs),
     /// Explores the state space of an LPS explicitly
     ExploreExplicit(ExploreExplicitArgs),
+    /// Explores the state space of an LPS explicitly, using a native (non-FFI)
+    /// binary `.lps` reader and enumerator instead of the mCRL2 toolset.
+    ExploreNative(ExploreNativeArgs),
 }
 
 /// The input LPS shared by every subcommand.
@@ -219,6 +226,35 @@ struct ExploreExplicitArgs {
     pinned: bool,
 }
 
+/// Arguments for the native (non-FFI) explicit exploration subcommand.
+///
+/// Unlike [`ExploreExplicitArgs`], there is no `--format`/`--no-preprocess`
+/// here: the native reader only understands the binary `.lps` format, and
+/// mCRL2's own LPS preprocessing passes are an FFI-only feature this path
+/// doesn't perform. There is also no control-flow pruning or parallel
+/// exploration yet, since `merc_lps_native::ExploreLinearProcessSpecification`
+/// doesn't support either.
+#[derive(clap::Args, Debug)]
+struct ExploreNativeArgs {
+    /// The input .lps file.
+    filename: String,
+
+    /// Explicitly specify the output LTS file format.
+    #[arg(long, short('o'), value_enum)]
+    out_format: Option<LtsFormat>,
+
+    /// Specify the output LTS. If not given, the LTS is not written.
+    #[arg(long)]
+    output: Option<PathBuf>,
+
+    #[arg(long, short('c'), value_enum, default_value_t = CachingStrategy::None)]
+    caching: CachingStrategy,
+
+    /// Order in which discovered states are explored.
+    #[arg(long, short('s'), value_enum, default_value_t = ExplorationStrategy::Dfs)]
+    strategy: ExplorationStrategy,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -253,6 +289,7 @@ fn handle_command(cli: &Cli, timing: &Timing) -> Result<(), MercError> {
         match command {
             Commands::Explore(args) => handle_explore(cli, args, timing, preprocess_lps)?,
             Commands::ExploreExplicit(args) => handle_explore_explicit(args, timing, preprocess_lps)?,
+            Commands::ExploreNative(args) => handle_explore_native(args, timing)?,
         }
     }
 
@@ -427,6 +464,53 @@ fn handle_explore_explicit_lts(
             args.control_flow,
             timing,
         )?;
+    }
+
+    Ok(())
+}
+
+/// Handles the explicit exploration of an LPS via the native (non-FFI) binary
+/// `.lps` reader and `merc_enumerate`-backed enumerator.
+fn handle_explore_native(args: &ExploreNativeArgs, timing: &Timing) -> Result<(), MercError> {
+    let lps = timing.measure("load LPS", || read_lps_file(&args.filename))?;
+
+    let output_format = guess_lts_output_format(args.output.as_deref(), args.out_format, LtsFormat::Aut);
+
+    // The binary `.lts` format additionally carries a data specification, so it's handled
+    // separately, as in `handle_explore_explicit_lts`.
+    if output_format == LtsFormat::Lts {
+        let Some(output) = &args.output else {
+            // No output requested: still explore (for the stats and timing), but discard the
+            // transitions rather than converting and writing them for nothing.
+            explore_lps(&mut (), lps, args.caching, args.strategy, timing)?;
+            return Ok(());
+        };
+
+        // `LtsStream::new` only borrows the data specification to write it immediately as the
+        // format's header, so `lps` is free to move into the explorer right after.
+        let mut stream = LtsStream::new(File::create(output)?, &lps.data_spec)?;
+        explore_lps(&mut stream, lps, args.caching, args.strategy, timing)?;
+        return Ok(());
+    }
+
+    let aut_format = match output_format {
+        LtsFormat::Aut => AutFormat::Aut,
+        LtsFormat::AutMcrl2 => AutFormat::AutMcrl2,
+        LtsFormat::Bcg => {
+            return Err(
+                "BCG output is not supported by explore-native; write AUT or .lts and convert with merc-lts.".into(),
+            );
+        }
+        LtsFormat::Lts => unreachable!("handled above"),
+    };
+
+    if let Some(output) = &args.output {
+        let mut file = BufWriter::new(File::create(output)?);
+        let mut builder: AutStream<_, LtsMultiAction<LtsAction>> = AutStream::with_format(&mut file, aut_format)?;
+        explore_lps(&mut builder, lps, args.caching, args.strategy, timing)?;
+    } else {
+        let mut builder: () = ();
+        explore_lps(&mut builder, lps, args.caching, args.strategy, timing)?;
     }
 
     Ok(())
