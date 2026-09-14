@@ -12,12 +12,13 @@ path = "src/main.rs"
 doc = false
 
 [features]
-metrics = ["merc_lps/metrics"]
+metrics = ["merc_lps/metrics", "merc_lps_native/metrics", "merc_unsafety/metrics"]
 
 [dependencies]
 mcrl2.workspace = true
 merc_explore = { workspace = true, features = ["clap"] }
 merc_lps = { workspace = true, features = ["clap"] }
+merc_lps_native.workspace = true
 merc_lts = { workspace = true, features = ["clap"] }
 merc_symbolic = { workspace = true, features = ["clap"] }
 merc_tools.workspace = true
