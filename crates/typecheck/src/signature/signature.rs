@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use merc_syntax::SortExpression;
+use merc_syntax::SortExpressionKind;
 use merc_syntax::Span;
 use merc_syntax::TypeVarId;
 use merc_syntax::UntypedDataSpecification;
@@ -15,7 +17,7 @@ use crate::build_polymorphic_schemes;
 use crate::check_products_within_domains;
 use crate::query_sort_of_constructor;
 use crate::query_sort_of_map;
-use crate::target_sort;
+use crate::resolve_sort;
 
 /// A polymorphic overload: `sort` is a [ResolvedSortId] built by [`resolve_sort`](crate::resolve_sort)
 /// from a template's own declaration, so it may mention [`ResolvedSort::Var`]
@@ -87,32 +89,75 @@ pub(crate) fn build_signature<'a>(
 }
 
 fn compute_signature(ctx: &mut TypeCheckContext, spec: &UntypedDataSpecification) -> Result<Signature, WellTypedError> {
-    // resolve_sort has no meaning for (and panics on) a product sort outside a
-    // function domain, so every sort this query resolves is checked first.
-    for sort in spec.sort_declarations.iter().filter_map(|decl| decl.expr.as_ref()) {
-        check_products_within_domains(sort)?;
-    }
+    let mut signature = Signature::default();
+    let mut constants: HashMap<String, ResolvedSortId> = HashMap::new();
+    push_declarations(ctx, spec, spec, false, &mut signature, &mut constants)?;
 
-    for sort in spec
-        .constructor_declarations
+    // The polymorphic built-ins — containers, function-update, comparisons
+    // and `if`.
+    signature.schemes = build_polymorphic_schemes(
+        ctx,
+        CONTAINER_TEMPLATES.all().into_iter().chain([&*BUILTIN_SCHEME_TEMPLATE]),
+    );
+
+    Ok(signature)
+}
+
+/// Checks and collects `decl_spec`'s own constructor/mapping declarations into `signature`,
+/// running every signature-level well-typedness rule of Definition 15.1.5/15.1.7 `is_well_typed`
+/// doesn't already cover post-normalization: no product sort outside a function domain, no
+/// constructor for a function sort, constructor/mapping disjointness, and no zero-arity symbol
+/// declared twice under different sorts (`constants`, shared across both declaration kinds and,
+/// when called again for a second spec, across that call too — see `resolve_system_signature`).
+///
+/// `resolve_spec` is the specification whose `sort_declarations` table a `Resolved(name, SortId)`
+/// node in `decl_spec` indexes into — the same specification as `decl_spec` for the user's own
+/// declarations (`compute_signature`), but the user specification itself for the system-defined
+/// specification's declarations, which resolve their `Resolved` sorts against the user's shared
+/// table rather than their own (see `resolve_system_signature`'s doc comment).
+///
+/// `trusted` skips the one rule the system-defined specification's own basic-sort constructors
+/// (`@c0: Nat`, `@cNat`, ...) legitimately break: no constructor for a basic sort. Every other rule
+/// runs unconditionally, including for trusted content — a real soundness check, not a user-only
+/// courtesy: a malformed generated specification (an editing mistake in a template, or a broken
+/// substitution) should fail loudly here rather than produce a silently wrong signature.
+pub(crate) fn push_declarations(
+    ctx: &mut TypeCheckContext,
+    decl_spec: &UntypedDataSpecification,
+    resolve_spec: &UntypedDataSpecification,
+    trusted: bool,
+    signature: &mut Signature,
+    constants: &mut HashMap<String, ResolvedSortId>,
+) -> Result<(), WellTypedError> {
+    // resolve_sort has no meaning for (and panics on) a product sort outside a
+    // function domain, so every sort this query resolves is checked first —
+    // including each alias's own definition, which a constructor/mapping sort
+    // may expand into.
+    for sort in decl_spec
+        .sort_declarations
         .iter()
-        .map(|decl| &decl.sort)
-        .chain(spec.map_declarations.iter().map(|decl| &decl.sort))
+        .filter_map(|decl| decl.expr.as_ref())
+        .chain(decl_spec.constructor_declarations.iter().map(|decl| &decl.sort))
+        .chain(decl_spec.map_declarations.iter().map(|decl| &decl.sort))
     {
         check_products_within_domains(sort)?;
     }
 
-    let mut signature = Signature::default();
-
-    // Zero-arity constructors/mappings are keyed by *name* only, so a second
-    // declaration under any different sort is rejected.
-    let mut constants: HashMap<String, ResolvedSortId> = HashMap::new();
-
-    for decl in &spec.constructor_declarations {
-        // Resolve through the memoized query so lowering can later read the
-        // interned constructor sort straight from the context.
-        let constructor_id = decl.id.expect("assign_declaration_ids ran before build_signature");
-        let sort_id = query_sort_of_constructor(ctx, spec, constructor_id);
+    for decl in &decl_spec.constructor_declarations {
+        // Resolve through the memoized, `ConstructorId`-keyed query for the user's own
+        // specification, so lowering can later read the interned constructor sort straight from
+        // the context. `trusted` content resolves directly against `resolve_spec` instead — never
+        // through the id-keyed cache, even when `decl.id` happens to be `Some`: a system
+        // declaration's id (when one exists at all) can be borrowed from an unrelated, template-
+        // local numbering space, so keying `ctx.sort_of_constructor` on it risks both resolving the
+        // wrong declaration (`decl_spec`'s own list, indexed by a foreign id) and colliding with an
+        // unrelated user `ConstructorId` that happens to have the same numeric value.
+        let sort_id = if trusted {
+            resolve_sort(ctx, resolve_spec, &decl.sort)
+        } else {
+            let constructor_id = decl.id.expect("assign_declaration_ids ran before build_signature");
+            query_sort_of_constructor(ctx, decl_spec, constructor_id)
+        };
 
         // The constructor targets the range of its (function) sort. The check
         // is semantic — an alias of `Nat` is rejected like `Nat` itself — but
@@ -124,39 +169,37 @@ fn compute_signature(ctx: &mut TypeCheckContext, spec: &UntypedDataSpecification
             _ => sort_id,
         };
         match ctx.sorts.get(target) {
-            ResolvedSort::Primitive(_) => {
+            ResolvedSort::Primitive(_) if !trusted => {
                 return Err(WellTypedError::ConstructorForBasicSort {
                     constructor: decl.identifier.node.clone(),
-                    sort: target_sort(&decl.sort).to_string(),
+                    sort: written_target_sort(&decl.sort).to_string(),
                     span: decl.identifier.span.clone(),
                 });
             }
             ResolvedSort::Function { .. } => {
                 return Err(WellTypedError::ConstructorForFunctionSort {
                     constructor: decl.identifier.node.clone(),
-                    sort: target_sort(&decl.sort).to_string(),
+                    sort: written_target_sort(&decl.sort).to_string(),
                     span: decl.identifier.span.clone(),
                 });
             }
             _ => {}
         }
 
-        check_constant_name(
-            &mut constants,
-            ctx,
-            &decl.identifier,
-            decl.identifier.span.clone(),
-            sort_id,
-        )?;
+        check_constant_name(constants, ctx, &decl.identifier, decl.identifier.span.clone(), sort_id)?;
         push_overload(
             signature.constructors.entry(decl.identifier.node.clone()).or_default(),
             sort_id,
         );
     }
 
-    for decl in &spec.map_declarations {
-        let map_id = decl.id.expect("assign_declaration_ids ran before build_signature");
-        let id = query_sort_of_map(ctx, spec, map_id);
+    for decl in &decl_spec.map_declarations {
+        let id = if trusted {
+            resolve_sort(ctx, resolve_spec, &decl.sort)
+        } else {
+            let map_id = decl.id.expect("assign_declaration_ids ran before build_signature");
+            query_sort_of_map(ctx, decl_spec, map_id)
+        };
 
         // The constructors and mappings must be disjoint *as symbols*: the same
         // name under both `cons` and `map` conflicts exactly when the resolved
@@ -174,18 +217,29 @@ fn compute_signature(ctx: &mut TypeCheckContext, spec: &UntypedDataSpecification
             });
         }
 
-        check_constant_name(&mut constants, ctx, &decl.identifier, decl.identifier.span.clone(), id)?;
+        check_constant_name(constants, ctx, &decl.identifier, decl.identifier.span.clone(), id)?;
         push_overload(signature.mappings.entry(decl.identifier.node.clone()).or_default(), id);
     }
 
-    // The polymorphic built-ins — containers, function-update, comparisons
-    // and `if`.
-    signature.schemes = build_polymorphic_schemes(
-        ctx,
-        CONTAINER_TEMPLATES.all().into_iter().chain([&*BUILTIN_SCHEME_TEMPLATE]),
-    );
+    Ok(())
+}
 
-    Ok(signature)
+/// The range of a written (function) sort, or the sort itself otherwise — for rendering the
+/// "sort as written" half of a [`WellTypedError::ConstructorForBasicSort`]/
+/// [`WellTypedError::ConstructorForFunctionSort`] message.
+///
+/// Unlike [`crate::target_sort`], this tolerates a plain `Function` node, not just `FlattenedFunction`:
+/// the user's own declarations are always already flattened by the time `push_declarations` sees
+/// them, but a `trusted` specification's are not (`resolve_system_signature` never runs
+/// `flatten_function_sorts` over `system`/`basics` — nothing needed it to, since no real system
+/// content has ever hit this error path before). Asserting the precondition here, the way
+/// `target_sort` does, would turn a `trusted` equation's *rejection* into a panic instead of the
+/// `WellTypedError` this whole check exists to produce in the first place.
+fn written_target_sort(sort: &SortExpression) -> &SortExpression {
+    match &sort.node {
+        SortExpressionKind::Function { range, .. } | SortExpressionKind::FlattenedFunction { range, .. } => range,
+        _ => sort,
+    }
 }
 
 /// Rejects a second zero-arity declaration of `name` under a different sort

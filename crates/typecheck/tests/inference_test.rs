@@ -52,9 +52,9 @@ fn test_ambiguous_function_application_picks_by_arg_sorts() {
              f: Pos # Nat -> U;
              f: Pos # Pos -> S;
              f: Nat # Pos -> T;
-             result: S;
+             result: Pos -> S;
          var x: Pos; y: Nat;
-         eqn result = f(x, x);",
+         eqn result(x) = f(x, x);",
     );
     check_ok(
         "sort U; S; T;
@@ -62,9 +62,9 @@ fn test_ambiguous_function_application_picks_by_arg_sorts() {
              f: Pos # Nat -> U;
              f: Pos # Pos -> S;
              f: Nat # Pos -> T;
-             result: U;
+             result: Pos # Nat -> U;
          var x: Pos; y: Nat;
-         eqn result = f(x, y);",
+         eqn result(x, y) = f(x, y);",
     );
     check_ok(
         "sort U; S; T;
@@ -72,9 +72,9 @@ fn test_ambiguous_function_application_picks_by_arg_sorts() {
              f: Pos # Nat -> U;
              f: Pos # Pos -> S;
              f: Nat # Pos -> T;
-             result: T;
+             result: Nat # Pos -> T;
          var x: Pos; y: Nat;
-         eqn result = f(y, x);",
+         eqn result(y, x) = f(y, x);",
     );
 }
 
@@ -90,9 +90,9 @@ fn test_ambiguous_function_application_order_independent() {
              f: Nat # Nat -> S;
              f: Nat # Pos -> T;
              f: Pos # Nat -> U;
-             result: S;
+             result: Pos -> S;
          var x: Pos; y: Nat;
-         eqn result = f(x, x);",
+         eqn result(x) = f(x, x);",
     );
 }
 
@@ -148,14 +148,14 @@ fn test_upcast_pos_plus_nat_via_variables() {
     // a direct Appendix-B overload here, no upcast needed. mCRL2:
     // test_upcast_pos2nat.
     check_ok(
-        "map result: Pos;
+        "map result: Pos # Nat -> Pos;
          var x: Pos; y: Nat;
-         eqn result = x + y;",
+         eqn result(x, y) = x + y;",
     );
     check_ok(
-        "map result: Bool;
+        "map result: Pos # Nat -> Bool;
          var x: Pos; y: Nat;
-         eqn result = (x == y);",
+         eqn result(x, y) = (x == y);",
     );
 }
 
@@ -212,8 +212,8 @@ fn test_list_concat_variable_upcast() {
     // A declared `List(Nat)`/`List(Pos)` variable concatenated with a
     // literal list stays at the variable's sort. mCRL2:
     // test_list_nat_concat_one_two, test_list_pos_concat_one_two.
-    check_ok("map r: List(Nat); var l: List(Nat); eqn r = l ++ [1, 2];");
-    check_ok("map r: List(Pos); var l: List(Pos); eqn r = l ++ [1, 2];");
+    check_ok("map r: List(Nat) -> List(Nat); var l: List(Nat); eqn r(l) = l ++ [1, 2];");
+    check_ok("map r: List(Pos) -> List(Pos); var l: List(Pos); eqn r(l) = l ++ [1, 2];");
 }
 
 #[test]
@@ -222,8 +222,8 @@ fn test_list_concat_asymmetric_upcast() {
     // `[0] ++ l` succeeds when `l: List(Nat)` (the literal upcasts), but not
     // when `l: List(Pos)` (the literal `0` cannot downcast). mCRL2:
     // test_list_zero_concat_list_nat, test_list_zero_concat_list_pos.
-    check_ok("map r: List(Nat); var l: List(Nat); eqn r = [0] ++ l;");
-    let err = check_err("map r: List(Pos); var l: List(Pos); eqn r = [0] ++ l;");
+    check_ok("map r: List(Nat) -> List(Nat); var l: List(Nat); eqn r(l) = [0] ++ l;");
+    let err = check_err("map r: List(Pos) -> List(Pos); var l: List(Pos); eqn r(l) = [0] ++ l;");
     assert!(
         matches!(err, WellTypedError::Inference(InferenceError::NoTyping { .. })),
         "{err}"
@@ -237,12 +237,16 @@ fn test_list_mismatched_variable_sorts_rejected() {
     // `FSet(S) <= Set(S)`), so `List(Pos)` and `List(Nat)` are simply
     // incomparable, both under `++` and `==`. mCRL2:
     // test_list_pos_concat_list_nat, test_list_is_list_nat.
-    let err = check_err("map r: List(Nat); var x: List(Pos); y: List(Nat); eqn r = x ++ y;");
+    let err = check_err(
+        "map r: List(Pos) # List(Nat) -> List(Nat); var x: List(Pos); y: List(Nat); eqn r(x, y) = x ++ y;",
+    );
     assert!(
         matches!(err, WellTypedError::Inference(InferenceError::NoTyping { .. })),
         "{err}"
     );
-    let err = check_err("map b: Bool; var x: List(Pos); y: List(Nat); eqn b = (x == y);");
+    let err = check_err(
+        "map b: List(Pos) # List(Nat) -> Bool; var x: List(Pos); y: List(Nat); eqn b(x, y) = (x == y);",
+    );
     assert!(
         matches!(err, WellTypedError::Inference(InferenceError::NoTyping { .. })),
         "{err}"
@@ -269,13 +273,13 @@ fn test_exp_operator_sort() {
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_mod_upcasts_positive_dividend_to_nat() {
     // `mod: Nat # Pos -> Nat` is the only overload; a `Pos` dividend upcasts.
-    check_ok("map n: Nat; var x: Pos; eqn n = x mod 2;");
+    check_ok("map n: Pos -> Nat; var x: Pos; eqn n(x) = x mod 2;");
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_div_over_int_stays_int() {
-    check_ok("map r: Int; var x: Int; eqn r = x div 2;");
+    check_ok("map r: Int -> Int; var x: Int; eqn r(x) = x div 2;");
 }
 
 #[test]
@@ -376,9 +380,9 @@ fn test_aliased_list_of_list_equality() {
     // feeding the `==` scheme. mCRL2: test_aliases.
     check_ok(
         "sort B; A = List(List(B)); C = List(B);
-         map result: Bool;
+         map result: A # List(C) -> Bool;
          var f: A; g: List(C);
-         eqn result = (f == g);",
+         eqn result(f, g) = (f == g);",
     );
 }
 
@@ -396,9 +400,9 @@ fn test_ambiguous_projection_function_resolves() {
         "sort S;
              T = struct T0 | T1(pi_1: T)?IS_T1 | T2(pi_1: S)?IS_T2;
          map R: T -> Bool;
-             result: Bool;
+             result: T -> Bool;
          var p: T;
-         eqn result = R(pi_1(p)) && IS_T1(p);",
+         eqn result(p) = R(pi_1(p)) && IS_T1(p);",
     );
 }
 
@@ -482,8 +486,8 @@ fn test_set_complement_subset_with_context() {
     // test_emptyset_complement_subset below; with the element sort supplied by a
     // variable, complement-under-subset itself types fine. mCRL2:
     // test_emptyset_complement_subset, test_emptyset_complement_subset_reverse.
-    check_ok("map b: Bool; var s: Set(Nat); eqn b = !{} <= s;");
-    check_ok("map b: Bool; var s: Set(Nat); eqn b = s <= !{};");
+    check_ok("map b: Set(Nat) -> Bool; var s: Set(Nat); eqn b(s) = !{} <= s;");
+    check_ok("map b: Set(Nat) -> Bool; var s: Set(Nat); eqn b(s) = s <= !{};");
 }
 
 #[test]
@@ -668,13 +672,19 @@ fn test_anonymous_struct_variable_sorts() {
     // identical ones share one hoisted declaration, so equal binder sorts
     // compare while a recogniser makes the sorts distinct. mCRL2:
     // test_equal_context, test_not_equal_context.
-    check_ok("map b: Bool; var x: struct t?is_t; y: struct t?is_t; eqn b = (x == y);");
+    check_ok(
+        "map b: (struct t?is_t) # (struct t?is_t) -> Bool; var x: struct t?is_t; y: struct t?is_t; \
+         eqn b(x, y) = (x == y);",
+    );
     // With non-decl hoisting, `struct t` and `struct t?is_t` each hoist to
     // abstract sorts (no constructors), so no duplicate-constant collision
     // occurs at the signature stage. Instead inference rejects `x == y`
     // because `x: @struct0` and `y: @struct1` are distinct nominal sorts with
     // no common supersort. mCRL2: test_not_equal_context.
-    let err = check_err("map b: Bool; var x: struct t; y: struct t?is_t; eqn b = (x == y);");
+    let err = check_err(
+        "map b: (struct t) # (struct t?is_t) -> Bool; var x: struct t; y: struct t?is_t; \
+         eqn b(x, y) = (x == y);",
+    );
     assert!(
         matches!(err, WellTypedError::Inference(InferenceError::NoTyping { .. })),
         "{err}"
@@ -716,18 +726,18 @@ fn test_where_bindings_resolve_against_declared_variables() {
     // With outer declarations, every right-hand side types against the
     // declared variables (not the sibling bindings). mCRL2:
     // test_where_in_context and its four *_in_context variants.
-    check_ok("map p: Pos; var x: Pos; y: Nat; eqn p = x + y whr x = 3, y = 0 end;");
-    check_ok("map p: Pos; var x: Pos; y: Pos; eqn p = x + y whr x = 3, y = x + 10 end;");
-    check_ok("map p: Pos; var x: Pos; y: Pos; eqn p = x + y whr x = 3, y = x + y + 10 end;");
-    check_ok("map p: Pos; var x: Pos; y: Nat; eqn p = x + y whr x = y + 10, y = 0 end;");
-    check_ok("map p: Pos; var x: Pos; y: Pos; eqn p = x + y whr x = y + 10, y = x + 3 end;");
+    check_ok("map p: Pos # Nat -> Pos; var x: Pos; y: Nat; eqn p(x, y) = x + y whr x = 3, y = 0 end;");
+    check_ok("map p: Pos # Pos -> Pos; var x: Pos; y: Pos; eqn p(x, y) = x + y whr x = 3, y = x + 10 end;");
+    check_ok("map p: Pos # Pos -> Pos; var x: Pos; y: Pos; eqn p(x, y) = x + y whr x = 3, y = x + y + 10 end;");
+    check_ok("map p: Pos # Nat -> Pos; var x: Pos; y: Nat; eqn p(x, y) = x + y whr x = y + 10, y = 0 end;");
+    check_ok("map p: Pos # Pos -> Pos; var x: Pos; y: Pos; eqn p(x, y) = x + y whr x = y + 10, y = x + 3 end;");
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_where_mix_nat_list() {
     // mCRL2: test_where_mix_nat_list.
-    check_ok("map l: List(Nat); var x: Nat; z: Nat; eqn l = x1 ++ y whr x1 = [0, z], y = [x] end;");
+    check_ok("map l: Nat # Nat -> List(Nat); var x: Nat; z: Nat; eqn l(x, z) = x1 ++ y whr x1 = [0, z], y = [x] end;");
 }
 
 #[test]
@@ -738,7 +748,7 @@ fn test_where_mix_nat_pos_list_types_globally() {
     // then cannot concatenate them; merc's solver types both bindings at
     // List(Nat) — the `[x]` element upcasts Pos <= Nat — which is a coherent
     // assignment, so the equation is accepted. mCRL2: test_where_mix_nat_pos_list (rejected).
-    check_ok("map l: List(Nat); var x: Pos; y: Nat; eqn l = x ++ y whr x = [0, y], y = [x] end;");
+    check_ok("map l: Pos # Nat -> List(Nat); var x: Pos; y: Nat; eqn l(x, y) = x ++ y whr x = [0, y], y = [x] end;");
 }
 
 #[test]
@@ -800,8 +810,8 @@ fn test_same_arity_overloads_resolved_by_argument() {
     // test_duplicate_function_same_arity_application_{nat,pos}_{constant,variable}.
     check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Pos; eqn r = f(0);");
     check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Nat; eqn r = f(1);");
-    check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Pos; var x: Nat; eqn r = f(x);");
-    check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Nat; var x: Pos; eqn r = f(x);");
+    check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Nat -> Pos; var x: Nat; eqn r(x) = f(x);");
+    check_ok("map f: Pos -> Nat; f: Nat -> Pos; r: Pos -> Nat; var x: Pos; eqn r(x) = f(x);");
 }
 
 #[test]
@@ -814,11 +824,11 @@ fn test_function_application_argument_upcasts() {
     check_ok("map f: Nat -> Bool; g: Nat -> Bool; eqn g = f;");
     check_ok("map f: Nat -> Bool; b: Bool; eqn b = f(1);");
     check_ok("map f: Nat -> Bool; b: Bool; eqn b = f(0);");
-    check_ok("map f: Nat -> Bool; b: Bool; var x: Pos; eqn b = f(x);");
-    check_ok("map f: Nat -> Bool; b: Bool; var x: Nat; eqn b = f(x);");
+    check_ok("map f: Nat -> Bool; b: Pos -> Bool; var x: Pos; eqn b(x) = f(x);");
+    check_ok("map f: Nat -> Bool; b: Nat -> Bool; var x: Nat; eqn b(x) = f(x);");
     for spec in [
         "map f: Nat -> Bool; b: Bool; eqn b = f(-1);",
-        "map f: Nat -> Bool; b: Bool; var x: Int; eqn b = f(x);",
+        "map f: Nat -> Bool; b: Int -> Bool; var x: Int; eqn b(x) = f(x);",
     ] {
         let err = check_err(spec);
         assert!(
@@ -837,11 +847,11 @@ fn test_struct_constructor_applications() {
     check_ok("sort S = struct c(Nat); map g: Nat -> S; eqn g = c;");
     check_ok("sort S = struct c(Nat); map r: S; eqn r = c(1);");
     check_ok("sort S = struct c(Nat); map r: S; eqn r = c(0);");
-    check_ok("sort S = struct c(Nat); map r: S; var x: Pos; eqn r = c(x);");
-    check_ok("sort S = struct c(Nat); map r: S; var x: Nat; eqn r = c(x);");
+    check_ok("sort S = struct c(Nat); map r: Pos -> S; var x: Pos; eqn r(x) = c(x);");
+    check_ok("sort S = struct c(Nat); map r: Nat -> S; var x: Nat; eqn r(x) = c(x);");
     for spec in [
         "sort S = struct c(Nat); map r: S; eqn r = c(-1);",
-        "sort S = struct c(Nat); map r: S; var x: Int; eqn r = c(x);",
+        "sort S = struct c(Nat); map r: Int -> S; var x: Int; eqn r(x) = c(x);",
     ] {
         let err = check_err(spec);
         assert!(
@@ -856,7 +866,7 @@ fn test_struct_constructor_applications() {
 fn test_data_expressions_struct() {
     // Constructor application through a nested anonymous struct declaration.
     // mCRL2: test_data_expressions_struct.
-    check_ok("sort S = struct t(struct e(Nat)); map b: Bool; var x: S; eqn b = (x == t(e(3)));");
+    check_ok("sort S = struct t(struct e(Nat)); map b: S -> Bool; var x: S; eqn b(x) = (x == t(e(3)));");
 }
 
 #[test]
@@ -872,7 +882,7 @@ fn test_proper_use_of_int2pos() {
 fn test_ambiguous_function_application_recursive() {
     // Resolves with f: Pos -> Int (exact into g) over f: Pos -> Nat (one
     // upcast). mCRL2: test_ambiguous_function_application_recursive (rejected).
-    check_ok("map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; b: Bool; var x: Pos; eqn b = g(f(x));");
+    check_ok("map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; b: Pos -> Bool; var x: Pos; eqn b(x) = g(f(x));");
 }
 
 #[test]
@@ -881,8 +891,8 @@ fn test_ambiguous_function_application_recursive2() {
     // The added g: Int -> Int is filtered out by the equation's Bool
     // left-hand side. mCRL2: test_ambiguous_function_application_recursive2 (rejected).
     check_ok(
-        "map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; g: Int -> Int; b: Bool; var x: Pos;
-         eqn b = g(f(x));",
+        "map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; g: Int -> Int; b: Pos -> Bool; var x: Pos;
+         eqn b(x) = g(f(x));",
     );
 }
 
@@ -893,8 +903,8 @@ fn test_ambiguous_function_application_recursive3() {
     // f: Int -> Int (argument upcast by two). mCRL2:
     // test_ambiguous_function_application_recursive3 (rejected).
     check_ok(
-        "map g: Int -> Bool; f: Pos -> Nat; f,g: Int -> Int; b: Bool; var x: Pos;
-         eqn b = g(f(x));",
+        "map g: Int -> Bool; f: Pos -> Nat; f,g: Int -> Int; b: Pos -> Bool; var x: Pos;
+         eqn b(x) = g(f(x));",
     );
 }
 
@@ -904,8 +914,8 @@ fn test_ambiguous_function_application_recursive4() {
     // g: Nat -> Int is filtered by the Bool left-hand side; f resolves as in
     // the first case. mCRL2: test_ambiguous_function_application_recursive4 (rejected).
     check_ok(
-        "map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; g: Nat -> Int; b: Bool; var x: Pos;
-         eqn b = g(f(x));",
+        "map g: Int -> Bool; f: Pos -> Nat; f: Pos -> Int; g: Nat -> Int; b: Pos -> Bool; var x: Pos;
+         eqn b(x) = g(f(x));",
     );
 }
 
@@ -918,7 +928,7 @@ fn test_improvement_ranked_overload_through_list_literal() {
     // merc ranks the exact overload. Same limitation as
     // test_ambiguous_function_application_recursive, but the disambiguating
     // context is a container literal rather than a function application.
-    check_ok("map h: List(Nat) -> Bool; f: Pos -> Nat; f: Pos -> Pos; b: Bool; var x: Pos; eqn b = h([f(x)]);");
+    check_ok("map h: List(Nat) -> Bool; f: Pos -> Nat; f: Pos -> Pos; b: Pos -> Bool; var x: Pos; eqn b(x) = h([f(x)]);");
 }
 
 #[test]
@@ -930,8 +940,8 @@ fn test_improvement_ranked_overload_two_level_nesting() {
     // ambiguous; merc ranks the exact overload. Deeper nesting than any ported
     // recursive case.
     check_ok(
-        "map top: Int -> Bool; mid: Nat -> Int; mid: Nat -> Nat; bot: Pos -> Nat; b: Bool;
-         var x: Pos; eqn b = top(mid(bot(x)));",
+        "map top: Int -> Bool; mid: Nat -> Int; mid: Nat -> Nat; bot: Pos -> Nat; b: Pos -> Bool;
+         var x: Pos; eqn b(x) = top(mid(bot(x)));",
     );
 }
 
@@ -943,7 +953,7 @@ fn test_improvement_where_global_int_list() {
     // types `x = [-1, y]` and `y = [x]` each at its local minimal sort and
     // then cannot concatenate them; merc solves the whole equation jointly,
     // upcasting both list elements to `Int`. mCRL2 rejects test_where_mix_nat_pos_list.
-    check_ok("map l: List(Int); var x: Pos; y: Nat; eqn l = x ++ y whr x = [-1, y], y = [x] end;");
+    check_ok("map l: Pos # Nat -> List(Int); var x: Pos; y: Nat; eqn l(x, y) = x ++ y whr x = [-1, y], y = [x] end;");
 }
 
 #[test]
@@ -957,8 +967,8 @@ fn test_improvement_ambiguous_projection_disambiguated_by_use() {
     // typechecker"); merc's constraint solver is that new typechecker.
     check_ok(
         "sort S; T = struct A(val: T)?is_A | B(val: S)?is_B | T0;
-         map use: S -> Bool; result: Bool;
-         var p: T; eqn result = use(val(p)) && is_B(p);",
+         map use: S -> Bool; result: T -> Bool;
+         var p: T; eqn result(p) = use(val(p)) && is_B(p);",
     );
 }
 

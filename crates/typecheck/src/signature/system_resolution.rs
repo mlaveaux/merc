@@ -7,8 +7,11 @@ use merc_syntax::UntypedDataSpecification;
 use crate::BUILTIN_SCHEME_TEMPLATE;
 use crate::CONTAINER_TEMPLATES;
 use crate::PolySortScheme;
+use crate::ResolvedSortId;
 use crate::Signature;
 use crate::TypeCheckContext;
+use crate::WellTypedError;
+use crate::push_declarations;
 use crate::push_overload;
 use crate::resolve_sort;
 
@@ -33,12 +36,12 @@ use crate::resolve_sort;
 /// `resolve_sort` is infallible here, the same call the user's own signature
 /// resolves through.
 ///
-/// Unlike `build_signature` this runs no well-typedness checks here — not
-/// because the system specification is trusted, but because `build_signature`'s
-/// checks would misfire on it: it legitimately declares things a user cannot,
-/// such as constructors for the basic sorts (`@c0: Nat`). The system
-/// specification's own well-formedness is instead verified separately and
-/// extensively by `check_system_specification`, unconditionally.
+/// Runs the same [`push_declarations`] well-typedness checks `build_signature` runs for the user's
+/// own declarations, `trusted` (skipping only the basic-sort-constructor rule `@c0: Nat` and
+/// friends legitimately break) — this is a real soundness check on the generated content, not a
+/// user-only courtesy, and catches what `check_constructor_target` used to hand-check on its own
+/// (no constructor for a function sort), plus disjointness and duplicate-constant-different-sort
+/// checks that specification never ran on system content before.
 ///
 /// Requires `build_signature` to have already populated `ctx.signature` with
 /// the user's own declarations, so there is something to merge into.
@@ -52,21 +55,18 @@ pub(crate) fn resolve_system_signature(
     ctx: &mut TypeCheckContext,
     spec: &UntypedDataSpecification,
     system: &UntypedDataSpecification,
-) {
+) -> Result<(), WellTypedError> {
     let mut signature = Signature::default();
+    let mut constants: HashMap<String, ResolvedSortId> = HashMap::new();
+    push_declarations(ctx, system, spec, true, &mut signature, &mut constants)?;
 
     for decl in &system.constructor_declarations {
         let id = resolve_sort(ctx, spec, &decl.sort);
-        push_overload(
-            signature.constructors.entry(decl.identifier.node.clone()).or_default(),
-            id,
-        );
         ctx.system_symbol_spans
             .insert((decl.identifier.node.clone(), id), decl.identifier.span.clone());
     }
     for decl in &system.map_declarations {
         let id = resolve_sort(ctx, spec, &decl.sort);
-        push_overload(signature.mappings.entry(decl.identifier.node.clone()).or_default(), id);
         ctx.system_symbol_spans
             .insert((decl.identifier.node.clone(), id), decl.identifier.span.clone());
     }
@@ -79,6 +79,7 @@ pub(crate) fn resolve_system_signature(
     );
     ctx.signature = Some(Arc::new(merged));
     ctx.basics_signature = Some(Arc::new(signature));
+    Ok(())
 }
 
 /// Resolves the system-defined specification's declarations onto the interned
@@ -268,6 +269,7 @@ mod tests {
     use crate::ResolvedSortId;
     use crate::Signature;
     use crate::TypeCheckContext;
+    use crate::WellTypedError;
     use crate::basic_sort_data_specification;
     use crate::build_system_defined_specification;
     use crate::merge_signatures;
@@ -292,7 +294,7 @@ mod tests {
         // `@NatPair`/`@word`, folded in by that same pipeline run).
         let mut basics = basic_sort_data_specification(&mut sources, NumberEncoding::Binary);
         crate::apply_sorts_in_spec(&mut basics, |sort| crate::resolve_sort_id(sort, spec.sorts())).unwrap();
-        resolve_system_signature(&mut ctx, spec.data_specification(), &basics);
+        resolve_system_signature(&mut ctx, spec.data_specification(), &basics).unwrap();
         (spec, ctx)
     }
 
@@ -325,6 +327,41 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
+    fn test_constructor_for_basic_sort_is_allowed_when_trusted() {
+        // The system-defined specification declares constructors for basic
+        // sorts on purpose (`@c0: Nat`) — `push_declarations`'s `trusted`
+        // parameter is what exempts this, the one signature rule trusted
+        // content legitimately breaks.
+        let spec = DataSpecification::from_untyped(UntypedDataSpecification::parse("map f: Bool;").unwrap()).unwrap();
+        let mut ctx = TypeCheckContext::new();
+        crate::build_signature(&mut ctx, spec.data_specification()).unwrap();
+
+        let system = UntypedDataSpecification::parse("cons @c0: Nat;").unwrap();
+        resolve_system_signature(&mut ctx, spec.data_specification(), &system)
+            .expect("a constructor for a basic sort is legitimate in the system spec");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // Test is too slow under miri
+    fn test_constructor_for_function_sort_is_rejected_even_when_trusted() {
+        // Unlike the basic-sort rule, this one is not exempted for trusted
+        // content: no template legitimately declares a function-sort
+        // constructor, so this only ever fires on an editing mistake.
+        let spec = DataSpecification::from_untyped(UntypedDataSpecification::parse("map f: Bool;").unwrap()).unwrap();
+        let mut ctx = TypeCheckContext::new();
+        crate::build_signature(&mut ctx, spec.data_specification()).unwrap();
+
+        let system = UntypedDataSpecification::parse("cons c: Bool -> (Nat -> Bool);").unwrap();
+        let err = resolve_system_signature(&mut ctx, spec.data_specification(), &system)
+            .expect_err("a constructor targeting a function sort must be rejected");
+        assert!(
+            matches!(err, WellTypedError::ConstructorForFunctionSort { ref sort, .. } if sort == "(Nat -> Bool)"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_template_instantiation_carries_user_sorts() {
         // `resolve_sort`'s handling of a template-substituted `Resolved` node,
         // exercised directly: production only ever feeds `resolve_system_signature`
@@ -353,7 +390,7 @@ mod tests {
 
         let mut ctx = TypeCheckContext::new();
         crate::build_signature(&mut ctx, spec.data_specification()).unwrap();
-        resolve_system_signature(&mut ctx, spec.data_specification(), &system);
+        resolve_system_signature(&mut ctx, spec.data_specification(), &system).unwrap();
 
         let def = SortId::new(*spec.sorts().index("D").unwrap());
         let d = ctx.sorts.def(def);

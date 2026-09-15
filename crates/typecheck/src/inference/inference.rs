@@ -122,7 +122,10 @@ pub enum InferenceError {
     )]
     NoTyping {
         expression: String,
-        /// The sort the expression was checked against, if available.
+        /// The sort the expression was checked against, when inference ran with an
+        /// externally-supplied expected sort ([`Roots::ExpressionAgainst`], e.g. via
+        /// `check_expression_against`); `None` when checking a whole equation, where no single
+        /// sort is being blamed.
         sort: Option<String>,
         span: Span,
     },

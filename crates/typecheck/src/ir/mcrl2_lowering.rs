@@ -1552,7 +1552,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_fset_literal_lowers() {
-        let equation = lower("map s: FSet(Nat); var n: Nat; eqn s = {n};").expect("singleton FSet lowers");
+        let equation = lower("map s: Nat -> FSet(Nat); var n: Nat; eqn s(n) = {n};").expect("singleton FSet lowers");
         // @fset_insert(n, {})
         assert!(equation.rhs.to_string().contains("@fset_insert"), "{}", equation.rhs);
     }
@@ -1560,7 +1560,8 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_fset_literal_two_elements_lowers() {
-        let equation = lower("map s: FSet(Nat); var n: Nat; m: Nat; eqn s = {n, m};").expect("two-element FSet lowers");
+        let equation = lower("map s: Nat # Nat -> FSet(Nat); var n: Nat; m: Nat; eqn s(n, m) = {n, m};")
+            .expect("two-element FSet lowers");
         let rhs = equation.rhs.to_string();
         assert!(rhs.contains("@fset_insert"), "{rhs}");
     }
@@ -1568,7 +1569,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_fbag_literal_lowers() {
-        let equation = lower("map b: FBag(Nat); var n: Nat; eqn b = {n: 1};").expect("singleton FBag lowers");
+        let equation = lower("map b: Nat -> FBag(Nat); var n: Nat; eqn b(n) = {n: 1};").expect("singleton FBag lowers");
         // @fbag_cinsert(n, @cNat(@c1), {:})  — 1 infers Pos, widened to Nat
         let rhs = equation.rhs.to_string();
         assert!(rhs.contains("@fbag_cinsert"), "{rhs}");
@@ -1707,7 +1708,8 @@ mod tests {
     fn test_builtin_arithmetic_op() {
         // `+` is a system-declared op (`NameTarget::Op` after overload resolution against
         // the basic-sort system signature), but verifies that arithmetic resolves.
-        let equation = lower("map n: Nat; var a: Nat; b: Nat; eqn n = a + b;").expect("arithmetic lowers");
+        let equation =
+            lower("map n: Nat # Nat -> Nat; var a: Nat; b: Nat; eqn n(a, b) = a + b;").expect("arithmetic lowers");
         assert_eq!(equation.rhs.to_string(), "+(a, b)");
     }
 
@@ -1717,7 +1719,7 @@ mod tests {
         // `in` is a POLYMORPHIC_SIGNATURE op (`NameTarget::Builtin`) whose
         // inferred sort is the concrete instantiation; the lowered term embeds
         // that sort directly.
-        let equation = lower("map b: Bool; var n: Nat; s: Set(Nat); eqn b = n in s;")
+        let equation = lower("map b: Nat # Set(Nat) -> Bool; var n: Nat; s: Set(Nat); eqn b(n, s) = n in s;")
             .expect("container op lowers with step 3 fix");
         assert_eq!(equation.rhs.to_string(), "in(n, s)");
     }
@@ -1727,7 +1729,7 @@ mod tests {
     fn test_builtin_func_update() {
         // `@func_update` is lowered by lower.rs to an Application; with the
         // step-3 fix its Builtin target uses the inferred sort directly.
-        let equation = lower("map f: Nat -> Bool; map g: Nat -> Bool; var n: Nat; eqn g = f[n -> true];")
+        let equation = lower("map f: Nat -> Bool; map g: Nat -> Nat -> Bool; var n: Nat; eqn g(n) = f[n -> true];")
             .expect("@func_update lowers with step 3 fix");
         assert_eq!(equation.rhs.to_string(), "@func_update(f, n, true)");
     }

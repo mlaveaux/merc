@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![debugger_visualizer(gdb_script_file = "gdb_pretty_printers.py")]
 
 mod aterm;
 mod aterm_binary_stream;

@@ -257,7 +257,7 @@ impl DataSpecification {
         // Resolve the system-defined declarations of the *basic* sorts onto
         // the same lattice, so Phase-3 inference sees the overload sets of the
         // built-in operators.
-        resolve_system_signature(&mut context, &spec, &basics);
+        resolve_system_signature(&mut context, &spec, &basics)?;
         debug!("typecheck: resolved the system signature");
 
         // Type checks every container/function-update template's own
