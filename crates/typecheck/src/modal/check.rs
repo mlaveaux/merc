@@ -1,5 +1,13 @@
 //! The scoped walk over the state formula: checks each `val(...)` expression.
 //!
+//! At the action-formula level (nested inside a `<...>`/`[...]` modality) a `val` is always
+//! `Bool`. At the state-formula level a `val` can be either `Real` — combined via
+//! `DataValExprLeftMult`/`DataValExprRightMult` into a PRES-style quantitative formula — or
+//! `Bool`, a plain mu-calculus atom. Which one applies isn't declared anywhere, so the first
+//! state-level `val(...)` the checker reaches tries `Real` then `Bool` and fixates the whole
+//! formula's [`ValSort`] to whichever matches; every later `val(...)` is then held to that same
+//! sort, so a formula can't mix the two. See `check_val_expr`.
+//!
 //! To resolve a state variable's sort, the checker uses the `state_vars` stack,
 //! which pairs each fixpoint variable's own [`StateVarId`] with its declaring
 //! span (for reporting) and its declared parameter sorts.
@@ -249,7 +257,8 @@ fn check_state_formula(
 /// Type-checks a state-formula-level `val(...)` occurrence. On the first one reached
 /// (`*val_sort == ValSort::Unknown`), tries `Real` then `Bool`, fixating `val_sort` to whichever
 /// sort the expression actually type-checks against; every `val(...)` reached afterward — once
-/// `val_sort` is no longer `Unknown` — is held to that same sort. See this module's doc comment.
+/// `val_sort` is no longer `Unknown` — is held to that same sort. See the module doc comment above
+/// for why this is necessary.
 fn check_val_expr(
     data: &mut DataSpecification,
     scope: &Scope,

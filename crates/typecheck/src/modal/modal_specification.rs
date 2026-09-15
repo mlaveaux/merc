@@ -18,14 +18,16 @@ use crate::TypingInfo;
 use super::ModalError;
 use super::check;
 
-/// Whether a state formula's `val(...)` occurrences are `Real`- or `Bool`-sorted.
-///
-/// At the action-formula level (nested inside a `<...>`/`[...]` modality) a `val` is always
-/// `Bool`.
+/// Whether a state formula's `val(...)` occurrences are `Real`- or `Bool`-sorted; see
+/// `super::check`'s module doc comment for how this is decided.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValSort {
+    /// Every `val(...)` in the formula is `Real`-sorted, combined via a `*`-multiplier into a
+    /// PRES-style quantitative formula.
     Real,
+    /// Every `val(...)` in the formula is `Bool`-sorted, a plain mu-calculus atom.
     Bool,
+    /// The formula has no state-level `val(...)` at all, so nothing pins the choice down.
     Unknown,
 }
 
