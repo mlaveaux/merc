@@ -172,7 +172,15 @@ impl SabreRewriter {
                         }
                         Some(sit) => {
                             SabreRewriter::handle_side_info(
-                                tp, automaton, builder, term_stack, &mut cs, leaf_index, sit, stats,
+                                tp,
+                                automaton,
+                                builder,
+                                term_stack,
+                                condition_cache,
+                                &mut cs,
+                                leaf_index,
+                                sit,
+                                stats,
                             );
                         }
                     }
@@ -293,6 +301,7 @@ impl SabreRewriter {
         automaton: &'a SetAutomaton<AnnouncementSabre>,
         builder: &mut TermStackBuilder,
         term_stack: &mut SharedTermStack,
+        condition_cache: &mut ConditionCache,
         cs: &mut ConfigurationStack<'a>,
         leaf_index: usize,
         sit: SideInfoType<'a>,
@@ -330,7 +339,16 @@ impl SabreRewriter {
 
                 // Apply the delayed rewrite rule if the conditions hold
                 if check_equivalence_classes(&matched, &annotation.equivalence_classes)
-                    && SabreRewriter::conditions_hold(tp, automaton, builder, term_stack, annotation, &matched, stats)
+                    && SabreRewriter::conditions_hold(
+                        tp,
+                        automaton,
+                        builder,
+                        term_stack,
+                        condition_cache,
+                        annotation,
+                        &matched,
+                        stats,
+                    )
                 {
                     SabreRewriter::apply_rewrite_rule(
                         tp,
