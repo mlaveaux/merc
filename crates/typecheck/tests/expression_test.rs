@@ -1,6 +1,4 @@
-//! Type checking and lowering of a *standalone* data expression, the entry
-//! point `merc-rewrite` uses to turn a term written on the command line into a
-//! lowered aterm it can rewrite with a specification's rules.
+//! Type checking and lowering of a *standalone* data expression.
 
 use merc_syntax::DataExpr;
 use merc_syntax::SourceMap;
@@ -78,16 +76,7 @@ fn test_struct_projection_lowers() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_operator_node_is_lowered_to_an_application() {
-    // `1 + 1` is a `Binary` node; both inference and lowering require the
-    // application form, so `typecheck_expression` must lower it first.
-    assert_eq!(lower("map f: Bool;", "1 + 1"), "+(@c1, @c1)");
-}
-
-#[test]
-#[cfg_attr(miri, ignore)] // Test is too slow under miri
-fn test_expression_types_at_its_minimal_sort() {
-    // Nothing widens a standalone expression, so `1 + 1` is the `Pos` overload
-    // of `+` and its literals stay `Pos` (`@c1`, not `@cNat(@c1)`).
+    // `1 + 1` is a `Binary` node.
     assert_eq!(lower("map f: Bool;", "1 + 1"), "+(@c1, @c1)");
 }
 
@@ -95,7 +84,7 @@ fn test_expression_types_at_its_minimal_sort() {
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_argument_coercion_is_inserted() {
     // `g`'s parameter is `Nat` but `1` infers to `Pos`, so lowering inserts the
-    // `@cNat` widening — the same coercion an equation argument gets.
+    // `@cNat` widening.
     assert_eq!(lower("map g: Nat -> Bool;", "g(1)"), "g(@cNat(@c1))");
 }
 

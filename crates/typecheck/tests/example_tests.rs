@@ -196,10 +196,6 @@ fn test_typecheck_mcrl2_spec(input: &str, snapshot_file: &str) {
     let spec = UntypedProcessSpecification::parse(input).expect("the example corpus parses in merc_syntax");
     match ProcessSpecification::from_untyped(spec) {
         Ok(typed) => {
-            // `to_typed_string` (rather than the plain `Display` of `data_specification()`)
-            // annotates every equation's sub-expressions with their resolved sort, so a
-            // regression in overload resolution or an implicit coercion shows up as a snapshot
-            // diff even when it changes no declaration.
             check_snapshot(
                 &typed.data_specification().to_typed_string(),
                 Path::new(snapshot_file),
@@ -211,13 +207,7 @@ fn test_typecheck_mcrl2_spec(input: &str, snapshot_file: &str) {
     }
 }
 
-/// Corpus files whose structs happen to declare unrelated, same-named constructors/projections —
-/// e.g. `garage.mcrl2`'s "free" — which now genuinely collide once struct equations resolve
-/// against the pooled signature unscoped (see
-/// `docs/typecheck-struct-system-unification-plan.md`'s "Bug 1"/"Bug 2", and
-/// `signature/system_resolution.rs`'s `test_struct_nullary_constant_colliding_with_unrelated_struct_function_is_rejected`).
-/// This is a known, accepted regression: it's asserted here so a future fix that resolves it (or
-/// a future change that reintroduces the collision elsewhere) shows up as a test failure.
+/// Corpus files whose structs happen to declare unrelated, same-named constructors/projections.
 #[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage.mcrl2") ; "garage.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r1.mcrl2") ; "garage-r1.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r2.mcrl2") ; "garage-r2.mcrl2")]

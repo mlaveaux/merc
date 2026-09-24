@@ -84,7 +84,7 @@ fn test_hovering_a_numeric_operator_resolves_to_its_system_mapping() {
             assert_eq!(name, "+");
             assert!(
                 declaration.is_some(),
-                "a system-defined mapping should carry a real span since Milestone 3"
+                "a system-defined mapping should carry a real span"
             );
         }
         other => panic!("expected a SystemDefined resolution for '+', got {other:?}"),
@@ -217,7 +217,7 @@ fn test_overloaded_name_resolves_to_the_matching_declaration_by_sort() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_duplicate_declaration_resolves_to_the_first() {
-    // A literal duplicate (legal in mCRL2) is the one case `(name, sort)` doesn't disambiguate;
+    // A literal duplicate is the one case `(name, sort)` doesn't disambiguate;
     // it resolves to the first declaration in source order.
     let text = "map f: Nat; f: Nat; eqn f = 1;";
     match resolved_name_at(text, "f =") {
@@ -236,8 +236,6 @@ fn test_duplicate_declaration_resolves_to_the_first() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_system_defined_symbol_reports_no_user_declaration() {
-    // `succ` is an Appendix-B mapping with no *user* declaration to point at, but it does carry a
-    // real span into its own bundled template (`nat.mcrl2`) since Milestone 3.
     match resolved_name_at("map f: Nat; eqn f = succ(0);", "succ") {
         ResolvedName::SystemDefined { name, declaration } => {
             assert_eq!(name, "succ");
@@ -250,9 +248,6 @@ fn test_system_defined_symbol_reports_no_user_declaration() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_a_built_in_sort_reference_now_resolves_to_its_appendix_b_declaration() {
-    // Before Milestone 3, a reference to a `Simple` built-in sort like `Nat` had nothing to
-    // resolve to at all (no `ResolvedName` was ever pushed for it) — it now resolves the same way
-    // a system-defined constructor/mapping does, with a real span into its own bundled template.
     let text = "map f: Nat;";
     let untyped = UntypedDataSpecification::parse(text).expect("the specification should parse");
     let mut sources = SourceMap::new();

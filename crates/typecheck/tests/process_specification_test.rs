@@ -234,8 +234,8 @@ fn test_assignment_to_an_unknown_parameter_is_rejected() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_duplicate_assignment_target_in_instantiation_is_rejected() {
-    // mCRL2: test_double_variable_assignment_in_process. `v` is assigned twice in the same
-    // instantiation; unlike test_assignment_form_instantiation_may_omit_parameters (leaving a
+    // `v` is assigned twice in the same instantiation; unlike
+    // test_assignment_form_instantiation_may_omit_parameters (leaving a
     // parameter unassigned is fine), assigning the same one twice never makes sense.
     let error = check_err("proc X(v: Bool) = tau . X(v = true, v = false); init X(true);");
     let ProcessError::NoMatchingOverload { cause, .. } = error else {
@@ -434,7 +434,7 @@ fn test_rename_with_mismatched_arity_is_rejected() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_self_reference_may_omit_unchanged_process_parameters() {
-    // mCRL2: test_process_reference_assignment. `P`'s own body refers to itself both bare (`P()`,
+    // `P`'s own body refers to itself both bare (`P()`,
     // keeping `b`'s current value) and via a partial assignment (`P(b = false)`); both are
     // instances of the general assignment-form omission already covered by
     // test_assignment_form_instantiation_may_omit_parameters, exercised here specifically as a
@@ -445,10 +445,10 @@ fn test_self_reference_may_omit_unchanged_process_parameters() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_unapplied_function_used_as_a_condition_is_rejected() {
-    // For mCRL2 bug #732 (test_function_condition): `b` names a declared *mapping*
-    // `Nat -> Nat`, not a `Bool`-sorted expression, so using it bare as a condition is rejected —
-    // distinct from test_non_boolean_condition_is_rejected, which uses a non-Bool literal rather
-    // than an unapplied function symbol.
+    // `b` names a declared *mapping* `Nat -> Nat`, not a `Bool`-sorted
+    // expression, so using it bare as a condition is rejected — distinct from
+    // test_non_boolean_condition_is_rejected, which uses a non-Bool literal
+    // rather than an unapplied function symbol.
     let error = check_err("map b: Nat -> Nat; init b -> tau <> delta;");
     assert!(matches!(error, ProcessError::Inference(_)), "got {error:?}");
 }

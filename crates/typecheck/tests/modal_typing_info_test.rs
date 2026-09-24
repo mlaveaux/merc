@@ -1,8 +1,3 @@
-//! Tests for [`ModalSpecification::typing_info`]: the span-keyed hover/go-to-definition
-//! information accumulated over a checked state formula's `val(...)` expressions,
-//! `forall`/`exists` binders, and `mu`/`nu` fixpoint parameters. Mirrors
-//! `pbes_typing_info_test.rs`.
-
 use merc_syntax::UntypedStateFrmSpec;
 use merc_typecheck::FormulaType;
 use merc_typecheck::ModalSpecification;

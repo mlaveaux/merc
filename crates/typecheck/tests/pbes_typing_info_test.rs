@@ -1,7 +1,3 @@
-//! Tests for [`PbesSpecification::typing_info`]: the span-keyed hover/go-to-definition
-//! information accumulated over a checked PBES's `val(...)` expressions, `PropVarInst` arguments,
-//! and quantifier binders.
-
 use merc_syntax::UntypedPbes;
 use merc_typecheck::PbesSpecification;
 use merc_typecheck::ResolvedName;
@@ -249,14 +245,11 @@ fn test_self_recursive_prop_var_inst_name_goto_def_resolves_to_its_declaration()
 }
 
 /// A list literal's element sort widens to the joined sort of all its elements (here `Nat`, from
-/// the `10`/`m` mix), not just the first element's own sort (`Pos`, `10`'s literal sort). mCRL2:
-/// test_pbes_specification2 — this failed in revision 10180 and before, inferring `List(Pos)`.
+/// the `10`/`m` mix), not just the first element's own sort (`Pos`, `10`'s literal sort).
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_list_literal_element_sort_widens_to_the_joined_sort_of_its_elements() {
     let text = "pbes nu X0(m: Nat) = forall i: Nat . val(!(i < 2)) || X0([10, m] . i); init X0(0);";
-    // The `.` (list-at) operator's own sort names its operand sorts directly: `List(Nat) # Nat ->
-    // Nat`, confirming the list literal `[10, m]` itself was inferred as `List(Nat)`, not
-    // `List(Pos)`. `". i)"` picks out this `.` specifically, not the quantifier's own `.`.
+    // The `.` (list-at) operator's own sort names its operand sorts directly.
     assert_eq!(hover(text, ". i)"), "(List(Nat) # Nat -> Nat)");
 }

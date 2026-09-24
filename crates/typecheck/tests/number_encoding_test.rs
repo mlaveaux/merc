@@ -130,10 +130,7 @@ fn test_literals_lower_to_the_selected_representation() {
 
     // A positive literal infers as `Pos`, but a *bare* literal widened to `Nat`
     // is rebuilt at `Nat` rather than wrapped in the encoding's Pos-to-Nat
-    // conversion — the term the mCRL2 toolset's own type checker produces (see
-    // `Lowering::coerce`). Under the binary encoding the two coincide, since
-    // `@cNat` is literally how a `Nat` literal is built; under the machine-word
-    // encoding it is the `Nat` digit chain, not `Pos2Nat` around a `Pos` one.
+    // conversion.
     assert_eq!(
         lowered_rhs("5", "Nat", NumberEncoding::Binary),
         "@cNat(@cDub(true, @cDub(false, @c1)))"

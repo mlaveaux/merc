@@ -220,9 +220,7 @@ fn test_struct_wrapping_fset_and_fbag_self_recursive() {
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_recursive_struct_without_base_case_is_empty() {
     // A single self-recursive constructor with no base case has no finite
-    // element — the fixpoint case Def. 15.1.7 exists for, distinct from the
-    // already-tested "abstract sort" and "constant constructor" cases.
-    // mCRL2: test_recursive_struct_no_base.
+    // element.
     match check_err("sort D = struct f(D);") {
         WellTypedError::EmptySort { sort, .. } if sort == "D" => {}
         other => panic!("unexpected error {other}"),
@@ -234,8 +232,7 @@ fn test_recursive_struct_without_base_case_is_empty() {
 fn test_sort_name_reused_as_map_and_variable() {
     // `S` is a sort, a mapping and an equation variable at once; the variable
     // shadows the mapping inside the equation, so `S(S)` applies the
-    // non-function variable and the equation is rejected. mCRL2:
-    // test_sort_as_variable.
+    // non-function variable and the equation is rejected.
     check(
         "sort S;
          map  S: S -> Bool;
@@ -248,10 +245,7 @@ fn test_sort_name_reused_as_map_and_variable() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_recursive_struct_via_function_codomain() {
-    // Struct recursion in a function sort's *codomain* (row A8 of the alias
-    // table; the domain variant is alias.rs's
-    // test_recursive_struct_through_function_sort). mCRL2:
-    // test_recursive_struct_via_function.
+    // Struct recursion in a function sort's *codomain*.
     match check_err("sort G = struct f(Nat -> G);") {
         WellTypedError::RecursiveAliasThroughFunctionSort { sort, .. } if sort == "G" => {}
         other => panic!("unexpected error {other}"),
@@ -261,8 +255,7 @@ fn test_recursive_struct_via_function_codomain() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_recursive_struct_list_indirect() {
-    // Struct recursion through a List alias one level removed. mCRL2:
-    // test_recursive_struct_list_indirect.
+    // Struct recursion through a List alias one level removed.
     check(
         "sort LP = List(P);
          P = struct b(x: LP);",
@@ -273,10 +266,6 @@ fn test_recursive_struct_list_indirect() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_duplicate_variables_in_var_block() {
-    // mCRL2 keeps both cases disabled as expected-failures — its checker does
-    // not catch the duplicate — but rejection is the intended semantics, and
-    // merc rejects. mCRL2: test_multiple_variables,
-    // test_multiple_variables_reversed (both disabled upstream).
     check(
         "sort S;
          map g: Bool;
@@ -298,9 +287,7 @@ fn test_duplicate_variables_in_var_block() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_normalize_sorts_across_equations() {
-    // Struct aliases used by mappings and equations together — the merc
-    // analogue of normalize_sorts_test.cpp's test_normalize_sorts, with the
-    // mappings that test adds through the C++ API declared inline instead.
+    // Struct aliases used by mappings and equations together.
     check(
         "sort Bit = struct e0 | e1;
               AbsBit = struct arbitrary;
@@ -316,27 +303,18 @@ fn test_normalize_sorts_across_equations() {
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-// mCRL2 keys zero-arity constants by name only (add_constant), rejecting any
-// second declaration regardless of sort. mCRL2: test_data_specification_constructor_same_signature.
 fn test_duplicate_constant_different_sort_rejected_cons_cons() {
     check("sort S; T; cons f: S; f: T;", false);
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-// See test_duplicate_constant_different_sort_rejected_cons_cons; here the
-// second declaration is a `map` instead of a `cons`.
-// mCRL2: test_data_specification_constructor_map_same_signature.
 fn test_duplicate_constant_different_sort_rejected_cons_map() {
     check("sort S; T; cons f: S; map f: T;", false);
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-// Two different structs each declaring a nullary constructor of the same
-// name (`open`, `closed`) are rejected for the same reason as
-// test_duplicate_constant_different_sort_rejected_*.
-// mCRL2: normalize_sorts_test.cpp test_loop_free_knuth_bendix_completion.
 fn test_cross_struct_duplicate_constant_name_rejected() {
     check(
         "sort front_doorstate = struct open | closed;
@@ -347,9 +325,6 @@ fn test_cross_struct_duplicate_constant_name_rejected() {
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-// Any user map/cons whose name collides with a system function is rejected,
-// regardless of sort ("Attempt to redeclare a system function"). No direct
-// upstream case; derived from mCRL2's system-function-redeclaration guard.
 fn test_user_declaration_shadowing_system_conversion_rejected() {
     check("map Nat2Pos: Nat -> Pos;", false);
 }
@@ -357,9 +332,6 @@ fn test_user_declaration_shadowing_system_conversion_rejected() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_many_aliases_to_nat_and_struct() {
-    // Ported from normalize_sorts_test.cpp: many aliases collapsing to `Nat`
-    // plus a wide structured sort. mCRL2 used this to catch an exponential
-    // normalization; it must stay fast and be accepted here.
     check(
         "sort A_t = Nat; B_t = Nat; C_t = Nat; D_t = Nat; E_t = Nat; F_t = Nat; G_t = Nat;
          H_t = Nat; I_t = Nat; J_t = Nat; K_t = Nat; L_t = Nat; M_t = Nat; N_t = Nat; O_t = Nat;
@@ -417,11 +389,11 @@ fn test_redeclaring_the_system_count_function_is_rejected() {
     }
 }
 
+/// `@` is reserved for Appendix B's own generated content (`@c0`, `@cPair`, `@zero_`, …),
+/// regardless of whether this particular name happens to already exist there.
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_at_prefixed_mapping_is_rejected_even_without_a_name_collision() {
-    // `@` is reserved for Appendix B's own generated content (`@c0`, `@cPair`, `@zero_`, …),
-    // regardless of whether this particular name happens to already exist there.
     match check_err("map @my_helper: Nat; map f: Nat; eqn f = @my_helper;") {
         WellTypedError::SystemFunctionRedeclared { name, .. } => assert_eq!(name, "@my_helper"),
         other => panic!("unexpected error {other}"),

@@ -176,10 +176,10 @@ fn test_anonymous_struct_in_global_variable_is_rejected() {
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_global_variable_is_in_scope_as_a_prop_var_inst_argument() {
-    // mCRL2: test_pbes_specification1. Distinct from
-    // test_global_variable_is_in_scope_in_a_formula_and_init: here the global is passed as a
-    // `PropVarInst` argument (both in the equation's formula and in `init`), not just compared
-    // against itself in a `val(...)`.
+    // Distinct from test_global_variable_is_in_scope_in_a_formula_and_init:
+    // here the global is passed as a `PropVarInst` argument (both in the
+    // equation's formula and in `init`), not just compared against itself in
+    // a `val(...)`.
     check_ok("glob dc: Bool; pbes nu X(b: Bool) = val(b) && X(dc); init X(dc);");
 }
 
