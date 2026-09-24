@@ -3,19 +3,15 @@
 use ahash::HashMap;
 use ahash::HashMapExt;
 use merc_aterm::Term;
-use merc_data::ContainerSortKind;
 use merc_data::DataFunctionSymbol;
 use merc_data::Mcrl2DataSpecification;
 use merc_data::SortArrowRef;
-use merc_data::SortConsRef;
 use merc_data::SortExpression;
 use merc_data::SortExpressionRef;
-use merc_data::is_container_sort;
 use merc_data::is_function_sort;
 use merc_utilities::TagIndex;
 
-/// Distinguishes a [`EnumerationPlanId`] from every other `TagIndex<usize, _>` in the
-/// workspace at compile time.
+/// Distinguishes a [`EnumerationPlanId`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct EnumerationPlanTag;
 
@@ -36,9 +32,6 @@ pub enum NotEnumerableReason {
     /// The sort is a function (`SortArrow`) sort. See
     /// `docs/enumeration-crate-plan.md` §4.7 for why this is not ported yet.
     FunctionSort,
-    /// The sort is `Bag` or `FBag`. Multisets are refused outright, matching
-    /// mCRL2 (§4.7); `List`/`Set`/`FSet` go through the generic constructor path.
-    Bag,
     /// The sort was never seen while building the [`EnumerationPlans`] (not among the
     /// data specification's declared sorts or any constructor's domain/target),
     /// so nothing is known about it.
@@ -129,9 +122,7 @@ impl EnumerationPlan {
 
 /// The precomputed enumeration plans for every sort reachable from a data
 /// specification (its declared sorts, plus every constructor's domain and
-/// target sorts), built once and shared by `&` across an enumeration run.
-///
-/// See `docs/enumeration-crate-plan.md` §6.1.
+/// target sorts), built once up front.
 #[derive(Debug)]
 pub struct EnumerationPlans {
     plans: Vec<EnumerationPlan>,
@@ -179,19 +170,13 @@ impl EnumerationPlans {
             });
         }
 
-        // Phase 2: classify sorts that are trivially not enumerable, before the
+        // Classify sorts that are trivially not enumerable, before the
         // fixpoints below ever look at their constructors.
         let mut base_reason: Vec<Option<NotEnumerableReason>> = sorts
             .iter()
             .map(|sort| {
                 if is_function_sort(sort) {
                     Some(NotEnumerableReason::FunctionSort)
-                } else if is_container_sort(sort) {
-                    let cons = SortConsRef::from(Term::copy(sort));
-                    match cons.kind() {
-                        ContainerSortKind::Bag | ContainerSortKind::FBag => Some(NotEnumerableReason::Bag),
-                        ContainerSortKind::List | ContainerSortKind::Set | ContainerSortKind::FSet => None,
-                    }
                 } else {
                     None
                 }
@@ -203,10 +188,7 @@ impl EnumerationPlans {
             }
         }
 
-        // Phase 3: least fixpoint of the minimal closed term size, the same
-        // shape as `merc_typecheck::resolution::non_empty::nonempty_sorts` but
-        // relaxing a `u32` instead of growing a `bool` set. `constructor_size`
-        // is `None` while any argument sort's `min_size` is still unknown.
+        // Least fixpoint of the minimal closed term size.
         let mut min_size: Vec<u32> = sorts.iter().map(|_| u32::MAX).collect();
         let mut constructor_size: Vec<Vec<u32>> =
             grouped.iter().map(|cs| cs.iter().map(|_| u32::MAX).collect()).collect();
@@ -252,15 +234,14 @@ impl EnumerationPlans {
             }
         }
 
-        // Phase 4: a sort is recursive if it is reachable from itself through
-        // constructor argument sorts — the graph-cycle generalisation of "this
-        // constructor's own sort appears among its arguments".
+        // A sort is recursive if it is reachable from itself through
+        // constructor argument sorts.
         let recursive = detect_recursive_sorts(&grouped);
 
-        // Phase 5: least fixpoint of finiteness. A sort starts finite unless it
-        // is not enumerable or recursive, and is knocked down to infinite as
-        // soon as any of its constructors uses a non-finite argument sort. This
-        // only ever flips `true` to `false`, so it converges monotonically.
+        // Least fixpoint of finiteness. A sort starts finite unless it is not
+        // enumerable or recursive, and is knocked down to infinite as soon as
+        // any of its constructors uses a non-finite argument sort. This only
+        // ever flips `true` to `false`, so it converges monotonically.
         let mut is_finite: Vec<bool> = sorts
             .iter()
             .enumerate()
@@ -268,10 +249,12 @@ impl EnumerationPlans {
             .collect();
         loop {
             let mut changed = false;
+
             for (sort_id, constructors) in grouped.iter().enumerate() {
                 if !is_finite[sort_id] {
                     continue;
                 }
+
                 if constructors
                     .iter()
                     .any(|c| c.arguments.iter().any(|&argument| !is_finite[argument.value()]))
@@ -280,14 +263,14 @@ impl EnumerationPlans {
                     changed = true;
                 }
             }
+
             if !changed {
                 break;
             }
         }
 
-        // Phase 6: assemble the plans, ordering each sort's constructors by
-        // ascending minimal term size (§4.5) so a bounded search visits small
-        // terms first.
+        // Assemble the plans, ordering each sort's constructors by ascending
+        // minimal term size.
         let plans = sorts
             .into_iter()
             .enumerate()
@@ -321,9 +304,8 @@ impl EnumerationPlans {
         EnumerationPlans { plans, index }
     }
 
-    /// Looks up the plan id for `sort`, or `None` if `sort` was not reachable
-    /// from the data specification this [`EnumerationPlans`] was built from (see
-    /// [`NotEnumerableReason::UnknownSort`]).
+    /// Looks up the plan id for `sort`, or `None` if `sort` does not have a
+    /// plan.
     pub fn get(&self, sort: &SortExpressionRef<'_>) -> Option<EnumerationPlanId> {
         self.index.get(&sort.protect()).copied()
     }
@@ -333,12 +315,12 @@ impl EnumerationPlans {
         &self.plans[id]
     }
 
-    /// Returns the number of distinct sorts this [`EnumerationPlans`] knows about.
+    /// Returns the number of distinct sorts.
     pub fn len(&self) -> usize {
         self.plans.len()
     }
 
-    /// Returns `true` iff this [`EnumerationPlans`] knows about no sorts at all.
+    /// Returns `true` iff the plan is empty.
     pub fn is_empty(&self) -> bool {
         self.plans.is_empty()
     }
@@ -379,13 +361,16 @@ fn detect_recursive_sorts(grouped: &[Vec<ConstructorPlan>]) -> Vec<bool> {
                 recursive[start] = true;
                 break;
             }
+
             if visited[node] {
                 continue;
             }
+
             visited[node] = true;
             stack.extend(edges[node].iter().copied());
         }
     }
+
     recursive
 }
 
@@ -466,13 +451,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn test_empty_sort_is_not_enumerable() {
         // `D`'s only constructor recurses into itself, so it has no closed
-        // terms at all — mirrors non_empty.rs's own empty-sort test, but that
-        // check happens in `merc_typecheck` and rejects such a spec before it
-        // ever becomes an `Mcrl2DataSpecification` (confirmed by the sibling
-        // `test_typecheck_rejects_empty_sort` below), so building the
-        // specification directly, bypassing typecheck, is the only way to
-        // exercise `EnumerationPlans`'s *own* classification of this case — which
-        // matters because nothing stops a caller from assembling one by hand.
+        // terms at all.
         let d: merc_data::SortExpression = merc_data::BasicSort::new("D").into();
         let arrow: merc_data::SortExpression = merc_data::SortArrow::new(std::slice::from_ref(&d), d.clone()).into();
         let f = merc_data::DataFunctionSymbol::with_sort("f", arrow.copy());
@@ -560,7 +539,8 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    fn test_bag_is_not_enumerable() {
+    fn test_bag_is_empty_via_function_argument() {
+        // `@bag: (S -> Nat) # FBag(S) -> Bag(S)` needs a function-sorted argument.
         let spec = lower("sort D = Bag(Bool);");
         let plans = EnumerationPlans::build(&spec);
 
@@ -568,7 +548,18 @@ mod tests {
         let id = plans.get(&sort.copy()).unwrap();
         assert_eq!(
             plans.plan(id).enumerability(),
-            SortEnumerability::NotEnumerable(NotEnumerableReason::Bag)
+            SortEnumerability::NotEnumerable(NotEnumerableReason::EmptySort)
         );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_fbag_is_infinite_enumerable() {
+        let spec = lower("sort D = FBag(Bool);");
+        let plans = EnumerationPlans::build(&spec);
+
+        let sort = spec.aliases()[0].reference().protect();
+        let id = plans.get(&sort.copy()).unwrap();
+        assert_eq!(plans.plan(id).enumerability(), SortEnumerability::InfiniteEnumerable);
     }
 }
