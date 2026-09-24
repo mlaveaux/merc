@@ -7,17 +7,12 @@ use merc_aterm::storage::Marker;
 /// A cheap, `Copy` handle into an [`ArenaList`]: a persistent singly-linked
 /// list node.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug)]
-pub(crate) struct ArenaListHandle(Option<u32>);
+pub(crate) struct ArenaListHandle(Option<usize>);
 
 impl ArenaListHandle {
     pub(crate) fn is_empty(self) -> bool {
         self.0.is_none()
     }
-}
-
-struct Node<T> {
-    value: T,
-    parent: ArenaListHandle,
 }
 
 /// Backing store for every [`ArenaListHandle`] derived from it.
@@ -42,7 +37,7 @@ impl<T> ArenaList<T> {
     /// Returns a new handle with `value` pushed in front of `parent`.
     /// `parent` remains valid: any other handle built on it is unaffected.
     pub(crate) fn push(&mut self, parent: ArenaListHandle, value: T) -> ArenaListHandle {
-        let index = u32::try_from(self.nodes.len()).expect("more arena-list nodes than fit in a u32");
+        let index = self.nodes.len();
         self.nodes.push(Node { value, parent });
         ArenaListHandle(Some(index))
     }
@@ -63,6 +58,11 @@ impl<T> ArenaList<T> {
         let node = &self.nodes[handle.0? as usize];
         Some((&node.value, node.parent))
     }
+}
+
+struct Node<T> {
+    value: T,
+    parent: ArenaListHandle,
 }
 
 /// Lets an [`ArenaList`] of term-holding values be wrapped in
