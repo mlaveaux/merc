@@ -68,7 +68,7 @@ fn lt_goal(bound: u32) -> (Vec<DataVariable>, DataExpression) {
 }
 
 fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
-    FreshVariableGenerator::new(vars.iter().map(|v| v.name().to_string()))
+    FreshVariableGenerator::new("v", vars.iter().map(|v| v.name().to_string()))
 }
 
 /// Constructor-expansion throughput for `sum n:D . n < bound`, across a range
