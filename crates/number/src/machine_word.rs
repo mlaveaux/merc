@@ -1,8 +1,13 @@
+use bnum::Uint;
+use bnum::cast::As;
 use num::BigUint;
 use num::integer::Roots;
 
 /// Number of bits in a machine word; also the shift amount for one digit.
 const WORD_BITS: u32 = 64;
+
+/// A stack-allocated 192-bit (three-word) unsigned integer
+type TripleWord = Uint<24>;
 
 /// Extracts the least-significant 64 bits of a [`BigUint`].
 fn truncate_u64(value: &BigUint) -> u64 {
@@ -22,6 +27,16 @@ fn big_from_digits(digits: &[u64]) -> BigUint {
         result = (result << WORD_BITS) + digit;
     }
     result
+}
+
+/// Builds `d0 * 2^128 + d1 * 2^64 + d2` from most-significant-first digits as
+/// a stack-allocated [`TripleWord`].
+fn triple_word(d0: u64, d1: u64, d2: u64) -> TripleWord {
+    let mut bytes = [0u8; 24];
+    bytes[0..8].copy_from_slice(&d0.to_be_bytes());
+    bytes[8..16].copy_from_slice(&d1.to_be_bytes());
+    bytes[16..24].copy_from_slice(&d2.to_be_bytes());
+    TripleWord::from_be_bytes(bytes)
 }
 
 // Word constants
@@ -182,9 +197,10 @@ pub fn mod_double_doubleword(n1: u64, n2: u64, n3: u64, n4: u64) -> u64 {
 
 /// `(2^128 * n1 + 2^64 * n2 + n3) div (2^64 * n4 + n5)`.
 pub fn div_triple_doubleword(n1: u64, n2: u64, n3: u64, n4: u64, n5: u64) -> u64 {
-    let numerator = big_from_digits(&[n1, n2, n3]);
-    let denominator = big_from_digits(&[n4, n5]);
-    truncate_u64(&(numerator / denominator))
+    let numerator = triple_word(n1, n2, n3);
+    // Widen the two-word divisor to three words with a leading zero digit.
+    let denominator = triple_word(0, n4, n5);
+    (numerator / denominator).as_::<u64>()
 }
 
 /// Square root of `2^64 * n1 + n2`, rounded down.
