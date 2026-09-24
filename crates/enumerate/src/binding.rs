@@ -1,3 +1,5 @@
+use ahash::AHashSet;
+
 use merc_aterm::ATermRef;
 use merc_aterm::Markable;
 use merc_aterm::Protected;
@@ -47,8 +49,16 @@ pub(crate) type BindingGuard<'a> = ProtectedWriteGuard<'a, ArenaList<Binding<'st
 /// [`BindingArena::resolve`] to substitute those away.
 pub(crate) struct BindingArena {
     pub(crate) chain: Protected<ArenaList<Binding<'static>>>,
-    /// Argument stack reused by [`BindingArena::resolve`].
-    pub(crate) scratch: Vec<DataExpression>,
+    pub(crate) scratch: ResolveScratch,
+}
+
+/// Buffers reused by [`BindingArena::resolve`].
+#[derive(Default)]
+pub(crate) struct ResolveScratch {
+    /// Arguments of the application being rebuilt.
+    arguments: Vec<DataExpression>,
+    /// Term indices of subterms of bound values known to contain no variable.
+    closed: AHashSet<usize>,
 }
 
 impl Default for BindingArena {
@@ -61,7 +71,7 @@ impl BindingArena {
     pub(crate) fn new() -> Self {
         BindingArena {
             chain: Protected::new(ArenaList::default()),
-            scratch: Vec::new(),
+            scratch: ResolveScratch::default(),
         }
     }
 
@@ -71,6 +81,7 @@ impl BindingArena {
     /// afterwards.
     pub(crate) fn clear(&mut self) {
         self.chain.write().clear();
+        self.scratch.closed.clear();
     }
 
     /// Returns a new chain with `variable ↦ value` recorded in front of
@@ -121,7 +132,7 @@ impl BindingArena {
     pub(crate) fn resolve<R: RewriteEngine>(
         guard: &BindingGuard<'_>,
         rewriter: &mut R,
-        scratch: &mut Vec<DataExpression>,
+        scratch: &mut ResolveScratch,
         chain: BindingChain,
         vars: &[DataVariable],
         out: &mut Vec<DataExpression>,
@@ -157,7 +168,7 @@ impl BindingArena {
     /// `protect`ing it first.
     fn substitute<'a, 'b, T: Term<'a, 'b>>(
         guard: &BindingGuard<'_>,
-        scratch: &mut Vec<DataExpression>,
+        scratch: &mut ResolveScratch,
         chain: BindingChain,
         term: &'b T,
     ) -> Option<DataExpression> {
@@ -173,32 +184,39 @@ impl BindingArena {
             return None;
         }
 
+        if scratch.closed.contains(&term.index()) {
+            return None;
+        }
+
         // At the raw term level `arg(0)` is the head symbol and the rest are
         // the actual arguments. The unchanged arguments before the first
         // substituted one are only protected once a rebuild is certain.
-        let start = scratch.len();
+        let start = scratch.arguments.len();
         let mut changed = false;
         for (index, argument) in term.arguments().skip(1).enumerate() {
             match Self::substitute(guard, scratch, chain, &argument) {
                 Some(substituted) => {
                     if !changed {
                         changed = true;
-                        scratch.extend(term.arguments().skip(1).take(index).map(|a| a.protect().into()));
+                        scratch
+                            .arguments
+                            .extend(term.arguments().skip(1).take(index).map(|a| a.protect().into()));
                     }
-                    scratch.push(substituted);
+                    scratch.arguments.push(substituted);
                 }
-                None if changed => scratch.push(argument.protect().into()),
+                None if changed => scratch.arguments.push(argument.protect().into()),
                 None => {}
             }
         }
 
         if !changed {
+            scratch.closed.insert(term.index());
             return None;
         }
 
         let head: DataFunctionSymbolRef<'_> = term.arg(0).into();
-        let application = DataApplication::with_args(&head, &scratch[start..]).into();
-        scratch.truncate(start);
+        let application = DataApplication::with_args(&head, &scratch.arguments[start..]).into();
+        scratch.arguments.truncate(start);
         Some(application)
     }
 
@@ -308,14 +326,6 @@ mod tests {
         SortExpression::from(BasicSort::new("Nat"))
     }
 
-    /// `c`/`a`/`b` below are uninterpreted (no rewrite rules), so an empty
-    /// specification's rewriter is a no-op on them — used only so
-    /// `resolve` has a [`merc_sabre::RewriteEngine`] to normalise the
-    /// composites it reconstructs.
-    fn rewriter() -> InnermostRewriter {
-        InnermostRewriter::new(&RewriteSpecification::new(vec![]))
-    }
-
     #[test]
     fn test_resolve_follows_chained_bindings() {
         // v -> c(y1, y2), y1 -> a, y2 -> b: resolving v must recursively
@@ -340,7 +350,7 @@ mod tests {
         let chain = BindingArena::extend(&mut guard, chain, &y1.copy(), &a.copy());
         let chain = BindingArena::extend(&mut guard, chain, &y2.copy(), &b.copy());
 
-        let mut rewriter = rewriter();
+        let mut rewriter = InnermostRewriter::new(&RewriteSpecification::new(vec![]));
         let mut resolved = Vec::new();
         BindingArena::resolve(
             &guard,
@@ -355,6 +365,38 @@ mod tests {
     }
 
     #[test]
+    fn test_substitute_is_linear_in_a_shared_closed_value() {
+        // A one-point value is an arbitrary subterm of the body, so it can be
+        // maximally shared: e_{k+1} = g(e_k, e_k) has k + 1 distinct subterms
+        // but unfolds to a tree of 2^k nodes, which must not be walked.
+        //
+        // Calls `substitute` rather than `resolve`, since the final rewrite
+        // still traverses the tree.
+        let v = DataVariable::with_sort("v", nat().copy());
+        let y = DataVariable::with_sort("y", nat().copy());
+        let c = DataFunctionSymbol::with_sort("c", nat().copy());
+        let g = DataFunctionSymbol::with_sort("g", nat().copy());
+        let a: DataExpression = DataFunctionSymbol::with_sort("a", nat().copy()).into();
+
+        let mut shared = a.clone();
+        for _ in 0..64 {
+            shared = DataApplication::with_args(&g, &[shared.clone(), shared]).into();
+        }
+        let v_value: DataExpression =
+            DataApplication::with_args(&c, &[DataExpression::from(y.clone()), shared.clone()]).into();
+
+        let mut arena = BindingArena::default();
+        let mut guard = arena.chain.write();
+        let chain = BindingChain::default();
+        let chain = BindingArena::extend(&mut guard, chain, &v.copy(), &v_value.copy());
+        let chain = BindingArena::extend(&mut guard, chain, &y.copy(), &a.copy());
+
+        let substituted = BindingArena::substitute(&guard, &mut arena.scratch, chain, &v_value);
+        let expected: DataExpression = DataApplication::with_args(&c, &[a, shared]).into();
+        assert_eq!(substituted, Some(expected));
+    }
+
+    #[test]
     #[should_panic(expected = "is not bound")]
     fn test_resolve_panics_on_unbound_variable() {
         let v = DataVariable::with_sort("v", nat().copy());
@@ -363,7 +405,7 @@ mod tests {
         let guard = arena.chain.write();
         BindingArena::resolve(
             &guard,
-            &mut rewriter(),
+            &mut InnermostRewriter::new(&RewriteSpecification::new(vec![])),
             &mut arena.scratch,
             BindingChain::default(),
             &[v],
