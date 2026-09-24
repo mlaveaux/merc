@@ -1,4 +1,6 @@
+use proc_macro2::Group;
 use proc_macro2::TokenStream;
+use proc_macro2::TokenTree;
 
 use quote::ToTokens;
 use quote::format_ident;
@@ -306,10 +308,22 @@ pub(crate) fn merc_derive_terms_impl(_attributes: TokenStream, input: TokenStrea
                         syn::Type::Path(path) if path.path.get_ident().is_some() => {
                             let identifier = path.path.get_ident().expect("checked by the match guard");
 
-                            // Build an identifier with the postfix Ref<'_>
+                            // Build an identifier with the postfix Ref<'a>
                             let name_ref = format_ident!("{}Ref", identifier);
 
-                            ref_implementation.self_ty = Box::new(parse_quote!(#name_ref <'_>));
+                            // Results borrowed from the underlying term outlive the
+                            // `Ref` wrapper itself, so tie elided output lifetimes to
+                            // `'a` rather than to `&self`.
+                            ref_implementation.generics = parse_quote!(<'a>);
+                            ref_implementation.self_ty = Box::new(parse_quote!(#name_ref <'a>));
+                            for item in &mut ref_implementation.items {
+                                if let syn::ImplItem::Fn(func) = item
+                                    && let syn::ReturnType::Type(_, output) = &mut func.sig.output
+                                {
+                                    let tokens = replace_anonymous_lifetime(output.to_token_stream());
+                                    **output = syn::parse2(tokens).expect("replacing a lifetime keeps the type valid");
+                                }
+                            }
 
                             added.push(Item::Verbatim(ref_implementation.into_token_stream()));
                         }
@@ -332,6 +346,28 @@ pub(crate) fn merc_derive_terms_impl(_attributes: TokenStream, input: TokenStrea
 
     // Hand the output tokens back to the compiler
     ast.into_token_stream()
+}
+
+/// Replaces every `'_` in `tokens` by `'a`.
+fn replace_anonymous_lifetime(tokens: TokenStream) -> TokenStream {
+    let mut result = Vec::new();
+    let mut after_quote = false;
+    for token in tokens {
+        let token = match token {
+            TokenTree::Ident(ident) if after_quote && ident == "_" => {
+                TokenTree::Ident(proc_macro2::Ident::new("a", ident.span()))
+            }
+            TokenTree::Group(group) => {
+                let mut replaced = Group::new(group.delimiter(), replace_anonymous_lifetime(group.stream()));
+                replaced.set_span(group.span());
+                TokenTree::Group(replaced)
+            }
+            other => other,
+        };
+        after_quote = matches!(&token, TokenTree::Punct(punct) if punct.as_char() == '\'');
+        result.push(token);
+    }
+    result.into_iter().collect()
 }
 
 #[cfg(test)]
