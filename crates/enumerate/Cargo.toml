@@ -4,7 +4,7 @@ description = "Enumerates constructor instances of (possibly infinite) data sort
 keywords = ["rewriting", "enumeration", "data"]
 categories = ["algorithms", "data-structures", "science"]
 readme = "README.md"
-version = "0.1.0"
+version = "1.0.0"
 
 edition.workspace = true
 homepage.workspace = true
@@ -19,7 +19,6 @@ merc_sabre.workspace = true
 merc_utilities.workspace = true
 
 ahash.workspace = true
-bumpalo.workspace = true
 log.workspace = true
 
 [dev-dependencies]
