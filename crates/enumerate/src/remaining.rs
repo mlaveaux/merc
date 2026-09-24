@@ -12,7 +12,7 @@ pub(crate) type RemainingArena = ArenaList<u32>;
 /// appended past it along this specific branch.
 ///
 /// # Details
-/// 
+///
 /// A persistent FIFO queue built from two [`ArenaList`]s, in the classic
 /// two-stack style: `front` is already in pop order (built once, in reverse,
 /// from the caller's variable order, so popping it never needs rebuilding);

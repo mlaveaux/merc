@@ -1,4 +1,4 @@
-# merc_enumerate
+# Overview
 
 Enumerates ground constructor instances of a (possibly infinite) data sort.
 

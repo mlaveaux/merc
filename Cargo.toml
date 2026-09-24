@@ -66,6 +66,7 @@ unexpected_cfgs = { level = "allow", check-cfg = ['cfg(loom)', 'cfg(kani)'] }
 ahash = "0.8"
 bitstream-io = "4.10"
 bitvec = "1.1"
+bnum = "0.14"
 bumpalo = "3.20"
 clap = { version = "4.6", features = ["derive"] }
 # Intentionally downgraded to keep the rustc msrv.
@@ -142,7 +143,7 @@ bindgen = "0.73"
 merc_aterm = { version = "3.0", path = "crates/aterm" }
 merc_collections = { version = "3.0", path = "crates/collections" }
 merc_data = { version = "3.0", path = "crates/data" }
-merc_enumerate = { version = "0.1", path = "crates/enumerate" }
+merc_enumerate = { version = "1.0", path = "crates/enumerate" }
 merc_explore = { version = "2.0", path = "crates/explore" }
 merc_io = { version = "3.0", path = "crates/io" }
 merc_lts = { version = "3.0", path = "crates/lts" }

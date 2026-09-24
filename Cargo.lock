@@ -177,9 +177,11 @@ dependencies = [
  "env_logger",
  "merc_aterm",
  "merc_data",
+ "merc_number",
  "merc_rec-tests",
  "merc_sabre",
  "merc_utilities",
+ "rand",
 ]
 
 [[package]]
@@ -282,6 +284,12 @@ dependencies = [
  "tap",
  "wyz",
 ]
+
+[[package]]
+name = "bnum"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1b08cb4ecbb540b940016b0a0f35b7e48ab0cc372ab88150c351de4cc469959"
 
 [[package]]
 name = "bumpalo"
@@ -1183,10 +1191,9 @@ dependencies = [
 
 [[package]]
 name = "merc_enumerate"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "ahash",
- "bumpalo",
  "log",
  "merc_aterm",
  "merc_data",
@@ -1278,6 +1285,7 @@ name = "merc_number"
 version = "3.0.0"
 dependencies = [
  "bitstream-io",
+ "bnum",
  "merc_utilities",
  "num",
  "rand",

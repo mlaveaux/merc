@@ -9,6 +9,7 @@ use merc_enumerate::FreshVariableGenerator;
 use merc_sabre::InnermostRewriter;
 use merc_sabre::RewriteEngine;
 use merc_sabre::RewriteSpecification;
+use merc_syntax::SourceMap;
 use merc_syntax::UntypedDataSpecification;
 use merc_typecheck::DataSpecification;
 use merc_typecheck::NumberEncoding;
@@ -23,7 +24,8 @@ fn enumerate_finds_every_solution_for_real_machine_word_nat() {
          eqn goal(m) = m < 3;",
     )
     .unwrap();
-    let typed = DataSpecification::from_untyped_with(untyped, NumberEncoding::MachineWord).unwrap();
+    let typed =
+        DataSpecification::from_untyped_with(untyped, NumberEncoding::MachineWord, &mut SourceMap::new()).unwrap();
     let spec = typed.lower_data_specification();
 
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
@@ -49,7 +51,7 @@ fn enumerate_finds_every_solution_for_real_machine_word_nat() {
         &[DataExpression::from(m_var.clone())],
     ));
 
-    let mut generator = FreshVariableGenerator::new(std::iter::once(m_var.name().to_string()));
+    let mut generator = FreshVariableGenerator::new("v", std::iter::once(m_var.name().to_string()));
     let mut enumerator = Enumerator::new(plans);
     let mut solutions = Vec::new();
     let outcome = enumerator.enumerate(
