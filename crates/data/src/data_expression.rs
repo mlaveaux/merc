@@ -504,6 +504,36 @@ mod inner {
                 }
             })
         }
+
+        /// Returns the kind of binder (lambda, forall/exists, or a set/bag comprehension).
+        pub fn binder_type(&self) -> super::BinderType {
+            let symbol = self.term.arg(0).get_head_symbol();
+            DATA_SYMBOLS.with_borrow(|ds| {
+                if symbol == ds.data_lambda_symbol.copy() {
+                    super::BinderType::Lambda
+                } else if symbol == ds.data_forall_symbol.copy() {
+                    super::BinderType::Forall
+                } else if symbol == ds.data_exists_symbol.copy() {
+                    super::BinderType::Exists
+                } else if symbol == ds.data_set_comprehension_symbol.copy() {
+                    super::BinderType::SetComp
+                } else if symbol == ds.data_bag_comprehension_symbol.copy() {
+                    super::BinderType::BagComp
+                } else {
+                    unreachable!("A DataAbstraction always carries one of the five binder kinds")
+                }
+            })
+        }
+
+        /// Returns the binder's bound variables.
+        pub fn variables(&self) -> ATermList<DataVariable> {
+            self.term.arg(1).into()
+        }
+
+        /// Returns the binder's body.
+        pub fn body(&self) -> DataExpressionRef<'_> {
+            self.term.arg(2).into()
+        }
     }
 
     impl fmt::Display for DataAbstraction {
@@ -622,6 +652,13 @@ mod inner {
 
     #[merc_ignore]
     impl From<DataExpression> for DataVariable {
+        fn from(value: DataExpression) -> Self {
+            value.term.into()
+        }
+    }
+
+    #[merc_ignore]
+    impl From<DataExpression> for DataAbstraction {
         fn from(value: DataExpression) -> Self {
             value.term.into()
         }
