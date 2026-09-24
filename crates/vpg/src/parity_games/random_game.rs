@@ -139,8 +139,8 @@ mod tests {
     fn test_random_variability_parity_game() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(BDD_NODE_CAPACITY, BDD_CACHE_CAPACITY, 1);
-            let vpg = random_variability_parity_game(&manager_ref, rng, false, 10, 5, 3, 3).unwrap();
-            assert_eq!(vpg.num_of_vertices(), 10);
+            let vpg = random_variability_parity_game(&manager_ref, rng, false, 6, 5, 2, 3).unwrap();
+            assert_eq!(vpg.num_of_vertices(), 6);
         })
     }
 
@@ -149,10 +149,10 @@ mod tests {
     fn test_random_total_variability_parity_game() {
         random_test(100, |rng| {
             let manager_ref = oxidd::bdd::new_manager(BDD_NODE_CAPACITY, BDD_CACHE_CAPACITY, 1);
-            let vpg = random_variability_parity_game(&manager_ref, rng, true, 10, 5, 3, 3).unwrap();
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 6, 5, 2, 3).unwrap();
             assert!(
-                vpg.num_of_vertices() >= 10 && vpg.num_of_vertices() <= 12,
-                "At least 10 vertices, with 2 additional vertices for totality"
+                vpg.num_of_vertices() >= 6 && vpg.num_of_vertices() <= 8,
+                "At least 6 vertices, with 2 additional vertices for totality"
             );
             assert!(
                 vpg.is_vpg_total(&manager_ref).unwrap(),

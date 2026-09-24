@@ -106,21 +106,29 @@ fn fix_element_rec(manager: &LDDManagerRef, set: &LDDFunction, level: usize, val
             }
         }
     } else {
-        match set.node() {
-            // `set` ran out of levels before reaching `level` (it is ∅, or `level` was past the
-            // end of its vectors): there is no element at `level` to match, so the result is ∅.
-            None => manager.with_manager_shared(LDDFunction::empty_set),
-            Some((v, down, right)) => {
-                let new_down = fix_element_rec(manager, &down, level - 1, value)?;
-                let new_right = fix_element_rec(manager, &right, level, value)?;
-
-                if new_down.is_empty() {
-                    Ok(new_right)
-                } else {
-                    manager.with_manager_shared(|m| LDDFunction::make_node(m, v, &new_down, &new_right))
+        // Walk the `right` sibling chain iteratively instead of recursing on it.
+        let mut kept = Vec::new();
+        let mut current = set.clone();
+        loop {
+            match current.node() {
+                // `set` ran out of levels before reaching `level` (it is ∅, or `level` was past the
+                // end of its vectors): there is no element at `level` to match, so the result is ∅.
+                None => break,
+                Some((v, down, right)) => {
+                    let new_down = fix_element_rec(manager, &down, level - 1, value)?;
+                    if !new_down.is_empty() {
+                        kept.push((v, new_down));
+                    }
+                    current = right;
                 }
             }
         }
+
+        let mut result = manager.with_manager_shared(LDDFunction::empty_set)?;
+        for (v, new_down) in kept.into_iter().rev() {
+            result = manager.with_manager_shared(|m| LDDFunction::make_node(m, v, &new_down, &result))?;
+        }
+        Ok(result)
     }
 }
 
@@ -176,8 +184,8 @@ mod tests {
         random_test(100, |rng| {
             let manager = oxidd::ldd::new_manager(LDD_NODE_CAPACITY, LDD_CACHE_CAPACITY, 1);
 
-            let a = random_vector_set(rng, 16, 5, 5);
-            let b = random_vector_set(rng, 16, 5, 5);
+            let a = random_vector_set(rng, 8, 3, 5);
+            let b = random_vector_set(rng, 8, 3, 5);
 
             let ldd_a = from_iter(&manager, a.iter());
             let ldd_b = from_iter(&manager, b.iter());

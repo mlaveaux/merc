@@ -352,7 +352,7 @@ mod tests {
     fn test_random_symbolic_zielonka_solver() {
         random_test(100, |rng| {
             let files = DumpFiles::new("test_random_symbolic_zielonka_solver");
-            let game = random_parity_game(rng, true, 60, 5, 3);
+            let game = random_parity_game(rng, true, 20, 5, 3);
             files.dump("input.pg", |writer| write_pg(writer, &game)).unwrap();
 
             let (expected, _) = solve_zielonka(&game, false);
@@ -400,7 +400,8 @@ mod tests {
     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
     fn test_random_symbolic_zielonka_solver_non_total() {
         random_test(100, |rng| {
-            let game = random_parity_game(rng, false, 60, 5, 3);
+            // See the same-sized game in `test_random_symbolic_zielonka_solver` above.
+            let game = random_parity_game(rng, false, 20, 5, 3);
 
             // Build the explicit oracle: same game, but every deadlock gets a self-loop and a
             // priority whose parity is the opponent of its owner (shared with

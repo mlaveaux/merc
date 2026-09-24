@@ -136,10 +136,7 @@ where
     M: LPS<Value = usize, Label = Mcrl2MultiActionLabel, StateInfo = ()>,
 {
     // Count states and transitions in the exploration closures, driving the periodic progress
-    // reporter from `on_transition`. Transitions are counted independently of the builder (rather
-    // than via `builder.num_of_transitions()`) since a discard builder such as `()` never tracks a
-    // count of its own, which would otherwise make the reported total collapse to just the
-    // in-progress state's buffered count (see `PerStateDedup`).
+    // reporter from `on_transition`.
     let progress = lps_progress();
     let states = Cell::new(0usize);
     let transitions = Cell::new(0usize);

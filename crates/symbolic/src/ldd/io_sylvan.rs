@@ -276,6 +276,7 @@ mod test {
 
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
+    #[cfg_attr(windows, ignore)] // collision.4.ldd's reachability recursion overflows Windows' smaller default stack
     #[cfg(not(debug_assertions))]
     fn test_load_collision_4() {
         let ldd_manager = oxidd::ldd::new_manager(LDD_NODE_CAPACITY * 20, LDD_CACHE_CAPACITY * 20, 1);
