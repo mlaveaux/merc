@@ -1,12 +1,5 @@
-//! Differential/property-based tests: [`Enumerator`] and [`NaiveEnumerator`]
-//! must agree on the same result set for the same goal, even though they use
-//! completely different algorithms (incremental breadth-first work queue vs.
-//! brute-force full instantiation — see [`NaiveEnumerator`]'s doc comment).
-//!
-//! Random goals are built through the `merc_data`/`merc_sabre` API rather than
-//! parsed as source text, so that `merc_syntax`/`merc_typecheck` do not have
-//! to run once per goal; see `enumerator_tests.rs` for why the sort is a small
-//! hand-rolled `D` rather than the real `Nat`.
+//! [`Enumerator`] and [`NaiveEnumerator`] must agree on the same result set for
+//! the same goal.
 
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -84,20 +77,6 @@ fn numeral(value: u32) -> DataExpression {
     term
 }
 
-fn lt_symbol() -> DataFunctionSymbol {
-    let sort: SortExpression = SortArrow::new(&[d_sort(), d_sort()], bool_sort()).into();
-    DataFunctionSymbol::with_sort("lt", sort.copy())
-}
-
-fn eq_symbol() -> DataFunctionSymbol {
-    let sort: SortExpression = SortArrow::new(&[d_sort(), d_sort()], bool_sort()).into();
-    DataFunctionSymbol::with_sort("eq", sort.copy())
-}
-
-fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
-    FreshVariableGenerator::new(vars.iter().map(|v| v.name().to_string()))
-}
-
 /// Which binary predicate a generated clause uses.
 ///
 /// `==` is included because it is the shape the one-point rule keys on: it
@@ -113,11 +92,13 @@ enum Predicate {
 
 impl Predicate {
     fn symbol(self) -> Option<DataFunctionSymbol> {
-        match self {
-            Predicate::Lt => Some(lt_symbol()),
-            Predicate::Eq => Some(eq_symbol()),
-            Predicate::Equality => None,
-        }
+        let name = match self {
+            Predicate::Lt => "lt",
+            Predicate::Eq => "eq",
+            Predicate::Equality => return None,
+        };
+        let sort: SortExpression = SortArrow::new(&[d_sort(), d_sort()], bool_sort()).into();
+        Some(DataFunctionSymbol::with_sort(name, sort.copy()))
     }
 
     fn apply(self, lhs: DataExpression, rhs: DataExpression) -> DataExpression {
@@ -213,7 +194,7 @@ fn check_one_random_goal(
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
     let outcome = enumerator.enumerate(
         enumerator_rewriter,
-        &mut generator_for(&vars),
+        &mut FreshVariableGenerator::new("v", vars.iter().map(|v| v.name().to_string())),
         &vars,
         &body,
         |_rewriter, solution| -> ControlFlow<()> {
@@ -298,7 +279,7 @@ fn test_enumerator_agrees_with_naive_enumerator_on_an_unsatisfiable_goal() {
     let mut enumerator_results: AHashSet<Vec<DataExpression>> = AHashSet::new();
     let outcome = enumerator.enumerate(
         &mut enumerator_rewriter,
-        &mut generator_for(&vars),
+        &mut FreshVariableGenerator::new("v", vars.iter().map(|v| v.name().to_string())),
         &vars,
         &body,
         |_rewriter, solution| -> ControlFlow<()> {

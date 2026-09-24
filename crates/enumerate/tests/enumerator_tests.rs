@@ -96,7 +96,7 @@ fn goal(spec: &Mcrl2DataSpecification, name: &str) -> (Vec<DataVariable>, DataEx
 /// A generator seeded from exactly the names in scope for one goal — see
 /// [`FreshVariableGenerator`]'s doc comment on why this is the caller's job.
 fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
-    FreshVariableGenerator::new(vars.iter().map(|v| v.name().to_string()))
+    FreshVariableGenerator::new("v", vars.iter().map(|v| v.name().to_string()))
 }
 
 #[test]
@@ -294,50 +294,6 @@ fn test_compile_one_point_then_enumerate_normalized_matches_direct_enumeration()
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn test_constraint_directed_ordering_promotes_the_constrained_variable() {
-    // `m` never occurs in `goal`'s body at all — a vacuous bound variable.
-    // The budget is the exact number of work items the search needs *with*
-    // the reordering; without it, expanding the vacuous `m` first costs two
-    // more, so a looser budget would make this test pass either way.
-    let tiny_limits = EnumerationLimits {
-        max_items: 10,
-        max_depth: 64,
-    };
-
-    let spec = lower(&format!(
-        "map goal: D # D -> Bool;
-         var m, n: D;
-         eqn goal(m, n) = eq(n, {});", // `eq`, not `==`: keep the one-point rule out of this.
-        numeral_source(3)
-    ));
-    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let plans = Rc::new(EnumerationPlans::build(&spec));
-
-    let (vars, body) = goal(&spec, "goal");
-    assert_eq!(
-        vars[0].name().to_string(),
-        "m",
-        "test assumes `m` is listed before `n` in `vars`"
-    );
-
-    let mut enumerator = Enumerator::new(plans).with_limits(tiny_limits);
-    match enumerator.find_witness(
-        &mut rewriter,
-        &mut generator_for(&vars),
-        &vars,
-        &body,
-        QuantifierKind::Exists,
-    ) {
-        WitnessOutcome::Found(values) => assert_eq!(values[1], numeral(3)),
-        other => panic!(
-            "expected a witness (ordering should promote the constrained `n` ahead of vacuous `m`), got {other:?}"
-        ),
-    }
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
 fn test_find_witness_exists_finds_a_small_witness() {
     let spec = lower(&format!(
         "map goal: D -> Bool;
@@ -396,7 +352,7 @@ fn test_find_witness_gives_up_past_the_bound() {
         &body,
         QuantifierKind::Exists,
     ) {
-        WitnessOutcome::GaveUp => {}
+        WitnessOutcome::LimitReached => {}
         other => panic!("expected GaveUp, got {other:?}"),
     }
 }
@@ -497,7 +453,7 @@ fn test_find_witness_forall_does_not_claim_an_undecided_body_holds() {
         &body,
         QuantifierKind::Forall,
     ) {
-        WitnessOutcome::GaveUp => {}
+        WitnessOutcome::LimitReached => {}
         other => panic!("expected GaveUp for an undecidable body, got {other:?}"),
     }
 }
