@@ -4,9 +4,6 @@ use crate::arena_list::ArenaList;
 use crate::arena_list::ArenaListHandle;
 
 /// Backing store for every [`RemainingList`] produced during one search.
-/// Owned by [`Enumerator`](crate::enumerator::Enumerator) and
-/// [`ArenaList::clear`]ed at the start of each search, so the backing
-/// storage's capacity carries over to the next one.
 pub(crate) type RemainingArena = ArenaList<u32>;
 
 /// One branch's still-to-instantiate variables, as indices into
@@ -14,6 +11,8 @@ pub(crate) type RemainingArena = ArenaList<u32>;
 /// original goal order plus any fresh variables a constructor expansion has
 /// appended past it along this specific branch.
 ///
+/// # Details
+/// 
 /// A persistent FIFO queue built from two [`ArenaList`]s, in the classic
 /// two-stack style: `front` is already in pop order (built once, in reverse,
 /// from the caller's variable order, so popping it never needs rebuilding);
@@ -31,7 +30,10 @@ pub(crate) struct RemainingList {
 impl RemainingList {
     /// The initial list for a whole search: every original variable, in the
     /// order the caller wants them expanded in, none consumed yet.
-    pub(crate) fn new(arena: &mut RemainingArena, original: Vec<u32>) -> RemainingList {
+    pub(crate) fn new(
+        arena: &mut RemainingArena,
+        original: impl IntoIterator<Item = u32, IntoIter: DoubleEndedIterator>,
+    ) -> RemainingList {
         let front = arena.push_all(ArenaListHandle::default(), original.into_iter().rev());
         RemainingList {
             front,
@@ -55,6 +57,7 @@ impl RemainingList {
                 },
             ));
         }
+
         if self.back.is_empty() {
             return None;
         }
@@ -69,6 +72,7 @@ impl RemainingList {
         }
         let front = arena.push_all(ArenaListHandle::default(), reversed);
         let (&value, parent) = arena.pop(front).expect("just built from a non-empty `back`");
+
         Some((
             value,
             RemainingList {
@@ -89,6 +93,17 @@ impl RemainingList {
             back: arena.push_all(self.back, fresh),
         }
     }
+
+    /// Consumes the list, yielding its remaining variable indices in pop order.
+    #[cfg(test)]
+    pub(crate) fn drain(self, arena: &mut RemainingArena) -> impl Iterator<Item = u32> {
+        let mut list = self;
+        std::iter::from_fn(move || {
+            let (value, rest) = list.pop_front(arena)?;
+            list = rest;
+            Some(value)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -96,20 +111,11 @@ mod tests {
     use super::RemainingArena;
     use super::RemainingList;
 
-    fn drain(arena: &mut RemainingArena, mut list: RemainingList) -> Vec<u32> {
-        let mut out = Vec::new();
-        while let Some((first, rest)) = list.pop_front(arena) {
-            out.push(first);
-            list = rest;
-        }
-        out
-    }
-
     #[test]
     fn test_pop_front_yields_original_order() {
         let mut arena = RemainingArena::default();
         let list = RemainingList::new(&mut arena, vec![1, 2, 3]);
-        assert_eq!(drain(&mut arena, list), vec![1, 2, 3]);
+        assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), vec![1, 2, 3]);
     }
 
     #[test]
@@ -124,7 +130,7 @@ mod tests {
     fn test_single_element_list_pops_its_only_element() {
         let mut arena = RemainingArena::default();
         let list = RemainingList::new(&mut arena, vec![7]);
-        assert_eq!(drain(&mut arena, list), vec![7]);
+        assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), vec![7]);
     }
 
     #[test]
@@ -135,7 +141,7 @@ mod tests {
         assert_eq!(first, 1);
 
         let appended = rest.with_appended(&mut arena, [10, 11]);
-        assert_eq!(drain(&mut arena, appended), vec![2, 10, 11]);
+        assert_eq!(appended.drain(&mut arena).collect::<Vec<_>>(), vec![2, 10, 11]);
     }
 
     #[test]
@@ -146,7 +152,7 @@ mod tests {
         assert_eq!(first, 1);
 
         let appended = rest.with_appended(&mut arena, [10, 11]);
-        assert_eq!(drain(&mut arena, appended), vec![10, 11]);
+        assert_eq!(appended.drain(&mut arena).collect::<Vec<_>>(), vec![10, 11]);
     }
 
     #[test]
@@ -161,8 +167,8 @@ mod tests {
         let child_a = rest.with_appended(&mut arena, [100]);
         let child_b = rest.with_appended(&mut arena, [200]);
 
-        assert_eq!(drain(&mut arena, child_a), vec![2, 3, 100]);
-        assert_eq!(drain(&mut arena, child_b), vec![2, 3, 200]);
+        assert_eq!(child_a.drain(&mut arena).collect::<Vec<_>>(), vec![2, 3, 100]);
+        assert_eq!(child_b.drain(&mut arena).collect::<Vec<_>>(), vec![2, 3, 200]);
     }
 
     #[test]
@@ -171,6 +177,6 @@ mod tests {
         let list = RemainingList::new(&mut arena, vec![]);
         let list = list.with_appended(&mut arena, [1, 2]);
         let list = list.with_appended(&mut arena, [3, 4]);
-        assert_eq!(drain(&mut arena, list), vec![1, 2, 3, 4]);
+        assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), vec![1, 2, 3, 4]);
     }
 }

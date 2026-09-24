@@ -24,7 +24,7 @@ use merc_syntax::UntypedDataSpecification;
 use merc_typecheck::DataSpecification;
 
 /// A small recursive sort mirroring `Nat`'s shape (`dzero`/`dsucc`), avoiding
-/// the real `Nat`/`Pos` prelude for the reason in the module doc comment.
+/// the real `Nat`/`Pos` prelude.
 const PRELUDE: &str = "
     sort D;
     cons dzero: D;
@@ -72,21 +72,20 @@ fn generator_for(vars: &[DataVariable]) -> FreshVariableGenerator {
 }
 
 /// Constructor-expansion throughput for `sum n:D . n < bound`, across a range
-/// of bounds — isolates the cost of `EnumerationPlans`-indexed constructor lookup
-/// and per-step normalisation (§6.1), since the enumerator processes roughly
-/// `2 * bound` work items regardless of `bound`'s size.
+/// of bounds, with one rewriter and enumerator shared across all iterations as
+/// a state space exploration would.
 fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
     let spec = lower(PRELUDE);
     let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
     let plans = Rc::new(EnumerationPlans::build(&spec));
+    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
+    let mut enumerator = Enumerator::new(plans);
 
     let mut group = c.benchmark_group("bounded sum enumeration");
     for bound in [10, 50, 200] {
         let (vars, body) = lt_goal(bound);
         group.bench_function(format!("n < {bound}"), |bencher| {
             bencher.iter(|| {
-                let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-                let mut enumerator = Enumerator::new(plans.clone());
                 let mut count = 0usize;
                 enumerator.enumerate(
                     &mut rewriter,
@@ -105,7 +104,7 @@ fn criterion_benchmark_bounded_enumeration(c: &mut Criterion) {
     group.finish();
 }
 
-/// The `EnumerationPlans::build` win the constructor-index buys, isolated.
+/// Cost of constructing the enumeration plans for a specification.
 fn criterion_benchmark_enumeration_plans_build(c: &mut Criterion) {
     let spec = lower(PRELUDE);
 
@@ -116,73 +115,9 @@ fn criterion_benchmark_enumeration_plans_build(c: &mut Criterion) {
     });
 }
 
-/// Finite-sort enumeration throughput, cached after the first call.
-fn criterion_benchmark_finite_sort_cache_hit(c: &mut Criterion) {
-    let spec = lower(PRELUDE);
-    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = Rc::new(EnumerationPlans::build(&spec));
-    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-
-    let b = DataVariable::with_sort("b", SortExpression::from(BasicSort::new("Bool")).copy());
-    let vars = vec![b];
-    // `goal(b) = true`: every Bool value is a solution, so this repeatedly
-    // drains the cached 2-element `Bool` list.
-    let body: DataExpression =
-        DataFunctionSymbol::with_sort("true", SortExpression::from(BasicSort::new("Bool")).copy()).into();
-
-    let mut enumerator = Enumerator::new(plans);
-    c.bench_function("Bool sum enumeration (cached after first call)", |bencher| {
-        bencher.iter(|| {
-            let mut count = 0usize;
-            enumerator.enumerate(
-                &mut rewriter,
-                &mut generator_for(&vars),
-                &vars,
-                &body,
-                |_rewriter, _solution| -> ControlFlow<()> {
-                    count += 1;
-                    ControlFlow::Continue(())
-                },
-            );
-            black_box(count);
-        });
-    });
-}
-
-/// `bounded sum enumeration`'s workload, but driven through one `Enumerator`
-/// reused across every `bencher.iter()` call instead of building a fresh one
-/// each time.
-fn criterion_benchmark_bounded_enumeration_reused(c: &mut Criterion) {
-    let spec = lower(PRELUDE);
-    let rewrite_spec = RewriteSpecification::from_data_specification(&spec);
-    let plans = Rc::new(EnumerationPlans::build(&spec));
-    let mut rewriter = InnermostRewriter::new(&rewrite_spec);
-    let (vars, body) = lt_goal(50);
-
-    let mut enumerator = Enumerator::new(plans);
-    c.bench_function("bounded sum enumeration, one Enumerator reused (n < 50)", |bencher| {
-        bencher.iter(|| {
-            let mut count = 0usize;
-            enumerator.enumerate(
-                &mut rewriter,
-                &mut generator_for(&vars),
-                &vars,
-                &body,
-                |_rewriter, _solution| -> ControlFlow<()> {
-                    count += 1;
-                    ControlFlow::Continue(())
-                },
-            );
-            black_box(count);
-        });
-    });
-}
-
 criterion_group!(
     benches,
     criterion_benchmark_bounded_enumeration,
-    criterion_benchmark_bounded_enumeration_reused,
     criterion_benchmark_enumeration_plans_build,
-    criterion_benchmark_finite_sort_cache_hit,
 );
 criterion_main!(benches);
