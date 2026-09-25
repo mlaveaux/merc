@@ -338,7 +338,11 @@ mod tests {
         assert_eq!(vector.len(), 9);
         assert_eq!(vector.at(8), 99);
         for i in 0..8u32 {
-            assert_eq!(vector.at(i as usize), i, "elements below the boundary must survive the resize");
+            assert_eq!(
+                vector.at(i as usize),
+                i,
+                "elements below the boundary must survive the resize"
+            );
         }
     }
 

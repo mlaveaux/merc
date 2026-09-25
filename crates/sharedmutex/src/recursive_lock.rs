@@ -22,6 +22,12 @@ pub struct RecursiveLock<T> {
     /// The number of times the current thread has read locked the mutex.
     recursive_depth: Cell<usize>,
 
+    /// Set for the duration of a [`RecursiveLockWriteGuard::with_mut`] call, so that a
+    /// [`RecursiveLock::read_recursive`] call made anywhere during that window (including
+    /// reentrantly, from inside the closure) sees it and panics instead of manufacturing an
+    /// aliased `&T` alongside the live `&mut T` the closure holds.
+    mutating: Cell<bool>,
+
     /// The number of calls to the write() method.
     write_calls: Cell<usize>,
 
@@ -35,6 +41,7 @@ impl<T> RecursiveLock<T> {
         RecursiveLock {
             inner: BfSharedMutex::new(data),
             recursive_depth: Cell::new(0),
+            mutating: Cell::new(false),
             write_calls: Cell::new(0),
             read_recursive_calls: Cell::new(0),
         }
@@ -45,6 +52,7 @@ impl<T> RecursiveLock<T> {
         RecursiveLock {
             inner: mutex,
             recursive_depth: Cell::new(0),
+            mutating: Cell::new(false),
             write_calls: Cell::new(0),
             read_recursive_calls: Cell::new(0),
         }
@@ -126,7 +134,17 @@ impl<T> RecursiveLock<T> {
     /// May also be called inside a write section: the returned guard then borrows the write
     /// lock instead of acquiring the underlying mutex. While such a guard is alive, mutating
     /// through the [`RecursiveLockWriteGuard`] panics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called while a [`RecursiveLockWriteGuard::with_mut`] closure is currently
+    /// executing (on this thread) — that closure holds a live `&mut T`, invisible to the
+    /// borrow checker across this call, so handing out a `&T` here would alias it.
     pub fn read_recursive<'a>(&'a self) -> Result<RecursiveLockReadGuard<'a, T>, Box<dyn Error + 'a>> {
+        assert!(
+            !self.mutating.get(),
+            "Cannot call read_recursive() while a RecursiveLockWriteGuard::with_mut call is in progress"
+        );
         if self.recursive_depth.get() == 0 {
             // Not yet holding a read lock: acquire the shared protocol lock without
             // materialising a guard, so the busy flag stays set until our own guard
@@ -224,21 +242,47 @@ impl<T> Deref for RecursiveLockWriteGuard<'_, T> {
     }
 }
 
-/// Allows dereferencing to the underlying object.
-impl<T> DerefMut for RecursiveLockWriteGuard<'_, T> {
+impl<T> RecursiveLockWriteGuard<'_, T> {
+    /// Grants scoped mutable access to the underlying value.
+    ///
+    /// Deliberately not a `DerefMut` impl returning a bare `&mut T`: such a reference has no
+    /// `Drop` hook, so nothing could tell [`RecursiveLock::read_recursive`] that it is still
+    /// live once handed out — the caller could stash it in a `let` binding, call
+    /// `read_recursive()` afterwards (which only touches the separate `RecursiveLock` value,
+    /// not this guard, so the borrow checker sees no conflict), and obtain a `&T` aliasing the
+    /// still-held `&mut T`. Scoping mutation to a closure whose parameter cannot outlive the
+    /// call, combined with the `mutating` flag `read_recursive` checks for the closure's whole
+    /// dynamic extent (including a `read_recursive` call made reentrantly from inside `f`),
+    /// closes both the "held across later statements" and the "called from within `f`" forms
+    /// of that aliasing.
+    ///
     /// # Panics
     ///
-    /// Panics while a recursive read guard taken inside this write section is alive. Such a
-    /// guard hands out `&T` derived from the data pointer, invisible to the borrow checker,
-    /// so a `&mut T` would alias it.
-    fn deref_mut(&mut self) -> &mut Self::Target {
+    /// Panics if a recursive read guard taken inside this write section (before this call) is
+    /// still alive — such a guard hands out `&T` derived from the data pointer, invisible to
+    /// the borrow checker, so a `&mut T` would alias it.
+    pub fn with_mut<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
         assert!(
             self.mutex.recursive_depth.get() == 1,
             "Cannot mutate through RecursiveLockWriteGuard while recursive read guards from its write section are alive"
         );
+
+        struct ResetOnDrop<'a>(&'a Cell<bool>);
+        impl Drop for ResetOnDrop<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+
+        // Marks the mutation as in progress for the whole call to `f`, including any
+        // `read_recursive()` call `f` reentrantly makes; reset even if `f` panics, so a
+        // caught unwind does not leave the lock permanently unable to read_recursive().
+        self.mutex.mutating.set(true);
+        let _reset = ResetOnDrop(&self.mutex.mutating);
+
         // We hold the write guard exclusively and no recursive read guards exist, so mutable
-        // access is safe.
-        self.guard.deref_mut()
+        // access is safe; `mutating` additionally rules out one being created during `f`.
+        f(self.guard.deref_mut())
     }
 }
 
@@ -260,37 +304,42 @@ mod tests {
     use crate::BfSharedMutex;
     use crate::RecursiveLock;
 
-    /// A `&mut T` obtained from `RecursiveLockWriteGuard::deref_mut` while no nested
-    /// recursive read guard is alive must not alias a `&T` obtained from a
-    /// subsequently-created nested `read_recursive` guard, even though nothing borrows
-    /// the `&mut T` returned from `deref_mut` past the point where it is checked.
-    ///
-    /// `deref_mut`'s `recursive_depth == 1` assertion is only evaluated at call time; it
-    /// does not prevent the caller from retaining the `&mut T` it returns while a nested
-    /// `read_recursive` guard is created afterwards, which manufactures a live `&mut T`
-    /// and a live `&T` to the same location with no `unsafe` on the caller's part.
+    /// Regression test for the aliasing bug `with_mut` replaced `DerefMut` to close:
+    /// calling `read_recursive()` *from inside* the closure passed to `with_mut` must panic
+    /// (instead of silently succeeding and manufacturing a `&T` aliasing the closure's live
+    /// `&mut T`, as the old `deref_mut`-based API allowed — see git history for the original
+    /// repro, which relied on stashing `&mut *write` in a `let` binding across a later
+    /// `read_recursive()` call; that call shape no longer type-checks at all now that
+    /// `DerefMut` is gone, which is itself part of the fix).
     #[test]
-    fn test_deref_mut_alias_survives_nested_read_recursive() {
+    #[should_panic(
+        expected = "Cannot call read_recursive() while a RecursiveLockWriteGuard::with_mut call is in progress"
+    )]
+    fn test_read_recursive_during_with_mut_panics() {
         let lock = RecursiveLock::new(42i32);
         let mut write = lock.write().unwrap();
 
-        // Obtain `&mut i32` through the safe API; depth is 1, so `deref_mut`'s assert
-        // passes and this borrow is handed out.
-        let data: &mut i32 = &mut *write;
-        *data = 100;
+        write.with_mut(|data| {
+            *data = 100;
+            // Reentrant call while `data` (the closure's `&mut i32`) is still logically
+            // live: must panic rather than hand out an aliasing `&T`.
+            let _ = lock.read_recursive().unwrap();
+            *data += 1;
+        });
+    }
 
-        // Nothing about holding `data` prevents this: `read_recursive` only touches
-        // `lock`, a value distinct from `write`/`data` as far as the borrow checker is
-        // concerned.
+    /// The non-overlapping case `with_mut` is meant to keep working: mutate via a scoped
+    /// closure, then take a recursive read only *after* that closure has returned (so the
+    /// `mutating` flag is already clear) — must succeed and observe the mutation.
+    #[test]
+    fn test_read_recursive_after_with_mut_succeeds() {
+        let lock = RecursiveLock::new(42i32);
+        let mut write = lock.write().unwrap();
+
+        write.with_mut(|data| *data = 100);
+
         let read = lock.read_recursive().unwrap();
-
-        // Read through the alias first, then write through `data` again: this ordering
-        // is what actually exercises the aliasing violation under Stacked Borrows,
-        // since a tag invalidated by a foreign access is only caught on its own next
-        // use.
         assert_eq!(*read, 100);
-        *data += 1;
-        assert_eq!(*data, 101);
     }
 
     #[test]
@@ -338,7 +387,7 @@ mod tests {
     fn test_read_recursive_inside_write() {
         let lock = RecursiveLock::new(42);
         let mut write = lock.write().unwrap();
-        *write += 1;
+        write.with_mut(|v| *v += 1);
 
         // Piggybacks on the write lock instead of acquiring the underlying mutex.
         let read = lock.read_recursive().unwrap();
@@ -347,7 +396,7 @@ mod tests {
         drop(read);
 
         // Mutation is allowed again once the read guard is gone.
-        *write += 1;
+        write.with_mut(|v| *v += 1);
         assert_eq!(*write, 44);
         drop(write);
 
@@ -438,7 +487,7 @@ mod tests {
                         }
 
                         // Exclusive access through the recursive write path.
-                        *lock.write().unwrap() += 1;
+                        lock.write().unwrap().with_mut(|v| *v += 1);
                     })
                 })
                 .collect();
