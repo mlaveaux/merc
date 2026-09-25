@@ -19,6 +19,7 @@ use merc_syntax::UntypedPres;
 use merc_syntax::UntypedProcessSpecification;
 use merc_syntax::UntypedStateFrmSpec;
 use merc_syntax::make_process_specification;
+use merc_syntax::random_data_specification;
 use merc_syntax::random_lps;
 use merc_syntax::random_pbes;
 use merc_syntax::random_pres;
@@ -298,5 +299,21 @@ fn random_pres_print_parse_fixpoint() {
         let reparsed = UntypedPres::parse(&printed)
             .unwrap_or_else(|e| panic!("failed to reparse generated PRES:\n{printed}\nerror: {e}"));
         assert_eq!(printed, format!("{reparsed}"), "PRES print/parse not a fixpoint");
+    });
+}
+
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn random_data_specification_print_parse_fixpoint() {
+    random_test(100, |rng| {
+        let spec = random_data_specification(rng, 6, 3);
+        let printed = format!("{spec}");
+        let reparsed = UntypedDataSpecification::parse(&printed)
+            .unwrap_or_else(|e| panic!("failed to reparse generated data specification:\n{printed}\nerror: {e}"));
+        assert_eq!(
+            printed,
+            format!("{reparsed}"),
+            "data specification print/parse not a fixpoint"
+        );
     });
 }

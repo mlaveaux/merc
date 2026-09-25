@@ -14,7 +14,13 @@ use crate::syntax_tree::ConstructorDecl;
 use crate::syntax_tree::Sort;
 
 const BASIC_SORTS: &[Sort] = &[Sort::Bool, Sort::Pos, Sort::Nat, Sort::Int, Sort::Real];
-const CONTAINERS: &[ComplexSort] = &[ComplexSort::List, ComplexSort::Set, ComplexSort::FSet, ComplexSort::FBag, ComplexSort::Bag];
+const CONTAINERS: &[ComplexSort] = &[
+    ComplexSort::List,
+    ComplexSort::Set,
+    ComplexSort::FSet,
+    ComplexSort::FBag,
+    ComplexSort::Bag,
+];
 
 /// Generates `sort_count` random sort declarations, each referencing only sorts declared
 /// earlier in the same list (plus the built-in basic sorts) -- so the dependency graph is
@@ -57,7 +63,12 @@ fn random_leaf_sort<R: Rng>(rng: &mut R, earlier: &[String]) -> SortExpression {
 /// Generates one sort's defining expression. `depth` bounds how many further constructor
 /// levels (struct field / container element / function domain-range) may nest before falling
 /// back to a leaf sort.
-fn random_sort_expr<R: Rng>(rng: &mut R, earlier: &[String], depth: usize, constructor_id: &mut usize) -> SortExpression {
+fn random_sort_expr<R: Rng>(
+    rng: &mut R,
+    earlier: &[String],
+    depth: usize,
+    constructor_id: &mut usize,
+) -> SortExpression {
     if depth == 0 {
         return random_leaf_sort(rng, earlier);
     }
@@ -89,7 +100,12 @@ fn random_sort_expr<R: Rng>(rng: &mut R, earlier: &[String], depth: usize, const
     }
 }
 
-fn random_constructor<R: Rng>(rng: &mut R, earlier: &[String], depth: usize, constructor_id: &mut usize) -> ConstructorDecl {
+fn random_constructor<R: Rng>(
+    rng: &mut R,
+    earlier: &[String],
+    depth: usize,
+    constructor_id: &mut usize,
+) -> ConstructorDecl {
     let name = format!("c{constructor_id}");
     *constructor_id += 1;
 
@@ -97,7 +113,10 @@ fn random_constructor<R: Rng>(rng: &mut R, earlier: &[String], depth: usize, con
     let args = (0..field_count)
         .map(|field_index| {
             let field_name = format!("{name}_f{field_index}");
-            (Some(respan(Span::default(), field_name)), random_sort_expr(rng, earlier, depth, constructor_id))
+            (
+                Some(respan(Span::default(), field_name)),
+                random_sort_expr(rng, earlier, depth, constructor_id),
+            )
         })
         .collect::<Vec<_>>();
 
