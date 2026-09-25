@@ -15,7 +15,8 @@ below.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Tooling: kani, miri, loom, sanitizers, nextest, cargo-deny | done — see [phase-0-tooling.md](phase-0-tooling.md) |
-| 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling`, mcrl2 FFI | not started |
+| 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling` | in progress (3 parallel review-adversary agents) |
+| 1b | mcrl2 FFI boundary (`tools/mcrl2/crates/mcrl2`) — miri/sanitizers only, kani doesn't model-check across the C++ FFI boundary | not started |
 | 2 | `typecheck` / `syntax` core (highest churn + lowest health) | not started |
 | 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | not started |
 | 4 | Tool binaries & GUI, three-workspace boundary check | not started |
