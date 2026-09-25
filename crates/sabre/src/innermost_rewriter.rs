@@ -177,6 +177,16 @@ impl InnermostRewriter {
                         }
                     }
                     Config::Construct(symbol, arity, index) => {
+                        // `symbol` was just popped off `write_configs` above (in the
+                        // `if let Some(config) = write_configs.pop()`), so it is no
+                        // longer an element of that container and is not, by itself,
+                        // rooted by it any more. It stays implicitly reachable only
+                        // because nothing allocates between that pop and its first
+                        // use here (`symbol.protect()` / `DataApplication::with_iter`,
+                        // both of which re-root it: the former onto the ordinary
+                        // thread-local protection stack, the latter by placing it in
+                        // the newly built `term`), so no GC can run in the gap.
+                        //
                         // Take the last arity arguments.
                         let mut write_terms = stack.terms.write();
                         let length = write_terms.len();
