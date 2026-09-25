@@ -18,9 +18,10 @@ below.
 | 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling` | done — see phase-1-foundation-unsafe-{aterm,sharedmutex-unsafety,sabre}.md |
 | 1b | mcrl2 FFI boundary (`tools/mcrl2/crates/mcrl2`) — miri boundary tests + written contracts only, kani doesn't model-check across the C++ FFI boundary | done — see phase-1b-mcrl2-ffi-{atermpp,wrappers}.md |
 | 2 | `typecheck` / `syntax` core (highest churn + lowest health) | done — see phase-2-typecheck-{inference,signature}.md, phase-2-syntax.md |
-| 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | not started |
-| 4 | Tool binaries & GUI, three-workspace boundary check | not started |
+| 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | in progress (4 parallel review-adversary agents: symbolic, reduction, vpg/unification/automaton, untested tool binaries + graph_symmetry) |
+| 4 | Tool binaries & GUI, three-workspace boundary check | partly covered by Phase 3's tool-binary agent |
 | 5 | Cross-cutting: import cycles, doc audit, coverage gaps | not started |
+| — | Comment cleanup: trim the extensive `# Safety` comments added during Phase 1/1b to concise ones, verifying each claim first | in progress (4 parallel agents: sharedmutex+unsafety, aterm, sabre+sabre_compiling, mcrl2 atermpp) |
 
 ## Findings so far
 
