@@ -667,3 +667,49 @@ fn combined_sort_matches(
         }
     }
 }
+
+#[cfg(test)]
+mod stack_depth_probe {
+    //! Isolates `check_process_expr`'s own recursion from the parser's: the tree here is built
+    //! directly, so a stack overflow can only come from this module's own walk.
+    use merc_syntax::ProcessExprKind;
+    use merc_syntax::Span;
+    use merc_syntax::UntypedDataSpecification;
+
+    use super::*;
+    use crate::checking::ActionTable;
+    use crate::process::process_specification::DeclarationTables;
+
+    fn deep_hide(depth: usize) -> ProcessExpr {
+        let mut expr = ProcessExprKind::Delta.spanned(Span::default());
+        for _ in 0..depth {
+            expr = ProcessExprKind::Hide {
+                actions: Vec::new(),
+                operand: Box::new(expr),
+            }
+            .spanned(Span::default());
+        }
+        expr
+    }
+
+    #[test]
+    fn deeply_nested_hide_does_not_overflow_the_stack() {
+        let mut data = DataSpecification::from_untyped(UntypedDataSpecification::parse("").unwrap()).unwrap();
+        let actions: ActionTable = ActionTable::build(&mut data, &[], resolve_declared_sort).unwrap();
+        let tables = DeclarationTables {
+            global_sorts: Vec::new(),
+            process_params: Vec::new(),
+            process_decl_spans: Vec::new(),
+            processes_by_name: Default::default(),
+            actions,
+        };
+        let mut typing = TypingInfo::default();
+        let scope: Vec<(VarId, ResolvedSortId, Span)> = Vec::new();
+
+        // 100,000 nested `hide({}, ...)`s, exactly as `deeply_nested_negation_does_not_overflow_the_stack`
+        // does for `modal::check::check_state_formula`.
+        let expr = deep_hide(100_000);
+        let result = check_process_expr(&mut data, &tables, &scope, &expr, &mut typing);
+        assert!(result.is_ok());
+    }
+}

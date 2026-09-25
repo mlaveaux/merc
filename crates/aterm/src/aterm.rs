@@ -460,6 +460,32 @@ pub struct ATermSend {
     protection_set: Arc<Mutex<ProtectionSet<ATermIndex>>>,
 }
 
+/// # Safety
+///
+/// `ATermSend { term: ATermRef<'static>, root: ProtectionIndex, protection_set:
+/// Arc<Mutex<ProtectionSet<ATermIndex>>> }`.
+/// - `term` is `Send`/`Sync` by the contract on `ATermRef`'s own impls above.
+/// - `root` (`ProtectionIndex`, a `Copy` newtype over a plain generational `usize` index) has no
+///   interior mutability, so it is trivially both.
+/// - `protection_set` is `Arc<Mutex<ProtectionSet<ATermIndex>>>`, which is `Send`/`Sync`
+///   automatically as soon as `ATermIndex = StablePointer<SharedTerm>` is -- exactly the
+///   property the `ATermRef` impls above establish (`Mutex<X>` needs `X: Send` to be `Sync`,
+///   `Arc<X>` needs `X: Send + Sync` to be `Send`, and `ProtectionSet<ATermIndex>`'s only
+///   `ATermIndex`-typed storage is a plain `Vec`, adding no further raw-pointer field of its
+///   own).
+///
+/// So nothing here needs re-deriving from scratch: this impl exists only because `SharedTerm`
+/// (embedded in `ATermIndex` via `ATermRef`) is a self-referential type that already required
+/// one manual `Send`/`Sync` assertion, and a struct that contains an unasserted `!Send`/`!Sync`
+/// field anywhere in its transitive closure cannot have those traits auto-derived for it either
+/// -- so the compiler cannot discharge this on `ATermSend`'s behalf even though every field's
+/// own requirement is already met once the `ATermRef` argument above is accepted.
+///
+/// The invariant `ATermSend` itself must additionally uphold across the send is that `root`
+/// stays protected in exactly `protection_set` until `Drop for ATermSend` unprotects it exactly
+/// once (see `ATermSend::from`); that keeps the term reachable by the GC regardless of which
+/// thread is now holding it, so point 2 of the `ATermRef` argument above (no use-after-free)
+/// still holds after the move, on the receiving thread.
 unsafe impl Send for ATermSend {}
 unsafe impl Sync for ATermSend {}
 
