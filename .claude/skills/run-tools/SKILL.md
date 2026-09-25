@@ -17,7 +17,7 @@ Every tool is a cargo binary; run it with `cargo run --release --bin <tool> -- <
 | `merc-pbes` | `tools/mcrl2` | PBES symmetry identification | `examples/pbes/` |
 | `merc-ltsgraph` | `tools/gui` | GUI visualization of LTSs (needs a display; skip in headless environments) | `examples/lts/` |
 
-For the `tools/mcrl2` and `tools/gui` binaries, run cargo from that workspace directory.
+For the `tools/mcrl2` and `tools/gui` binaries, run cargo from that workspace directory. Both workspaces already point their `target-dir` at the shared root `target/` (via `.cargo/config.toml`), so never pass an explicit `--target-dir` — doing so builds a separate, duplicate copy of everything instead of reusing the shared target directory.
 
 Functionality that shells out to the upstream mCRL2 toolset (e.g. symbolic exploration in `merc-lps`, refinement comparisons) reads the `MCRL2_PATH` environment variable, which must point at a built mCRL2 `build/stage/bin` directory. When it is unset those code paths are skipped or unavailable — say so in your report instead of concluding they work.
 

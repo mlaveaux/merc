@@ -15,6 +15,8 @@ The repository contains **three independent cargo workspaces**. A change is only
 
 For a change scoped to one crate, run tests for that crate first (`-p <crate>`), then the workspace-wide checks before committing.
 
+The `tools/mcrl2` and `tools/gui` workspaces each have a `.cargo/config.toml` setting `target-dir = "../../target"`, so their builds already land in the shared root `target/` directory. Never pass an explicit `--target-dir` (or set `CARGO_TARGET_DIR`) when building in those workspaces — it overrides that shared location and produces a second, duplicate build of every dependency.
+
 ## Instructions
 
 ### Step 1: Tests
