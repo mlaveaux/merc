@@ -21,6 +21,7 @@ use merc_syntax::UntypedStateFrmSpec;
 use merc_syntax::make_process_specification;
 use merc_syntax::random_lps;
 use merc_syntax::random_pbes;
+use merc_syntax::random_pres;
 use merc_utilities::random_test;
 
 /// PBES quantifiers used to panic because `forall`/`exists` were registered as
@@ -284,5 +285,18 @@ fn random_pbes_print_parse_fixpoint() {
         let reparsed = UntypedPbes::parse(&printed)
             .unwrap_or_else(|e| panic!("failed to reparse generated PBES:\n{printed}\nerror: {e}"));
         assert_eq!(printed, format!("{reparsed}"), "PBES print/parse not a fixpoint");
+    });
+}
+
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn random_pres_print_parse_fixpoint() {
+    random_test(100, |rng| {
+        let use_bounds = rng.random_bool(0.5);
+        let pres = random_pres(rng, 3, 4, 4, use_bounds);
+        let printed = format!("{pres}");
+        let reparsed = UntypedPres::parse(&printed)
+            .unwrap_or_else(|e| panic!("failed to reparse generated PRES:\n{printed}\nerror: {e}"));
+        assert_eq!(printed, format!("{reparsed}"), "PRES print/parse not a fixpoint");
     });
 }
