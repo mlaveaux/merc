@@ -552,6 +552,7 @@ impl fmt::Display for TermPoolMetrics<'_> {
 ///   via `unsafe { &mut *pool.get() }`, but only while holding the pool's exclusive *write*
 ///   lock -- which cannot be granted while any thread's `read_recursive()` guard above is still
 ///   live.
+///
 /// So for any given cell, the collector's access and its owning thread's access are always
 /// temporally disjoint: a cell is never observed by two threads, nor by the collector and its
 /// owning thread, at the same time. That is what makes the `&mut` on both sides sound in

@@ -308,7 +308,8 @@ fn test_boundary_transmutable_single_element_preserves_identity() {
     // internally.
     // SAFETY: the `'static`-labeled copy is only read below, strictly before `leaf` (and hence
     // `v`) goes out of scope at the end of this function.
-    let v: Vec<ATermRef<'static>> = vec![unsafe { std::mem::transmute::<ATermRef<'_>, ATermRef<'static>>(leaf.copy()) }];
+    let v: Vec<ATermRef<'static>> =
+        vec![unsafe { std::mem::transmute::<ATermRef<'_>, ATermRef<'static>>(leaf.copy()) }];
 
     // SAFETY: the transmuted lifetime does not outlive `v` (which itself does not outlive
     // `leaf`, the term it borrows from).

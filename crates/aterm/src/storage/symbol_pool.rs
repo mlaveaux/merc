@@ -149,7 +149,12 @@ impl SymbolPool {
 }
 
 /// Represents a function symbol with a name and arity.
+///
+/// `#[repr(C)]` so `name` is *guaranteed* (not merely typical under the current rustc layout
+/// algorithm) to occupy the struct's first bytes — the `BlockAllocatorSafe` safety argument
+/// below depends on that, pinned by the `offset_of!` static assertion in `mod tests`.
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[repr(C)]
 pub struct SharedSymbol {
     /// Name of the function
     name: String,
@@ -161,8 +166,9 @@ pub struct SharedSymbol {
 // `merc_unsafety`), checked against `SharedSymbol { name: String, arity: usize }`:
 //
 // 1. The sentinel (`usize::MAX`, i.e. all bytes `0xFF`) must never occur as the first
-//    `size_of::<*mut _>()` bytes of a live `SharedSymbol`. With the layout this type currently
-//    gets from rustc (verified below), those bytes are `name`'s internal heap pointer (or, for
+//    `size_of::<*mut _>()` bytes of a live `SharedSymbol`. With `#[repr(C)]` guaranteeing `name`
+//    occupies the struct's first bytes (pinned below), those bytes are `name`'s internal heap
+//    pointer (or, for
 //    an unallocated `String`, `NonNull::dangling()`, `align_of::<u8>() == 1`): no allocator in
 //    this codebase or on the platforms it targets ever hands out the address `usize::MAX` (not a
 //    valid, mappable heap address on any supported target), which is exactly why that bit
@@ -176,14 +182,10 @@ pub struct SharedSymbol {
 // Caveat this impl does NOT fully discharge: `SharedSymbol` is not `#[repr(C)]` (unlike
 // `SharedTermFixed`/`SharedTermInt` in `aterm_storage.rs`, which are, with an analogous
 // first-field comment), so property 1 additionally assumes `name` occupies the struct's first
-// `size_of::<*mut _>()` bytes -- true for the layout this rustc currently produces (checked with
-// `std::mem::offset_of!` below), but not a guarantee `#[repr(Rust)]` makes, and not pinned by a
-// static assertion. If a future compiler (or a different codegen configuration) placed `arity:
-// usize` first instead, this impl would depend on `arity` itself never reaching exactly
-// `usize::MAX` -- a value `Symbol::new`/`SharedSymbol::new` accept without any bound.
-// See the review report for this crate for the accompanying finding and suggested fix
-// (`#[repr(C)]` on `SharedSymbol`, pinned by an `offset_of!` static assertion as the other two
-// `BlockAllocatorSafe` types already have).
+// `size_of::<*mut _>()` bytes -- guaranteed by `#[repr(C)]` on `SharedSymbol` (pinned by the
+// `offset_of!` static assertion below, as the other two `BlockAllocatorSafe` types already
+// have), not merely typical of the layout an unannotated `#[repr(Rust)]` struct happens to get
+// from the current compiler.
 unsafe impl BlockAllocatorSafe for SharedSymbol {}
 
 impl SharedSymbol {

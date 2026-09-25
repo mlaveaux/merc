@@ -563,7 +563,10 @@ mod verification {
         let symbol_index = leak_symbol(0);
         // SAFETY: `symbol_index` is a leaked, live `SharedSymbol`.
         let symbol = unsafe { SymbolRef::from_index(&symbol_index) };
-        let int_term = Box::new(SharedTermInt { symbol, annotation: value });
+        let int_term = Box::new(SharedTermInt {
+            symbol,
+            annotation: value,
+        });
         let int_ptr = NonNull::from(Box::leak(int_term));
         // SAFETY: `int_ptr` points at a leaked, live `SharedTermInt`.
         let int_stable = unsafe { StablePointer::from_ptr(int_ptr) };
