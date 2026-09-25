@@ -4,6 +4,7 @@ use oxidd::ldd::LDDFunction;
 use oxidd::ldd::LDDManagerRef;
 use oxidd::ldd::Value;
 
+use merc_symbolic::ExplorationStrategy;
 use merc_symbolic::ReachabilityOptions;
 use merc_symbolic::SymbolicLPS;
 use merc_symbolic::SymbolicLps;
@@ -44,6 +45,11 @@ pub struct SymbolicPbes {
 /// which order their parameters are stored, mirroring the `--groups` and `--reorder` options of
 /// mCRL2's `pbessolvesymbolic`, and `cached` its `--cached` option: every group then remembers the
 /// parameter values it has already learned successors for, instead of re-enumerating them.
+/// `strategy` selects how the transition groups are applied, as for LPS symbolic exploration.
+///
+/// Deadlock detection is always requested internally regardless of `strategy`, since the resulting
+/// sinks are needed to build the game; there is no `--detect-deadlocks` flag here, unlike
+/// `merc-sym`/`merc-lps`.
 ///
 /// Builds the game from the same `SymbolicContext` reachability ran with; the
 /// value → equation-index mapping in `context.columns()` is only valid for that one context and
@@ -52,6 +58,7 @@ pub fn explore_pbes_symbolic_game(
     storage: &LDDManagerRef,
     srf_pbes: SrfPbes,
     encoding: &SymbolicLpsOptions,
+    strategy: ExplorationStrategy,
     cached: bool,
     compute_strategy: bool,
     timing: &Timing,
@@ -76,9 +83,9 @@ pub fn explore_pbes_symbolic_game(
         .expect("the equation index (position 0) must appear somewhere in the permutation");
 
     let options = ReachabilityOptions {
+        strategy,
         detect_deadlocks: true,
         cached,
-        ..ReachabilityOptions::default()
     };
     let mut context = symbolic.create_context();
     let result = reachability_with_options(storage, &mut symbolic, &mut context, &options, timing)?;
@@ -118,8 +125,9 @@ pub fn explore_pbes_symbolic(
     storage: &LDDManagerRef,
     srf_pbes: SrfPbes,
     encoding: &SymbolicLpsOptions,
+    strategy: ExplorationStrategy,
     cached: bool,
     timing: &Timing,
 ) -> Result<LDDFunction, MercError> {
-    Ok(explore_pbes_symbolic_game(storage, srf_pbes, encoding, cached, false, timing)?.vertices)
+    Ok(explore_pbes_symbolic_game(storage, srf_pbes, encoding, strategy, cached, false, timing)?.vertices)
 }

@@ -32,6 +32,10 @@ pub use args::BDD_NODE_CAPACITY;
 pub use args::LDD_CACHE_CAPACITY;
 pub use args::LDD_NODE_CAPACITY;
 #[cfg(feature = "clap")]
+pub use args::ExplorationArgs;
+#[cfg(feature = "clap")]
+pub use args::MaxIterationsArgs;
+#[cfg(feature = "clap")]
 pub use args::OxiddArgs;
 #[cfg(feature = "clap")]
 pub use args::ReorderArgs;

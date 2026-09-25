@@ -29,9 +29,6 @@ pub enum VariableOrder {
 
     /// Computes an order with the MINCE algorithm from the read/write matrix, which requires the
     /// [KaHyPar](https://github.com/kahypar/kahypar) hypergraph partitioner.
-    ///
-    /// This is the reordering that the `merc-sym reorder` command applies to the read/write matrix
-    /// reported by mCRL2's `lpsreach --info`, here computed from the read/write matrix directly.
     Mince {
         /// Path to the `KaHyPar` executable.
         kahypar_path: PathBuf,
@@ -81,8 +78,7 @@ impl VariableOrder {
 /// The order in which parameters are considered for reordering, as given on the command line.
 ///
 /// Kept separate from [`VariableOrder`] so that the `kahypar` tool is only resolved, via
-/// [`Order::resolve`], when [`Self::Mince`] is actually selected. Shared by the `merc-lps` and
-/// `merc-pbes` tools' `--reorder` argument.
+/// [`Order::resolve`], when [`Self::Mince`] is actually selected.
 #[derive(Debug, Clone)]
 pub enum Order {
     /// Do not reorder the parameters, the default.
@@ -99,10 +95,10 @@ impl Order {
     /// Resolves this into the [`VariableOrder`] to explore with. `resolve_kahypar` locates the
     /// `kahypar` executable and its configuration, and is only invoked when [`Self::Mince`] is
     /// selected.
-    pub fn resolve(
-        &self,
-        resolve_kahypar: impl FnOnce() -> Result<(PathBuf, PathBuf), MercError>,
-    ) -> Result<VariableOrder, MercError> {
+    pub fn resolve<F>(&self, resolve_kahypar: F) -> Result<VariableOrder, MercError>
+    where
+        F: FnOnce() -> Result<(PathBuf, PathBuf), MercError>,
+    {
         match self {
             Order::None => Ok(VariableOrder::None),
             Order::Mince => {
@@ -166,7 +162,8 @@ fn dependency_graph(patterns: &[ReadWritePattern]) -> DependencyGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::ReadWritePattern;
+    use super::VariableOrder;
 
     fn patterns() -> Vec<ReadWritePattern> {
         vec![

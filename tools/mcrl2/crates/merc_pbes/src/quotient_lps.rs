@@ -54,7 +54,7 @@ impl GapLexminSession {
 
         // Read until the setup sentinel while stdin is still open.
         let mut stdout = child.stdout.take().expect("GAP stdout should be piped");
-        let ready = read_until_sentinel(&mut stdout, "LEXMIN-READY").expect("GAP session startup failed");
+        let _ready = read_until_sentinel(&mut stdout, "LEXMIN-READY").expect("GAP session startup failed");
 
         // Put stdin and stdout back into the Child so they survive for later
         // queries.
@@ -131,11 +131,7 @@ fn read_until_sentinel<R: Read>(reader: &mut R, sentinel: &str) -> std::io::Resu
         }
     }
 
-    Err(Error::new(
-        ErrorKind::UnexpectedEof,
-        format!("sentinel not found in {}", buf).as_str(),
-    )
-    .into())
+    // Unreachable, sentinel not found.
 }
 
 /// Parse the flat integer list that GAP printed between `LEXMIN-BEGIN` and

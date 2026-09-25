@@ -4,6 +4,7 @@ use mcrl2::Pbes;
 use mcrl2::SrfPbes;
 use merc_explore::CachingStrategy;
 use merc_explore::ExplorationStrategy;
+use merc_symbolic::ExplorationStrategy as SymbolicExplorationStrategy;
 use merc_symbolic::LDD_CACHE_CAPACITY;
 use merc_symbolic::LDD_NODE_CAPACITY;
 use merc_symbolic::SymbolicLpsOptions;
@@ -78,6 +79,7 @@ fn assert_symbolic_matches_explicit(pbes: &Pbes) {
         &storage,
         unified_symbolic_srf(pbes),
         &SymbolicLpsOptions::default(),
+        SymbolicExplorationStrategy::default(),
         false,
         true,
         &Timing::new(),

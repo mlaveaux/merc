@@ -1,13 +1,11 @@
 use std::fs::File;
 use std::io::BufWriter;
-use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
 use clap::Subcommand;
 use log::info;
-use log::warn;
 
 use merc_explore::CachingStrategy;
 use merc_explore::ExplorationStrategy;
@@ -18,8 +16,9 @@ use merc_lts::LtsFormat;
 use merc_lts::LtsStream;
 use merc_lts::MutexLtsBuilder;
 use merc_lts::guess_lts_output_format;
-use merc_symbolic::ExplorationStrategy as SymbolicExplorationStrategy;
+use merc_symbolic::ExplorationArgs;
 use merc_symbolic::LddLenCache;
+use merc_symbolic::MaxIterationsArgs;
 use merc_symbolic::OxiddArgs;
 use merc_symbolic::ReachabilityOptions;
 use merc_symbolic::ReorderArgs;
@@ -35,7 +34,6 @@ use merc_tools::report_error;
 use merc_unsafety::print_allocator_metrics;
 use merc_utilities::MercError;
 use merc_utilities::Timing;
-use oxidd::ldd::LDDFunction;
 
 use mcrl2::LinearProcessSpecification;
 use mcrl2::PreprocessOptions;
@@ -122,9 +120,8 @@ struct ExploreArgs {
     #[command(flatten)]
     input: InputArgs,
 
-    /// The strategy used to apply the transition groups during reachability.
-    #[arg(long, short('s'), value_enum, default_value_t = SymbolicExplorationStrategy::default())]
-    strategy: SymbolicExplorationStrategy,
+    #[command(flatten)]
+    exploration: ExplorationArgs,
 
     /// How the summands are distributed over the transition groups: 'none' (one group per summand),
     /// 'used' (join summands using the same parameters), 'simple' (join summands with the same
@@ -144,10 +141,8 @@ struct ExploreArgs {
     #[arg(long)]
     cached: bool,
 
-    /// Stop the exploration after this many iterations (rounds for saturation), and report what has
-    /// been found until then. The reported states and deadlocks may then be incomplete.
-    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
-    max_iterations: Option<u32>,
+    #[command(flatten)]
+    max_iterations: MaxIterationsArgs,
 
     /// Write the reachable symbolic LTS to this .sym file, including the data specification,
     /// process parameters, parameter values and action labels. If not given, the LTS is not written.
@@ -242,7 +237,7 @@ fn handle_explore(cli: &Cli, args: &ExploreArgs, timing: &Timing, preprocess_lps
     let storage = cli.oxidd.init_ldd_manager();
 
     let options = ReachabilityOptions {
-        strategy: args.strategy,
+        strategy: args.exploration.strategy,
         detect_deadlocks: args.deadlocks,
         cached: args.cached,
     };
@@ -252,15 +247,8 @@ fn handle_explore(cli: &Cli, args: &ExploreArgs, timing: &Timing, preprocess_lps
         order: args.reorder.variable_order()?,
     };
 
-    // Stops the exploration once `--max-iterations` iterations are done, and remembers that it did.
     let mut stopped_after = None;
-    let on_iteration = |iteration: usize, _states: &LDDFunction| match args.max_iterations {
-        Some(max) if iteration >= max as usize => {
-            stopped_after = Some(iteration);
-            ControlFlow::Break(())
-        }
-        _ => ControlFlow::Continue(()),
-    };
+    let on_iteration = args.max_iterations.on_iteration(&mut stopped_after);
 
     if let Some(output) = &args.output {
         let (lts, deadlocks) = explore_lps_symbolic_to_sym(&storage, lps, &encoding, &options, timing, on_iteration)?;
@@ -279,11 +267,7 @@ fn handle_explore(cli: &Cli, args: &ExploreArgs, timing: &Timing, preprocess_lps
         }
     }
 
-    if let Some(iteration) = stopped_after {
-        warn!(
-            "Stopped after {iteration} iteration(s) because of --max-iterations, the reported states and deadlocks may be incomplete"
-        );
-    }
+    MaxIterationsArgs::warn_if_stopped(stopped_after);
 
     Ok(())
 }

@@ -15,6 +15,7 @@ use mcrl2::Pbes;
 use mcrl2::SrfPbes;
 use mcrl2::set_reporting_level;
 use mcrl2::verbosity_to_log_level;
+use merc_symbolic::ExplorationArgs;
 use merc_symbolic::LddLenCache;
 use merc_symbolic::OxiddArgs;
 use merc_symbolic::ReorderArgs;
@@ -282,6 +283,9 @@ struct ExploreExplicitArgs {
 /// [`ExploreArgs`] is shared between `explore-explicit` and `solve`.
 #[derive(clap::Args, Debug)]
 struct SymbolicExploreArgs {
+    #[command(flatten)]
+    exploration: ExplorationArgs,
+
     /// How the equations are distributed over the transition groups: 'none' (one group per equation),
     /// 'used' (join equations using the same parameters), 'simple' (join equations with the same
     /// read/write pattern) or a partition of the equation indices, e.g. '0; 1 3 4; 2 5'.
@@ -632,7 +636,14 @@ fn handle_explore_symbolic(
     let encoding = args.symbolic.encoding()?;
 
     let srf_pbes = args.symbolic.build_srf(&pbes)?;
-    let states = explore_pbes_symbolic(&storage, srf_pbes, &encoding, args.symbolic.cached, timing)?;
+    let states = explore_pbes_symbolic(
+        &storage,
+        srf_pbes,
+        &encoding,
+        args.symbolic.exploration.strategy,
+        args.symbolic.cached,
+        timing,
+    )?;
     println!("Number of states: {}", ldd_len(&states, &mut LddLenCache::new()));
     Ok(())
 }
@@ -658,6 +669,7 @@ fn handle_solve_symbolic(
             &storage,
             srf_pbes,
             &encoding,
+            args.symbolic.exploration.strategy,
             args.symbolic.cached,
             args.verify_solution,
             timing,

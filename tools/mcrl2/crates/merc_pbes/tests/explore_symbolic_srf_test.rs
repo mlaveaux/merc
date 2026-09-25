@@ -4,6 +4,7 @@ use mcrl2::Pbes;
 use mcrl2::SrfPbes;
 use merc_explore::CachingStrategy;
 use merc_explore::ExplorationStrategy;
+use merc_symbolic::ExplorationStrategy as SymbolicExplorationStrategy;
 use merc_symbolic::LDD_CACHE_CAPACITY;
 use merc_symbolic::LDD_NODE_CAPACITY;
 use merc_symbolic::LddLenCache;
@@ -56,8 +57,15 @@ fn assert_symbolic_matches_explicit(text_pbes_relative_path: &str) {
     symbolic_srf
         .unify_parameters(true, false)
         .expect("Failed to unify parameters");
-    let states = explore_pbes_symbolic(&storage, symbolic_srf, &SymbolicLpsOptions::default(), false, &timing)
-        .expect("Failed to explore PBES symbolically");
+    let states = explore_pbes_symbolic(
+        &storage,
+        symbolic_srf,
+        &SymbolicLpsOptions::default(),
+        SymbolicExplorationStrategy::default(),
+        false,
+        &timing,
+    )
+    .expect("Failed to explore PBES symbolically");
 
     let num_states = ldd_len(&states, &mut LddLenCache::new())
         .exact()
