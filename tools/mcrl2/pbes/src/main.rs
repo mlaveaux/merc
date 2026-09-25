@@ -856,7 +856,6 @@ fn quotient_explore<P, B: PGBuilder>(
 ) -> Result<B::PG, MercError>
 where
     P: ParameterLayoutLPS<Value = usize, Label = (), StateInfo = PbesVertex> + Sync,
-    <P::Summand as Summand>::Context: Send,
 {
     match caching {
         CachingStrategy::None => {

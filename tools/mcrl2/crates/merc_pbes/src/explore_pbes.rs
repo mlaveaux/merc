@@ -260,11 +260,12 @@ pub struct PbesContext {
     player_priority: Option<(Player, Priority)>,
 }
 
-// SAFETY: PbesContext is owned by exactly one worker thread. The
-// PbesRewriteContext wraps a per-worker C++ rewriter that no other thread
-// touches.  The raw term pointers in parameter_values are stable addresses
-// into the global term pool and are only read, never written.
-unsafe impl Send for PbesContext {}
+// Deliberately not `Send`: `rewrite: PbesRewriteContext` is documented as not `Send` (its
+// underlying C++ rewriter is single-threaded), and `crates/merc_pbes/tests/
+// pbes_context_send_soundness_test.rs` demonstrated that moving a `PbesContext` across threads
+// and using it there crashes the process (the same class of thread-local-bookkeeping crash as
+// `PbesSrfContext`, see `explore_srf.rs`). No call site needs `Send` here either — see the
+// removed `<P::Summand as Summand>::Context: Send` bound in `crates/explore/src/explore.rs`.
 
 impl PbesLps {
     pub fn new(mut pbes: Pbes) -> Result<Self, MercError> {

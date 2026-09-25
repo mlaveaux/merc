@@ -8,7 +8,6 @@ use mcrl2::DataVariable;
 use mcrl2::Pbes;
 use merc_explore::CacheLPS;
 use merc_explore::LPS;
-use merc_explore::Summand;
 use merc_explore::configure_rayon_thread_pool;
 use merc_explore::explore;
 use merc_explore::explore_parallel;
@@ -300,7 +299,6 @@ pub fn explore_pbes_parallel_impl<M, B>(
 ) -> Result<B::PG, MercError>
 where
     M: LPS<Value = usize, Label = (), StateInfo = PbesVertex> + Sync,
-    <M::Summand as Summand>::Context: Send,
     B: PGBuilder,
 {
     let pool = configure_rayon_thread_pool(threads, pinned)?;

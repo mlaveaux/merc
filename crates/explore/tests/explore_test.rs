@@ -78,7 +78,6 @@ where
 fn run_parallel<P>(lps: &P) -> (BTreeSet<State>, BTreeSet<Edge>)
 where
     P: LPS<Value = usize, Label = Label, StateInfo = State> + Sync,
-    <P::Summand as Summand>::Context: Send,
 {
     let (_initial, locals) = explore_parallel(
         lps,

@@ -32,3 +32,4 @@ petgraph.workspace = true
 merc_syntax.workspace = true
 rand.workspace = true
 test-case.workspace = true
+trybuild.workspace = true

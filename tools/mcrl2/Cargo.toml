@@ -43,6 +43,7 @@ streaming-iterator = "0.1"
 tempfile = "3.27"
 test-case = "3"
 thiserror = "2.0"
+trybuild = "1.0"
 
 # Dependencies used in procedural macros.
 proc-macro2 = "1.0"

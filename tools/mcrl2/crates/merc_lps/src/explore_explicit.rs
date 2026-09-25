@@ -255,7 +255,6 @@ fn run_explore_explicit_parallel<B, M>(
 where
     B: ConcurrentLtsBuilder<Mcrl2MultiActionLabel>,
     M: LPS<Value = usize, Label = Mcrl2MultiActionLabel, StateInfo = ()> + Sync,
-    <M::Summand as Summand>::Context: Send,
 {
     // Shared (immutable) reference to the builder used by the worker threads;
     // `ConcurrentLtsBuilder` requires `Sync`, so the workers can add transitions
@@ -604,8 +603,11 @@ pub struct ExplicitContext {
     next_state_buf: Vec<usize>,
 }
 
-// SAFETY: an `ExplicitContext` is owned by exactly one worker thread.
-unsafe impl Send for ExplicitContext {}
+// Deliberately not `Send`: `context: LearnSuccessorsContext` is thread-affine (see
+// `PbesSrfContext` in `explore_srf.rs`), and `crates/merc_lps/tests/
+// explicit_context_send_soundness_test.rs` demonstrated the same cross-thread crash. No call
+// site needs `Send` here either — see the removed `<P::Summand as Summand>::Context: Send`
+// bound in `crates/explore/src/explore.rs`.
 
 /// A single summand of the LPS, prepared for explicit enumeration.
 pub struct ExplicitSummand {

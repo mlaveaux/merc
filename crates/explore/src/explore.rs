@@ -179,7 +179,6 @@ where
     P: LPS + Sync,
     P::Value: Send + Sync + Debug,
     P::Label: Debug,
-    <P::Summand as Summand>::Context: Send,
     Local: Send,
     MakeLocal: Fn() -> Local + Sync,
     OnState: Fn(&mut Local, StateIndex, &P::StateInfo) -> Result<(), MercError> + Sync,
