@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "repowise": {
+      "command": "repowise",
+      "args": ["mcp"]
+    },
+    "rust-analyzer": {
+      "command": "rust-analyzer-mcp"
+    }
+  }
+}

@@ -34,3 +34,6 @@ crates/syntax/tests/snapshot
 
 # Ignore temporary files created by CADP
 *.o
+
+# repowise runtime data (local codebase index, rebuilt with `repowise init`)
+.repowise/

@@ -33,6 +33,8 @@ Assume the change has a bug and try to find it, in this order of importance:
 
 When the author (including the user) asserts "this is safe because X" or "callers never pass Y", check it: grep the callers, read the invariant, run the test. Run the relevant checks (`check` skill) rather than predicting they pass. A claim you did not verify is reported as unverified, not as fact.
 
+Where the `rust-analyzer` and `repowise` MCP servers are connected, prefer them over grep for the questions they answer precisely: `rust-analyzer` for go-to-definition, find-references, and type/diagnostic queries; `repowise` for callers, dependency/blast-radius, and change-risk across the whole codebase. Their output is still a claim to check against the actual code, not a substitute for reading it.
+
 ### Step 4: Demonstrate each defect with a failing test
 
 A finding is only confirmed when it fails executably. For every defect you intend to report, write a minimal test that fails on the reviewed code and would pass once fixed.
