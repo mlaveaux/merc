@@ -315,6 +315,33 @@ mod tests {
         assert_eq!(shared_vector.len(), (num_threads * num_iterations) as usize);
     }
 
+    /// Boundary of the very first reserve (`capacity` goes from 0, so `new_capacity =
+    /// max(0 * 2, 8) = 8`): exercises the empty-buffer branch of `reserve` (no old allocation to
+    /// copy from or free) and checks every slot up to and including the boundary index that
+    /// triggers the *second* reserve (`capacity` 8 -> 16).
+    #[test]
+    fn test_first_reserve_boundary() {
+        let vector = BfVec::<u32>::new();
+        assert!(vector.is_empty());
+
+        for i in 0..8u32 {
+            vector.push(i);
+        }
+        assert_eq!(vector.len(), 8);
+        for i in 0..8u32 {
+            assert_eq!(vector.at(i as usize), i);
+        }
+
+        // One more push crosses into the second reserve (8 -> 16), exercising the
+        // non-empty branch of `reserve` (copy + free the old allocation).
+        vector.push(99);
+        assert_eq!(vector.len(), 9);
+        assert_eq!(vector.at(8), 99);
+        for i in 0..8u32 {
+            assert_eq!(vector.at(i as usize), i, "elements below the boundary must survive the resize");
+        }
+    }
+
     #[test]
     fn test_clear_resets_length() {
         let vector = BfVec::<String>::new();

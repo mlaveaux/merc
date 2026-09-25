@@ -462,6 +462,27 @@ mod tests {
         });
     }
 
+    /// Crosses the bucket-0/bucket-1 boundary (`FIRST_BLOCKS = 16` blocks of `BLOCK` slots each
+    /// in bucket 0, so with `BLOCK = 4` that boundary sits at index `16 * 4 = 64`): the last
+    /// element of bucket 0 and the first element of bucket 1 must both resolve correctly, and
+    /// `bucket_or_alloc` must allocate the second bucket exactly once.
+    #[test]
+    fn bucket_boundary_crossing_resolves_correctly() {
+        let vec: ConcurrentAppendVec<u64, 4> = ConcurrentAppendVec::new();
+        for i in 0..65u64 {
+            let index = vec.push(i * 10);
+            assert_eq!(index, i as usize);
+        }
+
+        // Index 63 is the last slot of bucket 0; index 64 is the first slot of bucket 1.
+        assert_eq!(vec.get(63), Some(&630));
+        assert_eq!(vec.get(64), Some(&640));
+        assert_eq!(vec.len(), 65);
+
+        let collected: Vec<u64> = vec.iter().copied().collect();
+        assert_eq!(collected.len(), 65, "iter must see every element across the bucket boundary");
+    }
+
     /// A single short block leaves the rest of the reserved block as gaps.
     #[test]
     fn gaps_read_back_as_none() {

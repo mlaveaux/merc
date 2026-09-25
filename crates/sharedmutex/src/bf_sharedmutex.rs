@@ -599,50 +599,28 @@ impl<T> GlobalBfSharedMutex<T> {
 unsafe impl<T: Send + Sync> Send for GlobalBfSharedMutex<T> {}
 unsafe impl<T: Send + Sync> Sync for GlobalBfSharedMutex<T> {}
 
-#[cfg(kani)]
-mod verification {
-    use super::*;
-
-    /// Exercises `create_read_guard_unchecked` along its documented pairing with
-    /// `acquire_shared`: after `acquire_shared` sets `busy`, reconstructing and dropping a guard
-    /// must observe the same value `read()` would and must clear `busy` again — the same
-    /// postcondition a guard obtained through the checked `read()` path gives.
-    #[kani::proof]
-    fn create_read_guard_unchecked_matches_checked_read() {
-        let mutex: BfSharedMutex<u32> = BfSharedMutex::new(42);
-
-        mutex.acquire_shared().expect("uncontended acquire never fails");
-        assert!(mutex.is_locked(), "acquire_shared must set busy");
-
-        // SAFETY: `acquire_shared` above set `busy` for this instance, and no guard for this
-        // acquisition has been produced yet, satisfying `create_read_guard_unchecked`'s contract.
-        let guard = unsafe { mutex.create_read_guard_unchecked() };
-        assert_eq!(*guard, 42);
-        drop(guard);
-
-        assert!(!mutex.is_locked(), "dropping the reconstructed guard must clear busy");
-    }
-
-    /// The write path must never observe a set `busy` flag on any registered clone once it has
-    /// acquired exclusive access, matching `acquire_exclusive`'s debug assertions.
-    #[kani::proof]
-    fn write_excludes_concurrent_reader_state() {
-        let mutex: BfSharedMutex<u32> = BfSharedMutex::new(0);
-        let other = mutex.clone();
-
-        assert!(!mutex.is_locked());
-        assert!(!other.is_locked());
-        assert!(!mutex.is_locked_exclusive());
-        assert!(!other.is_locked_exclusive());
-
-        let mut guard = mutex.write().expect("uncontended write never fails");
-        *guard = 7;
-        drop(guard);
-
-        assert!(!mutex.is_locked_exclusive(), "write guard drop must clear forbidden");
-        assert_eq!(*mutex.read().expect("uncontended read never fails"), 7);
-    }
-}
+// No `#[cfg(kani)] mod verification` exists in this file. Two harnesses were attempted and
+// dropped after investigation showed neither is viable, regardless of which operation on
+// `BfSharedMutex<T>` they exercised:
+//
+//   - A harness for `write()`/`acquire_exclusive` (locks the inner `other: Mutex<Vec<..>>>`)
+//     did not terminate in several minutes of CBMC time.
+//   - A harness for `create_read_guard_unchecked` paired with `acquire_shared` — despite never
+//     logically entering `acquire_shared`'s `while forbidden { .. }` loop (a fresh mutex has
+//     `forbidden == false`, so the loop body, which is the only place that locks the `Mutex`, is
+//     not reachable on that concrete execution) — still failed: CBMC ran out of memory
+//     attempting an unbounded unwind of `std::sync::mutex::futex::Mutex::lock_contended`'s
+//     internal retry loop (reaching 384+ iterations before OOM). See the report's Kani section
+//     for the exact failure output.
+//
+// Every function in this file that reaches `self.shared.other` — directly or through
+// `SharedMutexControl`'s `Arc` — is therefore not a viable Kani target under this toolchain: the
+// `# Safety` contract on `create_read_guard_unchecked` and the boundary transitions between
+// read/write guards are instead covered by the targeted miri tests in the `tests` module below
+// (`test_create_read_guard_unchecked_paired_with_acquire_shared`,
+// `test_read_then_write_guard_boundary`, `test_write_then_read_guard_boundary_on_other_clone`,
+// `test_drop_unused_clone_does_not_block_write`) and by this module's `# Safety`/`SAFETY`
+// contract comments.
 
 #[cfg(test)]
 mod tests {
