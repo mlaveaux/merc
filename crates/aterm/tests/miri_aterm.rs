@@ -301,7 +301,14 @@ fn test_boundary_transmutable_empty_containers() {
 #[test]
 fn test_boundary_transmutable_single_element_preserves_identity() {
     let leaf = ATerm::constant(&Symbol::new("boundary_transmute_leaf", 0));
-    let v: Vec<ATermRef<'static>> = vec![leaf.copy()];
+
+    // `Transmutable` is only implemented for `ATermRef<'static>` (see `transmutable.rs`), so
+    // building the fixture needs the same "shrink a real borrow to `'static`, then only ever
+    // observe it for no longer than the source lives" trick `ProtectedWriteGuard::protect` uses
+    // internally.
+    // SAFETY: the `'static`-labeled copy is only read below, strictly before `leaf` (and hence
+    // `v`) goes out of scope at the end of this function.
+    let v: Vec<ATermRef<'static>> = vec![unsafe { std::mem::transmute::<ATermRef<'_>, ATermRef<'static>>(leaf.copy()) }];
 
     // SAFETY: the transmuted lifetime does not outlive `v` (which itself does not outlive
     // `leaf`, the term it borrows from).

@@ -31,3 +31,7 @@ rand.workspace = true
 [dev-dependencies]
 test-case.workspace = true
 test-log.workspace = true
+
+# Makes it possible to check functional contracts in kani.
+[package.metadata.kani]
+unstable = { function-contracts = true, mem-predicates = true }

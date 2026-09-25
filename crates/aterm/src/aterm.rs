@@ -81,8 +81,32 @@ const _: () = assert!(std::mem::size_of::<ATermRef>() == std::mem::size_of::<usi
 #[cfg(not(debug_assertions))]
 const _: () = assert!(std::mem::size_of::<Option<ATermRef>>() == std::mem::size_of::<usize>());
 
-/// These are safe because terms are immutable. Garbage collection is
-/// always performed with exclusive access, and reference terms have no thread-local state.
+/// # Safety
+///
+/// `ATermRef<'a> { shared: StablePointer<SharedTerm>, marker: PhantomData<&'a ()> }`. `shared`
+/// is a non-owning, type-erased raw pointer (`merc_unsafety::StablePointer` wraps a `NonNull`),
+/// which is `!Send`/`!Sync` unconditionally; these two impls are what let an `ATermRef` cross a
+/// `Send`/`Sync` boundary at all. `PhantomData<&'a ()>` carries no runtime state and does not
+/// itself affect either trait.
+///
+/// Moving or sharing a live `ATermRef<'a>` across threads is sound because, for the whole
+/// duration any thread holds one:
+/// 1. **No data race on the pointee.** Every `SharedTerm` in the global pool is immutable once
+///    inserted: `ATermStorage::insert` only ever writes a fresh allocation
+///    (`SharedTerm::construct`), and the only other writer, the sweep in
+///    `GlobalTermPool::sweep_terms_and_symbols`, removes whole entries rather than mutating a
+///    live one. So two threads reading the same `SharedTerm` concurrently through two
+///    `ATermRef`s that alias the same address never race.
+/// 2. **No use-after-free.** The address a `StablePointer<SharedTerm>` refers to is reclaimed
+///    only by `GlobalTermPool::collect_garbage`'s sweep, which runs exclusively under the pool's
+///    write lock (`GlobalBfSharedMutex::write`, via `RecursiveLock::write`). That write lock
+///    cannot be granted while any thread holds a `read_recursive()` guard, and holding a live,
+///    in-bounds `ATermRef<'a>` requires the term to be reachable from a GC root for at least
+///    `'a` (the caller-side contract of [`ATermRef::from_index`]) -- every safe path that
+///    produces one either holds such a read guard for the term's whole `'a` (`Return`) or has
+///    already registered it in a protection set that `mark_roots` visits before any sweep can
+///    run. So no thread, at any point while it holds an `ATermRef`, can observe a sweep freeing
+///    the memory a concurrently-held `ATermRef` (on any thread, including its own) points at.
 unsafe impl Send for ATermRef<'_> {}
 unsafe impl Sync for ATermRef<'_> {}
 

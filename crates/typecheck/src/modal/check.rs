@@ -508,3 +508,53 @@ fn check_action_arguments(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod stack_depth_probe {
+    //! Isolates `check_state_formula`'s own recursion from the parser's and from
+    //! `resolve_modal_variables`': the tree here is built directly, bypassing both, so a stack
+    //! overflow can only come from this module's own `check_state_formula`/`collect_scope` walk.
+    use merc_syntax::Span;
+    use merc_syntax::StateFrmKind;
+    use merc_syntax::StateFrmUnaryOp;
+    use merc_syntax::UntypedDataSpecification;
+
+    use super::*;
+    use crate::checking::ActionTable;
+
+    fn deep_negation(depth: usize) -> StateFrm {
+        let mut formula = StateFrmKind::True.spanned(Span::default());
+        for _ in 0..depth {
+            formula = StateFrmKind::Unary {
+                op: StateFrmUnaryOp::Negation,
+                expr: Box::new(formula),
+            }
+            .spanned(Span::default());
+        }
+        formula
+    }
+
+    #[test]
+    fn deeply_nested_negation_does_not_overflow_the_stack() {
+        let mut data = DataSpecification::from_untyped(UntypedDataSpecification::parse("").unwrap()).unwrap();
+        let tables: ActionTable = ActionTable::build(&mut data, &[], resolve_declared_sort).unwrap();
+        let mut typing = TypingInfo::default();
+        let mut state_vars = StateVarStack::new();
+        let scope: Vec<(VarId, ResolvedSortId, Span)> = Vec::new();
+
+        // 100,000 nested `!`s: well within what a real, if pathological, `.mcf` file could contain
+        // (the parser itself already overflows at a similar depth — a separate, out-of-scope
+        // concern), but small enough that a bounded-recursion walk would handle it trivially.
+        let formula = deep_negation(100_000);
+        let result = check_state_formula(
+            &mut data,
+            &tables,
+            &scope,
+            &mut state_vars,
+            &formula,
+            FormulaType::Bool,
+            &mut typing,
+        );
+        assert!(result.is_ok());
+    }
+}

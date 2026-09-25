@@ -88,19 +88,44 @@ impl Markable for Config<'_> {
     }
 }
 
-// SAFETY: `Config` only borrows the term pool through its `DataFunctionSymbolRef`
-// / `DataExpressionRef` fields, which are themselves lifetime-erasable handles
-// into the global term pool. Transmuting only changes the lifetime parameter, so
-// the layout is identical.
+// SAFETY: `Config<'a>` differs from `Config<'static>` only in the lifetime
+// parameter carried by its `DataFunctionSymbolRef<'a>` / `DataExpressionRef<'a>`
+// fields (the `Rewrite`/`Return` variants carry no lifetime at all). A Rust
+// lifetime parameter is never part of a type's runtime representation, so
+// `Config<'static>` and `Config<'a>` are guaranteed by the language to have
+// identical size, alignment and field layout for every `'a`: the transmutes
+// below reinterpret the same bits under a different (shorter) lifetime bound,
+// never as a different shape. Both methods rely on the caller-side contract
+// documented on `Transmutable::transmute_lifetime[_mut]`; see the `# Safety`
+// sections below for the precise pre/postcondition of each.
 unsafe impl Transmutable for Config<'static> {
     type Target<'a> = Config<'a>;
 
+    /// # Safety
+    ///
+    /// Requires: `'a` does not outlive the lifetime of the `&self` borrow (the
+    /// signature does not enforce this; every caller in this crate satisfies it
+    /// by only ever obtaining `'a` from a [`ProtectedWriteGuard`](merc_aterm::ProtectedWriteGuard)
+    /// / [`ProtectedReadGuard`](merc_aterm::ProtectedReadGuard) whose own borrow of `self` bounds `'a`).
+    ///
+    /// Guarantees: the result is a shared reference that aliases exactly the
+    /// same bytes as `self` (layout-identical per the impl comment above),
+    /// valid for reads for at most `'a`.
     unsafe fn transmute_lifetime<'a>(&'_ self) -> &'a Self::Target<'a> {
         // SAFETY: see the trait impl comment above; the caller upholds that 'a does not
         // outlive the borrow of `self`.
         unsafe { std::mem::transmute::<&Self, &'a Config>(self) }
     }
 
+    /// # Safety
+    ///
+    /// Requires: `'a` does not outlive the lifetime of the `&mut self` borrow;
+    /// because the input is `&mut`, no other reference to the same `Config` may
+    /// be live for the duration of `'a`.
+    ///
+    /// Guarantees: the result is a unique (mutable) reference that aliases
+    /// exactly the same bytes as `self`, valid for reads and writes for at most
+    /// `'a`.
     unsafe fn transmute_lifetime_mut<'a>(&'_ mut self) -> &'a mut Self::Target<'a> {
         // SAFETY: see the trait impl comment above; the caller upholds that 'a does not
         // outlive the borrow of `self`.
@@ -485,5 +510,76 @@ mod tests {
             expected,
             "evaluating a constant-only rhs stack must reproduce the literal"
         );
+    }
+}
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Exercises `Transmutable for Config<'static>` on the two variants that
+    /// carry no term-pool reference (`Rewrite`/`Return`), so the harness needs
+    /// no live `ATerm`/thread-local pool state. `Construct`/`Term` are not
+    /// reachable here: both wrap a `DataFunctionSymbolRef`/`DataExpressionRef`,
+    /// which can only be constructed against a live, initialised term pool
+    /// (global mutexes, thread-locals, hash-consing) — modelling that under
+    /// kani/CBMC is not practical to bound cheaply, so it is out of scope for
+    /// this harness (see the report for the alternative evidence gathered for
+    /// that part of the unsafe surface: a GC-stress regression test).
+    ///
+    /// The property proved here is the one actually specific to this impl: a
+    /// lifetime-only transmute must not corrupt or misalign the enum's
+    /// discriminant or payload, for any `usize` payload value kani chooses to
+    /// explore, and a write through the transmuted mutable reference must be
+    /// visible through the original binding (they alias the same bytes).
+    #[kani::proof]
+    fn config_transmute_lifetime_preserves_rewrite_payload() {
+        let index: usize = kani::any();
+        let config: Config<'static> = Config::Rewrite(index);
+
+        // SAFETY: `'_` here is bounded by the local borrow of `config`, which
+        // outlives the call, satisfying `transmute_lifetime`'s precondition.
+        let transmuted: &Config<'_> = unsafe { config.transmute_lifetime() };
+
+        match transmuted {
+            Config::Rewrite(got) => assert_eq!(*got, index),
+            _ => panic!("transmute must not change which variant is active"),
+        }
+    }
+
+    #[kani::proof]
+    fn config_transmute_lifetime_preserves_return_variant() {
+        let config: Config<'static> = Config::Return();
+
+        // SAFETY: see above.
+        let transmuted: &Config<'_> = unsafe { config.transmute_lifetime() };
+
+        assert!(matches!(transmuted, Config::Return()));
+    }
+
+    #[kani::proof]
+    fn config_transmute_lifetime_mut_round_trips_writes() {
+        let index: usize = kani::any();
+        let mut config: Config<'static> = Config::Rewrite(index);
+
+        // SAFETY: `'_` is bounded by the local borrow of `config`.
+        let transmuted: &mut Config<'_> = unsafe { config.transmute_lifetime_mut() };
+
+        let bumped = index.wrapping_add(1);
+        match transmuted {
+            Config::Rewrite(got) => {
+                assert_eq!(*got, index);
+                *got = bumped;
+            }
+            _ => panic!("transmute must not change which variant is active"),
+        }
+
+        match config {
+            Config::Rewrite(got) => assert_eq!(
+                got, bumped,
+                "a write through the transmuted reference must be visible through the original binding"
+            ),
+            _ => panic!("transmute must not change which variant is active"),
+        }
     }
 }

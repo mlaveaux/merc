@@ -348,6 +348,30 @@ pub fn generate(spec: &RewriteSpecification, source_dir: &Path) -> Result<(), Me
 /// Simulates the runtime stack: non-output slots start as `[1 .. stack_size)`,
 /// and each reversed-BFS construct drains the last `arity` indices as its
 /// arguments.
+///
+/// # Safety contract of the emitted code (not this function itself)
+///
+/// For every `Config::Construct`/`Config::Term` entry in `term_stack`, this
+/// emits a literal `DataExpressionRefFFI::from_ptr(<addr>)`, where `<addr>` is
+/// the *current* raw term-pool address (`shared().ptr().as_ptr() as usize`) of
+/// that symbol/subterm, read out once, here, at codegen time. That address is
+/// baked into the generated source as a plain integer; nothing at codegen time,
+/// compile time or load time re-validates it, and it is dereferenced again on
+/// every call to the emitted function, for as long as the compiled library
+/// stays loaded.
+///
+/// This is only sound because every such address is reachable (directly for a
+/// `Construct` symbol, or as a subterm of `rule.rhs`/a condition side for a
+/// `Term` literal — see `TermStack::from_term`) from a `Rule` inside the
+/// `RewriteSpecification` that `SabreCompilingRewriter::new` clones into its
+/// own `_spec` field before returning; hash-consing means that clone keeps the
+/// exact same pool entries alive (same address), not merely structurally equal
+/// ones. `_spec`'s documented job — see `sabre_compiling.rs:30`-`32` — is to
+/// keep every address emitted here reachable by the garbage collector for as
+/// long as the `SabreCompilingRewriter` that owns the loaded library is alive.
+/// Callers of `generate` must not let any term/symbol whose address ends up
+/// embedded here become unreachable while the generated library can still be
+/// invoked.
 fn generate_rewrite_term_stack_impl(
     formatter: &mut IndentFormatter<File>,
     prefix: &str,
