@@ -135,16 +135,14 @@ impl<T> RecursiveLock<T> {
     /// lock instead of acquiring the underlying mutex. While such a guard is alive, mutating
     /// through the [`RecursiveLockWriteGuard`] panics.
     ///
-    /// # Panics
-    ///
-    /// Panics if called while a [`RecursiveLockWriteGuard::with_mut`] closure is currently
-    /// executing (on this thread) — that closure holds a live `&mut T`, invisible to the
-    /// borrow checker across this call, so handing out a `&T` here would alias it.
+    /// Safe to call — and does not by itself panic — from inside a
+    /// [`RecursiveLockWriteGuard::with_mut`] closure, purely for the acquisition's own
+    /// bookkeeping side effect (e.g. a `GcMutex`-style "don't collect while I hold this"
+    /// token that is never dereferenced): acquiring the lock touches only `RecursiveLock`'s
+    /// own state, not `T`'s memory. [`RecursiveLockReadGuard::deref`] is where the actual
+    /// `&T` is materialised, and that is where the conflict with `with_mut`'s live `&mut T`
+    /// is caught — see its docs.
     pub fn read_recursive<'a>(&'a self) -> Result<RecursiveLockReadGuard<'a, T>, Box<dyn Error + 'a>> {
-        assert!(
-            !self.mutating.get(),
-            "Cannot call read_recursive() while a RecursiveLockWriteGuard::with_mut call is in progress"
-        );
         if self.recursive_depth.get() == 0 {
             // Not yet holding a read lock: acquire the shared protocol lock without
             // materialising a guard, so the busy flag stays set until our own guard
@@ -195,7 +193,21 @@ impl<T> RecursiveLockReadGuard<'_, T> {
 impl<T> Deref for RecursiveLockReadGuard<'_, T> {
     type Target = T;
 
+    /// # Panics
+    ///
+    /// Panics if a [`RecursiveLockWriteGuard::with_mut`] closure is currently executing (on
+    /// this thread) — that closure holds a live `&mut T`, invisible to the borrow checker
+    /// across the `read_recursive()` call that produced this guard, so materialising a `&T`
+    /// here would alias it. Acquiring this guard without ever dereferencing it (e.g. purely
+    /// to extend the read-lock's recursion depth, as `GcMutex` does to block collection) does
+    /// not panic — only reading through it during `with_mut` does, since that is the point a
+    /// conflicting `&T`/`&mut T` pair would actually be created.
     fn deref(&self) -> &Self::Target {
+        assert!(
+            !self.mutex.mutating.get(),
+            "Cannot deref a RecursiveLockReadGuard while a RecursiveLockWriteGuard::with_mut call is in progress"
+        );
+
         // SAFETY: This guard keeps the read lock (or the enclosing write lock) held, so only
         // shared access is handed out and the data pointer (an `UnsafeCell::get`) is non-null.
         #[cfg(not(loom))]
@@ -246,15 +258,19 @@ impl<T> RecursiveLockWriteGuard<'_, T> {
     /// Grants scoped mutable access to the underlying value.
     ///
     /// Deliberately not a `DerefMut` impl returning a bare `&mut T`: such a reference has no
-    /// `Drop` hook, so nothing could tell [`RecursiveLock::read_recursive`] that it is still
+    /// `Drop` hook, so nothing could tell [`RecursiveLockReadGuard::deref`] that it is still
     /// live once handed out — the caller could stash it in a `let` binding, call
     /// `read_recursive()` afterwards (which only touches the separate `RecursiveLock` value,
-    /// not this guard, so the borrow checker sees no conflict), and obtain a `&T` aliasing the
-    /// still-held `&mut T`. Scoping mutation to a closure whose parameter cannot outlive the
-    /// call, combined with the `mutating` flag `read_recursive` checks for the closure's whole
-    /// dynamic extent (including a `read_recursive` call made reentrantly from inside `f`),
-    /// closes both the "held across later statements" and the "called from within `f`" forms
-    /// of that aliasing.
+    /// not this guard, so the borrow checker sees no conflict) and deref the result, and obtain
+    /// a `&T` aliasing the still-held `&mut T`. Scoping mutation to a closure whose parameter
+    /// cannot outlive the call, combined with the `mutating` flag
+    /// [`RecursiveLockReadGuard::deref`] checks for the closure's whole dynamic extent
+    /// (including a `read_recursive().deref()` made reentrantly from inside `f`), closes both
+    /// the "held across later statements" and the "dereferenced from within `f`" forms of that
+    /// aliasing — while still allowing `f` to call `read_recursive()` itself and simply hold
+    /// (never deref) the resulting guard, e.g. purely as a "don't garbage collect while I hold
+    /// this" token (see `merc_aterm`'s `GcMutex`): acquiring the lock touches only
+    /// `RecursiveLock`'s own bookkeeping, not `T`'s memory, so it cannot alias `f`'s `&mut T`.
     ///
     /// # Panics
     ///
@@ -305,27 +321,53 @@ mod tests {
     use crate::RecursiveLock;
 
     /// Regression test for the aliasing bug `with_mut` replaced `DerefMut` to close:
-    /// calling `read_recursive()` *from inside* the closure passed to `with_mut` must panic
-    /// (instead of silently succeeding and manufacturing a `&T` aliasing the closure's live
-    /// `&mut T`, as the old `deref_mut`-based API allowed — see git history for the original
-    /// repro, which relied on stashing `&mut *write` in a `let` binding across a later
-    /// `read_recursive()` call; that call shape no longer type-checks at all now that
-    /// `DerefMut` is gone, which is itself part of the fix).
+    /// calling `read_recursive()` *and dereferencing the result* from inside the closure
+    /// passed to `with_mut` must panic (instead of silently succeeding and manufacturing a
+    /// `&T` aliasing the closure's live `&mut T`, as the old `deref_mut`-based API allowed —
+    /// see git history for the original repro, which relied on stashing `&mut *write` in a
+    /// `let` binding across a later `read_recursive()` call; that call shape no longer
+    /// type-checks at all now that `DerefMut` is gone, which is itself part of the fix). The
+    /// panic must fire on the *deref*, not on the mere `read_recursive()` call — see
+    /// `test_read_recursive_without_deref_during_with_mut_succeeds` below for why that
+    /// distinction matters.
     #[test]
     #[should_panic(
-        expected = "Cannot call read_recursive() while a RecursiveLockWriteGuard::with_mut call is in progress"
+        expected = "Cannot deref a RecursiveLockReadGuard while a RecursiveLockWriteGuard::with_mut call is in progress"
     )]
-    fn test_read_recursive_during_with_mut_panics() {
+    fn test_read_recursive_deref_during_with_mut_panics() {
         let lock = RecursiveLock::new(42i32);
         let mut write = lock.write().unwrap();
 
         write.with_mut(|data| {
             *data = 100;
             // Reentrant call while `data` (the closure's `&mut i32`) is still logically
-            // live: must panic rather than hand out an aliasing `&T`.
-            let _ = lock.read_recursive().unwrap();
+            // live: acquiring the guard is fine (see the test below), but *dereferencing*
+            // it must panic rather than hand out an aliasing `&T`.
+            let read = lock.read_recursive().unwrap();
+            let _ = *read;
             *data += 1;
         });
+    }
+
+    /// The other half of the same fix: merely *acquiring* a recursive read guard during
+    /// `with_mut`, without ever dereferencing it, must not panic — this is the pattern
+    /// `merc_aterm`'s `GcMutex` relies on (holding a `read_recursive()` guard purely as a
+    /// "don't garbage collect while I hold this" token, never reading `T` through it) and is
+    /// exactly what a naive "panic in `read_recursive()` itself" fix would have wrongly broken.
+    #[test]
+    fn test_read_recursive_without_deref_during_with_mut_succeeds() {
+        let lock = RecursiveLock::new(42i32);
+        let mut write = lock.write().unwrap();
+
+        write.with_mut(|data| {
+            *data = 100;
+            let _guard = lock.read_recursive().unwrap();
+            // No deref of `_guard`: never materializes a `&i32`, so no alias with `data` is
+            // ever created, and continuing to use `data` here is sound.
+            *data += 1;
+        });
+
+        assert_eq!(*write, 101);
     }
 
     /// The non-overlapping case `with_mut` is meant to keep working: mutate via a scoped
