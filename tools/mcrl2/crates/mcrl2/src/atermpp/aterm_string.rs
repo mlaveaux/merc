@@ -47,21 +47,14 @@ impl ATermStringRef<'static> {
     ///
     /// Requires: `term` is non-null, names an `aterm_string` (arity-0) node,
     /// and stays reachable from some GC root for as long as the caller
-    /// actually *reads* through the returned reference — not merely for as
-    /// long as whatever value `term` was borrowed from happens to be in
-    /// scope syntactically (that owner may be a temporary already dropped by
-    /// the time the reference is read), and not necessarily forever: the
-    /// chosen lifetime `'static` is a type-level upper bound the caller
-    /// promises to respect, not a runtime guarantee this function creates —
-    /// unlike `ATerm::from_ptr`/`Symbol::from_ptr`, this is a bare reference
-    /// and registers no new GC root of its own. See callers such as
-    /// `merc_pbes::explore_pbes::name_key` for how that root is actually
-    /// supplied (typically a longer-lived owning value, like a `Pbes` kept
-    /// alive by the caller, that transitively keeps `term` reachable).
-    /// Guarantees: the returned `ATermStringRef<'static>` is safe to copy,
-    /// compare and hash unconditionally (no dereference), and safe to
-    /// dereference (`str()`, `Display`) for as long as the precondition is
-    /// upheld.
+    /// reads through the returned reference. Unlike `ATerm::from_ptr` or
+    /// `Symbol::from_ptr`, this registers no GC root of its own: the
+    /// `'static` lifetime is a type-level promise the caller makes, not a
+    /// guarantee this function creates, so the caller must keep `term`
+    /// reachable through some other, genuinely longer-lived root (see
+    /// `merc_pbes::explore_pbes::name_key`). Guarantees: the returned
+    /// reference is safe to copy, compare and hash unconditionally, and
+    /// safe to dereference as long as the precondition holds.
     pub unsafe fn from_address(term: *const crate::_aterm) -> ATermStringRef<'static> {
         // SAFETY: the caller upholds that the term stays live for `'static`.
         ATermStringRef::new(unsafe { ATermRef::new(term) })

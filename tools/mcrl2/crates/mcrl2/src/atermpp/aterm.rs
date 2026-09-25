@@ -50,19 +50,14 @@ pub struct ATermRef<'a> {
     marker: PhantomData<&'a ()>,
 }
 
-// SAFETY: `ATermRef<'a>` is `Copy` and carries only a raw `*const _aterm`
-// plus a `PhantomData<&'a ()>` lifetime witness; it owns no protection by
-// itself (that is held elsewhere, by whichever `ATerm`/container the
-// lifetime `'a` is borrowed from). The pointee is immutable from Rust's
-// perspective — mutation only happens as relaxed-atomic bookkeeping during
-// garbage collection, which every thread observes consistently because GC
-// requires the C++ exclusive lock (no thread may be "busy" while it runs).
-// Reading the same `*const _aterm` concurrently from multiple threads (via
-// `Send`) or through a shared `&ATermRef` (via `Sync`) therefore performs no
-// racing writes. Moving/sharing an `ATermRef<'a>` across threads cannot
-// extend its validity past `'a`: `'a` is a compile-time bound the type
-// carries with it (e.g. via `std::thread::scope`), independent of which
-// thread evaluates it.
+// SAFETY: `ATermRef<'a>` is `Copy` and holds only a raw `*const _aterm` plus
+// a `PhantomData<&'a ()>` witness; it owns no protection itself (that lives
+// in whichever `ATerm`/container `'a` borrows from). The pointee is
+// immutable from Rust's perspective — GC mutates it only via relaxed
+// atomics, and only while every other thread's busy flag is clear (the C++
+// exclusive lock), so concurrent reads via `Send`/`Sync` never race a
+// write. Moving or sharing across threads cannot extend validity past `'a`,
+// a compile-time bound independent of which thread evaluates it.
 unsafe impl Send for ATermRef<'_> {}
 unsafe impl Sync for ATermRef<'_> {}
 
@@ -96,17 +91,12 @@ impl<'a> ATermRef<'a> {
     ///
     /// # Safety
     ///
-    /// Requires: `*self` and `*parent` name the same maximally-shared node,
-    /// or `*self` is reachable from `*parent` by following zero or more
-    /// `arg(i)` steps (i.e. `*self` is `*parent` or one of its transitive
-    /// subterms) — checked by the `debug_assert!` above in debug builds,
-    /// trusted in release builds. Since garbage collection marks a live
-    /// term's whole subtree from its root, this means: whatever keeps
-    /// `*parent` alive for `'b` (a protected `ATerm`'s root, a `Markable`
-    /// container, or a transitively-live parent up the chain) also keeps
-    /// `*self` alive for `'b`. Guarantees: the returned `ATermRef<'b>` is
-    /// valid to hold and dereference for the whole of `'b` under that same
-    /// condition.
+    /// Requires: `*self` is `*parent` or one of its transitive subterms
+    /// (checked by the `debug_assert!` above in debug builds, trusted in
+    /// release). Since GC marks a live term's whole subtree from its root,
+    /// whatever keeps `*parent` alive for `'b` also keeps `*self` alive for
+    /// `'b`. Guarantees: the returned `ATermRef<'b>` is valid to dereference
+    /// for all of `'b` under that same condition.
     pub unsafe fn upgrade<'b: 'a>(&'a self, parent: &ATermRef<'b>) -> ATermRef<'b> {
         debug_assert!(
             parent.iter().any(|t| t.copy() == *self),
@@ -122,10 +112,8 @@ impl<'a> ATermRef<'a> {
     ///
     /// # Safety
     ///
-    /// Same precondition as [`ATermRef::upgrade`] (`*self` reachable from
-    /// `*_parent` via zero or more `arg(i)` steps), but unchecked even in
-    /// debug builds — every call site must justify it inline rather than
-    /// relying on a `debug_assert!` here.
+    /// Same precondition as [`ATermRef::upgrade`], but unchecked even in
+    /// debug builds — every call site must justify it inline.
     unsafe fn upgrade_unchecked<'b: 'a>(&'a self, _parent: &ATermRef<'b>) -> ATermRef<'b> {
         // SAFETY: callers guarantee `_parent` is a parent term, see `upgrade`.
         unsafe { ATermRef::new(self.term) }
@@ -146,18 +134,14 @@ impl<'a> ATermRef<'a> {
     ///
     /// # Safety
     ///
-    /// Requires: `term` is non-null (or the caller only ever calls
-    /// `is_default`/nothing else on the result) and, if non-null, names a
-    /// maximally-shared node that is reachable from some GC root — a
-    /// protected `ATerm`'s address, the global send set, or a `Markable`
-    /// container's contents — for the *entire* span of the caller-chosen
-    /// `'a`. Choosing `'a` longer than that root's actual protected lifetime
-    /// is unsound: a later garbage collection may free `term` while the
-    /// `ATermRef<'a>` is still considered live by the type system, giving a
-    /// dangling pointer that `get()`/`arg()`/... will dereference.
-    /// Guarantees: on success, `ATermRef { term, .. }` is safe to copy,
-    /// compare and dereference (via `get()`) for all of `'a`, provided the
-    /// precondition holds.
+    /// Requires: `term` is null, or names a maximally-shared node reachable
+    /// from some GC root (a protected `ATerm`, the global send set, or a
+    /// `Markable` container) for the entire span of the caller-chosen `'a`
+    /// — choosing `'a` longer than that root's actual lifetime lets a later
+    /// collection free `term` while the type system still considers it
+    /// live, producing a dangling pointer on the next dereference.
+    /// Guarantees: the result is safe to copy, compare and dereference for
+    /// all of `'a`, provided the precondition holds.
     pub(crate) unsafe fn new(term: *const ffi::_aterm) -> ATermRef<'a> {
         ATermRef {
             term,
@@ -303,16 +287,13 @@ impl ATerm {
     ///
     /// # Safety
     ///
-    /// Requires: `term` is non-null and, at the point of the call, names a
-    /// maximally-shared node that is currently reachable from some live GC
-    /// root (so a garbage collection triggered by *this* call cannot free it
-    /// first). No requirement on `term` staying live afterwards: this
-    /// function immediately registers it in the calling thread's own
-    /// protection set (`ThreadTermPool::protect`) before returning, and a
-    /// term in a thread's own protection set is always marked live by
-    /// `GlobalTermPool::mark_protection_sets`, regardless of what else
-    /// referenced it. Guarantees: the returned `ATerm` keeps `term` alive
-    /// (via that protection-set root) until the `ATerm` is dropped.
+    /// Requires: `term` is non-null and, at the point of the call, reachable
+    /// from some live GC root (so a collection triggered by this call
+    /// itself cannot free it first) — this function immediately registers
+    /// it in the calling thread's own protection set before returning, and
+    /// terms in that set are always marked live regardless of what else
+    /// referenced them. Guarantees: the returned `ATerm` keeps `term` alive
+    /// until it is dropped.
     pub unsafe fn from_ptr(term: *const ffi::_aterm) -> Self {
         debug_assert!(!term.is_null(), "Cannot create ATerm from null ptr");
         THREAD_TERM_POOL.with_borrow(|tp| tp.protect(term))
@@ -431,13 +412,12 @@ impl ATermSend {
     ///
     /// # Safety
     ///
-    /// Requires: `term` is non-null and, at the point of the call, names a
-    /// maximally-shared node currently reachable from some live GC root
-    /// (mirrors [`ATerm::from_ptr`]'s precondition; the same reasoning
-    /// applies — this immediately protects `term` in
-    /// [`SEND_PROTECTION_SET`], so no further liveness is required from the
-    /// caller). Guarantees: the returned `ATermSend` keeps `term` alive,
-    /// markable and dereferenceable from *any* thread, until it is dropped.
+    /// Requires: `term` is non-null and, at the point of the call, reachable
+    /// from some live GC root (mirrors [`ATerm::from_ptr`]'s precondition:
+    /// this immediately protects `term` in [`SEND_PROTECTION_SET`], so no
+    /// further liveness is required from the caller). Guarantees: the
+    /// returned `ATermSend` keeps `term` alive, markable and
+    /// dereferenceable from any thread, until it is dropped.
     pub unsafe fn from_ptr(term: *const ffi::_aterm) -> ATermSend {
         ATermSend::protect(term)
     }

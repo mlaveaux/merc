@@ -147,17 +147,10 @@ impl RuntimeLibrary {
 
         // Load it back in and call the rewriter.
         //
-        // Safety: `libloading::Library::new` is unsafe because loading an arbitrary
-        // dynamic library can run arbitrary initialisation code and offers no
-        // guarantee that any symbol it exports has the signature the caller expects.
-        // Here `path` names a library this same process just built, moments ago, from
-        // source this crate generated, from the on-the-fly `Cargo.toml` written by
-        // `RuntimeLibrary::new` (which pins the generated crate's `rust-version` to
-        // `CARGO_PKG_RUST_VERSION`, the host's own toolchain version). There is no
-        // library-side initialisation to run at load time beyond static linking; the
-        // `initialise`/`rewrite` symbols are only *called* later, in
-        // `SabreCompilingRewriter::new`, whose own `# Safety` note is what actually
-        // justifies their signatures matching.
+        // Safety: `path` names a library this process just built, moments ago, from source
+        // this crate generated; the generated crate has no load-time initialisation beyond
+        // static linking (the `initialise`/`rewrite` symbols are only *called* later, in
+        // `SabreCompilingRewriter::new`, whose own `# Safety` note covers their signatures).
         unsafe { Ok(Library::new(&path)?) }
     }
 }

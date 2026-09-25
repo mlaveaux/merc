@@ -327,30 +327,18 @@ impl<'a> ConfigurationStack<'a> {
         // it does not add a *new* term that needs inserting.
         let mut subterm = unsafe { write_terms.protect(&write_terms[base + up_to_date]) };
 
-        // Go over the configurations one by one until we reach 'end'. The running
-        // `subterm` local is, in general, *not* itself an element of `write_terms`
-        // between one `protect` call and the next store into `write_terms[base +
-        // up_to_date]` a few lines below (in the `Some(position)` arm in
-        // particular, it aliases the freshly `data_substitute_with`-built `t`,
-        // which is not yet in any container). That window is safe only because
-        // nothing between a `protect` and the following store allocates a new
-        // term or symbol: allocation is the only thing that can make the
-        // automatic-GC counter (`ThreadTermPool::decrement_garbage_collection_counter`)
-        // reach zero and trigger a collection (`crates/aterm/src/storage/thread_aterm_pool.rs`),
-        // so as long as that gap stays allocation-free, `subterm` cannot be
-        // collected out from under this loop even though it is briefly rootless.
+        // Go over the configurations one by one until we reach 'end'. `subterm` is briefly
+        // rootless between a `protect` call and its store into `write_terms` below; that's
+        // safe because no term/symbol allocation happens in the gap (allocation is the only
+        // thing that can trigger a collection), so it can't be collected in the meantime.
         while up_to_date > end {
             // If the position is not deepened nothing needs to be done, otherwise substitute on the position stored in the configuration.
             subterm = match self.stack[up_to_date].position {
                 None => subterm,
                 Some(position) => {
-                    // `subterm.protect()` (the safe `Term::protect`, not the unsafe
-                    // guard method below) roots `subterm` on the ordinary
-                    // thread-local protection stack for the duration of this call,
-                    // which is what actually keeps it alive across the allocations
-                    // `data_substitute_with` performs; the `unsafe` `protect` calls
-                    // in this function are never what protects a term across an
-                    // allocating call.
+                    // `subterm.protect()` here is the safe `Term::protect`, which keeps the
+                    // *previous* `subterm` alive across `data_substitute_with`'s allocations;
+                    // the `unsafe` `protect` calls in this function never do that job.
                     let t = data_substitute_with(
                         &mut pool.substitution_builder,
                         tp,
@@ -358,11 +346,8 @@ impl<'a> ConfigurationStack<'a> {
                         subterm.protect().into(),
                         position,
                     );
-                    // Safety: `t` is a freshly returned, still-live local; no
-                    // allocation happens between this line and the store into
-                    // `write_terms[base + up_to_date]` below (only an integer
-                    // decrement and one more `protect`, itself an allocation-free
-                    // transmute), so no GC can run in between.
+                    // Safety: `t` is fresh and live; no allocation happens before it is
+                    // stored below, so no collection can run meanwhile (see the loop comment).
                     unsafe { write_terms.protect(&t) }
                 }
             };

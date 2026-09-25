@@ -1238,4 +1238,129 @@ mod test {
             assert_eq!(count(&deadlocks), 1, "{strategy:?}");
         }
     }
+
+    /// Same as [test_reachability_detect_deadlocks], but with [`ReachabilityOptions::cached`] set:
+    /// caching must not change which states are reported as deadlocks, only avoid re-enumerating
+    /// read-projections `learn_successors` already learned from. No existing test combines
+    /// `detect_deadlocks` with `cached`.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_reachability_detect_deadlocks_cached() {
+        for strategy in [
+            ExplorationStrategy::BreadthFirst,
+            ExplorationStrategy::Chaining,
+            ExplorationStrategy::Fixpoint,
+            ExplorationStrategy::FixpointChaining,
+            ExplorationStrategy::Saturation,
+        ] {
+            let manager = oxidd::ldd::new_manager(LDD_NODE_CAPACITY, LDD_CACHE_CAPACITY, 1);
+            let mut lts = line_lts(&manager);
+
+            let options = ReachabilityOptions {
+                strategy,
+                detect_deadlocks: true,
+                cached: true,
+            };
+            let mut context = lts.create_context();
+            let result = reachability_with_options(&manager, &mut lts, &mut context, &options, &Timing::new())
+                .expect("Reachability should work correctly");
+
+            // States 0, 1, 2 are reachable and only state 2 has no outgoing transition.
+            assert_eq!(count(&result.states), 3, "{strategy:?}");
+            let deadlocks = result.deadlocks.expect("detect_deadlocks was requested");
+            assert_eq!(count(&deadlocks), 1, "{strategy:?}");
+        }
+    }
+
+    /// Same as [test_reachability_degenerate_groups], but with `cached: true`: every mix of the
+    /// `meta` branches (write-only, read-only, disjoint, overlapping read/write, unconditional,
+    /// never-firing) must still find the same deadlocks once caching skips re-enumerating known
+    /// read-projections.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_reachability_degenerate_groups_cached() {
+        let unconditional = || GroupSpec {
+            read: vec![],
+            write: vec![],
+            transitions: vec![transition(&[], &[], 0)],
+        };
+        let write_only = || GroupSpec {
+            read: vec![],
+            write: vec![0],
+            transitions: vec![transition(&[], &[1], 1), transition(&[], &[2], 2)],
+        };
+        let read_only = || GroupSpec {
+            read: vec![0],
+            write: vec![],
+            transitions: vec![transition(&[2], &[], 1)],
+        };
+        let disjoint = || GroupSpec {
+            read: vec![0],
+            write: vec![2],
+            transitions: vec![transition(&[1], &[1], 0), transition(&[2], &[2], 1)],
+        };
+        let read_write = || GroupSpec {
+            read: vec![1],
+            write: vec![1],
+            transitions: (0..2)
+                .flat_map(|v| (0..3).map(move |label| transition(&[v], &[v + 1], label)))
+                .collect(),
+        };
+        let overlapping = || GroupSpec {
+            read: vec![1, 2],
+            write: vec![2],
+            transitions: vec![transition(&[2, 0], &[1], 0), transition(&[1, 1], &[2], 1)],
+        };
+
+        let check_cached = |name: &str, groups: &[GroupSpec]| {
+            let manager = oxidd::ldd::new_manager(SMALL_NODE_CAPACITY, SMALL_CACHE_CAPACITY, 1);
+            let mut lts = summand_lts(&manager, 3, &[0, 0, 0], groups);
+
+            // Oracle: BreadthFirst, uncached (already checked correct by the uncached test).
+            let expected = {
+                let options = ReachabilityOptions {
+                    strategy: ExplorationStrategy::BreadthFirst,
+                    detect_deadlocks: true,
+                    cached: false,
+                };
+                reach(&manager, &mut lts, &options)
+            };
+            let expected_deadlocks = expected.deadlocks.expect("detect_deadlocks was requested");
+
+            for strategy in ALL_STRATEGIES {
+                let options = ReachabilityOptions {
+                    strategy,
+                    detect_deadlocks: true,
+                    cached: true,
+                };
+                let result = reach(&manager, &mut lts, &options);
+                let deadlocks = result.deadlocks.expect("detect_deadlocks was requested");
+
+                assert!(
+                    result.states == expected.states,
+                    "{name}: {strategy:?} (cached) found {} reachable state(s), expected {}",
+                    count(&result.states),
+                    count(&expected.states),
+                );
+                assert!(
+                    deadlocks == expected_deadlocks,
+                    "{name}: {strategy:?} (cached) found {} deadlock(s), expected {}",
+                    count(&deadlocks),
+                    count(&expected_deadlocks),
+                );
+            }
+        };
+
+        check_cached(
+            "all",
+            &[
+                unconditional(),
+                write_only(),
+                read_only(),
+                disjoint(),
+                read_write(),
+                overlapping(),
+            ],
+        );
+    }
 }

@@ -21,19 +21,12 @@ use super::TermStack;
 ///
 /// # Safety invariant maintained by every method below
 ///
-/// Every `unsafe { write_*.protect(&x) }` call in this file is immediately
-/// (same statement, or the very next one, with nothing allocating in between)
-/// followed by pushing or storing the result into the same `write_configs` /
-/// `write_terms` guard it was taken from. `protect`'s own contract (see
-/// `merc_aterm::ProtectedWriteGuard::protect`) requires exactly that: the
-/// returned, lifetime-erased handle must end up inserted into the container,
-/// because insertion is what makes it a garbage-collection root — the
-/// transmute itself grants no protection. Because nothing on any of these
-/// paths allocates a new term or symbol between the `protect` and the store,
-/// no collection can be triggered in the gap (allocation is the only thing
-/// that can exhaust `ThreadTermPool`'s GC budget counter), so the value stays
-/// implicitly reachable through whatever already-live term it was copied from
-/// until it is rooted through the container.
+/// Every `unsafe { write_*.protect(&x) }` call in this file is shortly followed, with no
+/// further term/symbol allocation in between, by storing the result into the same
+/// `write_configs`/`write_terms` guard it was taken from (`protect`'s contract, see
+/// `merc_aterm::ProtectedWriteGuard::protect`, requires exactly that — insertion is what
+/// roots it). Allocation is the only thing that can trigger a collection, so the value can't
+/// be collected while briefly unrooted.
 #[derive(Default)]
 pub struct InnermostStack {
     pub configs: Protected<Vec<Config<'static>>>,

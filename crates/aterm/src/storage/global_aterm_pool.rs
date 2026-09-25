@@ -533,30 +533,12 @@ impl fmt::Display for TermPoolMetrics<'_> {
 ///
 /// # Safety
 ///
-/// `ThreadPoolList(Vec<Option<Arc<UnsafeCell<SharedTermProtection>>>>)`. `UnsafeCell<T>` is
-/// `!Sync` unconditionally, which makes `Arc<UnsafeCell<T>>` neither auto-`Sync` (needs the
-/// pointee to be `Sync`) nor auto-`Send` (`Arc<U>: Send` needs `U: Send + Sync`, and
-/// `UnsafeCell<T>` fails the `Sync` half regardless of `T`) -- hence the two explicit impls
-/// below, propagated up through the `Vec`.
-///
-/// Every entry is a per-thread `Arc<UnsafeCell<SharedTermProtection>>` that entry's owning
-/// `ThreadTermPool` also holds a clone of (see `protection_sets` there); `ThreadPoolList`, owned
-/// by `GlobalTermPool`, exists only so the garbage collector can reach every thread's cell to
-/// mark it. The two access paths never race, not because of anything intrinsic to `UnsafeCell`,
-/// but because they are made mutually exclusive by the surrounding
-/// `RecursiveLock<GlobalTermPool>` / `GlobalBfSharedMutex`:
-/// - A `ThreadTermPool` reads or mutates only *its own* cell (never another thread's, and never
-///   by going through `ThreadPoolList`), and only while holding a `read_recursive()` guard on
-///   the pool lock (see `ThreadTermPool::lock_protection_set`).
-/// - `GlobalTermPool::mark_roots` (called from `collect_garbage`) walks every cell in this list
-///   via `unsafe { &mut *pool.get() }`, but only while holding the pool's exclusive *write*
-///   lock -- which cannot be granted while any thread's `read_recursive()` guard above is still
-///   live.
-///
-/// So for any given cell, the collector's access and its owning thread's access are always
-/// temporally disjoint: a cell is never observed by two threads, nor by the collector and its
-/// owning thread, at the same time. That is what makes the `&mut` on both sides sound in
-/// practice, even though neither is expressed through Rust's aliasing rules at the type level.
+/// `UnsafeCell` is `!Sync` unconditionally, blocking auto-`Send`/`Sync` through the `Arc`, hence
+/// the explicit impls below. Sound because a cell's two accessors are mutually exclusive: its
+/// owning `ThreadTermPool` touches only that cell while holding a `read_recursive()` guard on the
+/// pool lock (see `ThreadTermPool::lock_protection_set`), and `GlobalTermPool::mark_roots`
+/// (called from `collect_garbage`) touches every cell only while holding the pool's exclusive
+/// write lock, which cannot be granted while any `read_recursive()` guard is live.
 struct ThreadPoolList(Vec<Option<Arc<UnsafeCell<SharedTermProtection>>>>);
 
 unsafe impl Sync for ThreadPoolList {}

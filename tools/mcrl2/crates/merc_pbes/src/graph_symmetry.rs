@@ -1702,4 +1702,20 @@ mod tests {
             "the data-level bound 'm' must be coloured BoundVariable"
         );
     }
+
+    #[test]
+    fn probe_empty_pbes() {
+        test_logger();
+        let pbes = Pbes::from_text("pbes init val(true);").unwrap();
+        let sdg = build_sdg(&pbes);
+        println!("empty pbes build_sdg result: {}", sdg.is_ok());
+        if let Ok(sdg) = sdg {
+            println!(
+                "num_parameters={} num_vertices={} num_edges={}",
+                sdg.num_parameters(),
+                sdg.num_vertices(),
+                sdg.num_edges()
+            );
+        }
+    }
 }

@@ -10,23 +10,11 @@ use crate::aterm::ATermRef;
 ///
 /// # Safety
 ///
-/// Implementors must guarantee, for every `'a` with `Self: 'a`:
-///
-/// 1. **Layout identity.** `Self` and `Self::Target<'a>` have identical size, alignment, and
-///    bit-for-bit representation; the only permitted difference is which lifetime is
-///    substituted into reference-shaped fields nested inside (here, always `ATermRef<'_>` /
-///    `SymbolRef<'_>`). A lifetime has no runtime representation, so this holds for free as long
-///    as the implementation does not also change field order, add/remove fields, or otherwise
-///    alter the value's bytes between `Self` and `Self::Target<'a>` -- e.g. every impl in this
-///    module is `unsafe { transmute::<&Self, &'a Self::Target<'a>>(self) }` on the nose, which
-///    is exactly `mem::transmute`'s own precondition (equal `size_of`/`align_of` on both sides).
-///    Violating this makes `transmute_lifetime`/`transmute_lifetime_mut` return a reference that
-///    reads as the wrong type at that address: immediate undefined behaviour on the first access
-///    through it, independent of anything the *caller* does correctly.
-/// 2. **Consistent target.** `Self::Target<'a>` for a shorter `'a` must itself be transmutable
-///    (via nested impls, e.g. `Vec<T>` requires `T: Transmutable`) back down to the same
-///    physical layout, so composing shrinks (`transmute_lifetime` on a `Target<'a>` down to
-///    `'b: 'a`) stays sound by induction on the same argument.
+/// Implementors must guarantee, for every `'a` with `Self: 'a`: (1) `Self` and `Self::Target<'a>`
+/// have identical size, alignment, and bit-for-bit representation -- only the lifetime nested in
+/// reference-shaped fields (`ATermRef`/`SymbolRef`) differs, exactly what `mem::transmute`
+/// requires; and (2) `Self::Target<'a>` is itself `Transmutable` down to the same layout, so
+/// nested and repeated shrinks stay sound.
 pub unsafe trait Transmutable {
     type Target<'a>: ?Sized
     where
@@ -36,18 +24,11 @@ pub unsafe trait Transmutable {
     ///
     /// # Safety
     ///
-    /// Requires: every `ATermRef`/`SymbolRef` reachable through `self` must remain a live GC
-    /// root -- i.e. registered in some protection set `mark_roots` visits, or otherwise kept
-    /// alive by construction (e.g. a `Return`'s read guard) -- for the *entire* duration `'a`,
-    /// not merely for the duration of the `&'_ self` borrow used to call this method. Nothing in
-    /// the signature ties `'a` to that borrow the way an ordinary safe method's elided lifetime
-    /// would, so the call type-checks for any `'a` the caller writes down, including `'static`;
-    /// picking one that outlives the actual protection produces a dangling reference the moment
-    /// the true underlying lifetime ends, and that mistake is entirely on the caller to avoid.
-    ///
-    /// Guarantees (given the requirement above is met): the returned `&'a Self::Target<'a>`
-    /// aliases the exact same bytes `self` occupies -- no allocation, copy, or transformation
-    /// occurs, per property 1 on the trait.
+    /// Every `ATermRef`/`SymbolRef` reachable through `self` must remain a live GC root --
+    /// registered in a protection set `mark_roots` visits, or otherwise kept alive by
+    /// construction (e.g. a `Return`'s read guard) -- for the entire `'a`, not just for the
+    /// `&self` borrow used to call this method; the returned reference aliases `self`'s own
+    /// bytes.
     unsafe fn transmute_lifetime<'a>(&'_ self) -> &'a Self::Target<'a>;
 
     /// Transmute the lifetime of the object to 'a.

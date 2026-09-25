@@ -240,39 +240,19 @@ impl<T> Drop for BfVecShared<T> {
         }
     }
 }
-// SAFETY: `BfVecShared<T>` is not auto-`Send` because `buffer: Option<NonNull<T>>` is a raw
-// pointer, never auto-`Send`/`Sync` regardless of `T`.
-//
-// Contract discharged by this impl, given `T: Send + Sync`:
-//   - `buffer` points to a `capacity`-element allocation of `T` that every thread holding a
-//     `BfSharedMutex<BfVecShared<T>>` clone can reach: `push` writes a fresh, exclusively-owned
-//     slot (`&self.buffer`'s slot at the CAS-reserved index) from behind a read lock, and `at`
-//     reads a published slot (`index < len`, Acquire) from behind a read lock, on whichever
-//     thread calls them — so elements may be written by one thread and read by another,
-//     requiring `T: Send`; `at` clones a slot's `T` while other threads may concurrently hold
-//     `&T` to slots they have already published, requiring `T: Sync`.
-//   - `capacity`/`reserved`/`len` are `usize`/`AtomicUsize`, always `Send`.
-//   - `Drop` for `BfVecShared<T>` runs on whichever thread drops the last reference and drops
-//     every live `T` in place; `T: Send` covers a value being dropped by a thread other than the
-//     one that wrote it.
+// SAFETY: Not auto-`Send` because `buffer: Option<NonNull<T>>` is a raw pointer. Given
+// `T: Send + Sync`, sending a `BfVecShared<T>` is sound: `push` writes elements that another
+// thread's `at` may later clone (requiring `Sync`, since both may hold `&T` concurrently), and
+// `Drop` may run on a thread other than the one that wrote a given element (requiring `Send`).
 unsafe impl<T: Send + Sync> Send for BfVecShared<T> {}
 
-// SAFETY: `BfVec<T>` has one field, `shared: BfSharedMutex<BfVecShared<T>>`; it inherits its
-// non-auto-`Send` status from `BfSharedMutex`'s own (see that type's `unsafe impl Send`).
-//
-// Note: `BfSharedMutex<U>: Send` (the impl this delegates to) is only *manually* asserted for
-// `U: Send + Sync`, and the compiler does not itself re-check that `U = BfVecShared<T>`
-// satisfies that bound when accepting this outer `unsafe impl` — no `unsafe impl Sync for
-// BfVecShared<T>` exists in this file, and `BfVecShared<T>` does not auto-derive `Sync` either
-// (blocked by the same `buffer: Option<NonNull<T>>` field noted above). The soundness of *this*
-// impl therefore additionally relies on `&BfVecShared<T>` being safe to observe concurrently
-// from multiple threads, which is true by construction even without a named `Sync` impl:
-// `buffer`/`capacity` are read only from behind a `BfSharedMutex` read lock and mutated only
-// from behind its write lock (mutually exclusive with every read lock by the busy-forbidden
-// protocol), while `reserved`/`len` are plain atomics designed to be raced on by concurrent
-// readers. Given `T: Send + Sync` (so cloning/reading/dropping the elements a `BfVecShared<T>`
-// stores is itself sound, per the impl above), moving a `BfVec<T>`'s `shared` clone to another
-// thread is sound.
+// SAFETY: `BfVec<T>` has one field, `shared: BfSharedMutex<BfVecShared<T>>`, so `Send` mirrors
+// `BfSharedMutex`'s own bound (`T: Send + Sync`, see its `unsafe impl Send` above). No `unsafe
+// impl Sync for BfVecShared<T>` exists here (nor is it auto-`Sync`), so that half of the bound
+// is never mechanically checked by the compiler; it holds because `buffer`/`capacity` are read
+// only under a `BfSharedMutex` read lock and written only under its write lock (mutually
+// exclusive by the busy-forbidden protocol), while `reserved`/`len` are atomics meant to be
+// raced on.
 unsafe impl<T: Send + Sync> Send for BfVec<T> {}
 
 #[cfg(test)]

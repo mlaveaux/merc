@@ -19,24 +19,11 @@ pub(crate) struct GcMutex<T> {
     inner: UnsafeCell<T>,
 }
 
-// SAFETY:
-//
-// `GcMutex<T> { inner: UnsafeCell<T> }`. `UnsafeCell<T>` is `!Sync` unconditionally (regardless
-// of `T`) -- that is precisely why a type providing its own synchronization around an
-// `UnsafeCell` must reassert `Sync` explicitly. Moving a `GcMutex<T>` moves the one `T` it owns,
-// so `Send` needs only `T: Send`.
-//
-// - `Send for GcMutex<T> where T: Send`: there is exactly one owner of the `T` inside at a time;
-//   transferring that ownership to another thread is sound whenever `T` itself is `Send`.
-// - `Sync for GcMutex<T> where T: Send + Sync`: `&GcMutex<T>` lets any thread that reaches it
-//   obtain a `&T` via `GcMutex::lock` (any number of concurrent readers, requiring `T: Sync`) or
-//   a `&mut T` via `GcMutex::lock_mut` (requiring `T: Send`, since the thread that ends up
-//   mutating it may differ from the one that created the value). `lock_mut` takes `&mut self`,
-//   so the borrow checker already guarantees at most one live `GcMutexGuard` per `GcMutex` and
-//   excludes it from overlapping with any `GcMutexReadGuard` obtained from the same handle. The
-//   two guard types between them enforce the same shared-xor-exclusive discipline a
-//   `Sync + RwLock`-style type normally provides, which is what makes reasserting `Sync` here
-//   sound.
+// SAFETY: `inner: UnsafeCell<T>` is `!Sync` unconditionally, so a type providing its own
+// synchronization must reassert it explicitly. `Send for GcMutex<T> where T: Send` holds because
+// moving the handle moves the one `T` it owns. `Sync for GcMutex<T> where T: Send + Sync` holds
+// because `lock`/`lock_mut` enforce shared-xor-exclusive access themselves: `lock_mut` takes
+// `&mut self`, so the borrow checker already excludes any other live guard.
 unsafe impl<T: Send> Send for GcMutex<T> {}
 unsafe impl<T: Send + Sync> Sync for GcMutex<T> {}
 

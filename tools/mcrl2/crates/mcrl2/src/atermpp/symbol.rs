@@ -112,14 +112,11 @@ impl Symbol {
     ///
     /// # Safety
     ///
-    /// Requires: `symbol` is non-null and names a live function symbol at the
-    /// point of the call (e.g. one just returned by the mCRL2 FFI, such as
-    /// `mcrl2_aterm_list_function_symbol`). No requirement on `symbol`
-    /// staying live afterwards: this function immediately increments its
-    /// reference count via `mcrl2_function_symbol_protect` before returning.
-    /// Guarantees: the returned `Symbol` keeps `symbol` alive (one reference
-    /// count held) until it is dropped, which decrements the count exactly
-    /// once via `mcrl2_function_symbol_drop`.
+    /// Requires: `symbol` is non-null and names a live function symbol at
+    /// the point of the call; its liveness need not extend past the call,
+    /// since this immediately takes a reference-counted protection.
+    /// Guarantees: the returned `Symbol` keeps `symbol` alive until it is
+    /// dropped, which releases that reference exactly once.
     pub(crate) unsafe fn from_ptr(symbol: *const ffi::_function_symbol) -> Symbol {
         let result = Symbol {
             symbol: SymbolRef::new(symbol),

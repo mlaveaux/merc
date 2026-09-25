@@ -35,14 +35,13 @@ impl ATermPtr {
     }
 }
 
-// SAFETY: `ATermPtr` is a bare `*const _aterm` with no lifetime attached at
-// all (unlike `ATermRef<'a>`), so moving one to another thread cannot itself
-// shorten any borrow. It carries no protection: whatever `ProtectionSet<
-// ATermPtr>` slot it was inserted into is what keeps the pointee alive, and
-// that set's own root (`ProtectionIndex`) determines the real lifetime,
-// tracked separately by `ATerm`/`ATermSend`/`Protected`'s `Drop` impls. A
-// caller storing a raw `ATermPtr` outside of a `ProtectionSet` it also holds
-// a root for can create a dangling pointer regardless of `Send`.
+// SAFETY: `ATermPtr` is a bare `*const _aterm` with no lifetime attached
+// (unlike `ATermRef<'a>`), so moving one to another thread cannot itself
+// shorten any borrow. It carries no protection of its own — whatever
+// `ProtectionSet<ATermPtr>` slot holds it is what keeps the pointee alive,
+// tracked by that slot's `ProtectionIndex` root via `ATerm`/`ATermSend`/
+// `Protected`'s `Drop` impls. Storing a raw `ATermPtr` outside a
+// `ProtectionSet` it also holds a root for can dangle regardless of `Send`.
 unsafe impl Send for ATermPtr {}
 
 // SAFETY: the pointee is only ever read (term content is immutable from

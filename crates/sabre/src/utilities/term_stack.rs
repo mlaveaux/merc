@@ -88,29 +88,19 @@ impl Markable for Config<'_> {
     }
 }
 
-// SAFETY: `Config<'a>` differs from `Config<'static>` only in the lifetime
-// parameter carried by its `DataFunctionSymbolRef<'a>` / `DataExpressionRef<'a>`
-// fields (the `Rewrite`/`Return` variants carry no lifetime at all). A Rust
-// lifetime parameter is never part of a type's runtime representation, so
-// `Config<'static>` and `Config<'a>` are guaranteed by the language to have
-// identical size, alignment and field layout for every `'a`: the transmutes
-// below reinterpret the same bits under a different (shorter) lifetime bound,
-// never as a different shape. Both methods rely on the caller-side contract
-// documented on `Transmutable::transmute_lifetime[_mut]`; see the `# Safety`
-// sections below for the precise pre/postcondition of each.
+// SAFETY: `Config<'a>` differs from `Config<'static>` only in the lifetime carried by its
+// `DataFunctionSymbolRef`/`DataExpressionRef` fields; a lifetime has no runtime representation,
+// so layout is identical for every `'a`. See `Transmutable`'s trait-level `# Safety` doc for the
+// caller contract each method below must satisfy.
 unsafe impl Transmutable for Config<'static> {
     type Target<'a> = Config<'a>;
 
     /// # Safety
     ///
-    /// Requires: `'a` does not outlive the lifetime of the `&self` borrow (the
-    /// signature does not enforce this; every caller in this crate satisfies it
-    /// by only ever obtaining `'a` from a [`ProtectedWriteGuard`](merc_aterm::ProtectedWriteGuard)
-    /// / [`ProtectedReadGuard`](merc_aterm::ProtectedReadGuard) whose own borrow of `self` bounds `'a`).
-    ///
-    /// Guarantees: the result is a shared reference that aliases exactly the
-    /// same bytes as `self` (layout-identical per the impl comment above),
-    /// valid for reads for at most `'a`.
+    /// See [`Transmutable::transmute_lifetime`]: `'a` must not outlive the `&self` borrow.
+    /// Every caller in this crate derives `'a` from a
+    /// [`ProtectedReadGuard`](merc_aterm::ProtectedReadGuard)/[`ProtectedWriteGuard`](merc_aterm::ProtectedWriteGuard)
+    /// (or a local borrow, in tests), which enforces this.
     unsafe fn transmute_lifetime<'a>(&'_ self) -> &'a Self::Target<'a> {
         // SAFETY: see the trait impl comment above; the caller upholds that 'a does not
         // outlive the borrow of `self`.
@@ -119,13 +109,8 @@ unsafe impl Transmutable for Config<'static> {
 
     /// # Safety
     ///
-    /// Requires: `'a` does not outlive the lifetime of the `&mut self` borrow;
-    /// because the input is `&mut`, no other reference to the same `Config` may
-    /// be live for the duration of `'a`.
-    ///
-    /// Guarantees: the result is a unique (mutable) reference that aliases
-    /// exactly the same bytes as `self`, valid for reads and writes for at most
-    /// `'a`.
+    /// See [`Transmutable::transmute_lifetime_mut`]: `'a` must not outlive the `&mut self`
+    /// borrow, and no other reference to this `Config` may be live for `'a`.
     unsafe fn transmute_lifetime_mut<'a>(&'_ mut self) -> &'a mut Self::Target<'a> {
         // SAFETY: see the trait impl comment above; the caller upholds that 'a does not
         // outlive the borrow of `self`.

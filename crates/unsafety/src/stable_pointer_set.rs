@@ -709,14 +709,10 @@ struct Entry<T: ?Sized> {
 }
 
 // SAFETY: `ptr: NonNull<T>` is the field that blocks auto-`Send`/auto-`Sync`; the debug-only
-// `reference_counter: Arc<()>` is always `Send + Sync` on its own.
-//
-// Contract discharged by these impls: `Entry<T>` is the value the `DashSet<Entry<T>, S>` index
-// stores — one allocation per set element, owned by the set — so a thread other than the one
-// that inserted it may end up dropping it (via `drop_and_deallocate_entry`) or reading it (via
-// `Deref`/hashing/equality when another thread's lookup walks the map's shards), requiring
-// `T: Send` for the former and `T: Sync` for the latter; both are exactly the bounds required
-// here.
+// `reference_counter: Arc<()>` is always `Send + Sync` on its own. `Entry<T>` is the value the
+// `DashSet<Entry<T>, S>` index stores, so a thread other than the one that inserted it may end
+// up dropping it (`T: Send`) or reading it via `Deref`/hashing/equality when another thread's
+// lookup walks the map's shards (`T: Sync`).
 unsafe impl<T: ?Sized + Send> Send for Entry<T> {}
 unsafe impl<T: ?Sized + Sync> Sync for Entry<T> {}
 

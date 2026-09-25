@@ -83,30 +83,12 @@ const _: () = assert!(std::mem::size_of::<Option<ATermRef>>() == std::mem::size_
 
 /// # Safety
 ///
-/// `ATermRef<'a> { shared: StablePointer<SharedTerm>, marker: PhantomData<&'a ()> }`. `shared`
-/// is a non-owning, type-erased raw pointer (`merc_unsafety::StablePointer` wraps a `NonNull`),
-/// which is `!Send`/`!Sync` unconditionally; these two impls are what let an `ATermRef` cross a
-/// `Send`/`Sync` boundary at all. `PhantomData<&'a ()>` carries no runtime state and does not
-/// itself affect either trait.
-///
-/// Moving or sharing a live `ATermRef<'a>` across threads is sound because, for the whole
-/// duration any thread holds one:
-/// 1. **No data race on the pointee.** Every `SharedTerm` in the global pool is immutable once
-///    inserted: `ATermStorage::insert` only ever writes a fresh allocation
-///    (`SharedTerm::construct`), and the only other writer, the sweep in
-///    `GlobalTermPool::sweep_terms_and_symbols`, removes whole entries rather than mutating a
-///    live one. So two threads reading the same `SharedTerm` concurrently through two
-///    `ATermRef`s that alias the same address never race.
-/// 2. **No use-after-free.** The address a `StablePointer<SharedTerm>` refers to is reclaimed
-///    only by `GlobalTermPool::collect_garbage`'s sweep, which runs exclusively under the pool's
-///    write lock (`GlobalBfSharedMutex::write`, via `RecursiveLock::write`). That write lock
-///    cannot be granted while any thread holds a `read_recursive()` guard, and holding a live,
-///    in-bounds `ATermRef<'a>` requires the term to be reachable from a GC root for at least
-///    `'a` (the caller-side contract of [`ATermRef::from_index`]) -- every safe path that
-///    produces one either holds such a read guard for the term's whole `'a` (`Return`) or has
-///    already registered it in a protection set that `mark_roots` visits before any sweep can
-///    run. So no thread, at any point while it holds an `ATermRef`, can observe a sweep freeing
-///    the memory a concurrently-held `ATermRef` (on any thread, including its own) points at.
+/// `shared: StablePointer<SharedTerm>` wraps a raw pointer, so `Send`/`Sync` must be asserted
+/// manually (`PhantomData<&'a ()>` does not affect either). Sound because every `SharedTerm` is
+/// immutable once inserted -- only the sweep in `GlobalTermPool::sweep_terms_and_symbols` removes
+/// entries, and only while holding the pool's exclusive write lock -- and a live `ATermRef<'a>`
+/// always denotes a term kept reachable for `'a`, either by a `Return`'s read guard or by a
+/// protection-set root that `mark_roots` visits before any sweep can run.
 unsafe impl Send for ATermRef<'_> {}
 unsafe impl Sync for ATermRef<'_> {}
 
@@ -462,30 +444,13 @@ pub struct ATermSend {
 
 /// # Safety
 ///
-/// `ATermSend { term: ATermRef<'static>, root: ProtectionIndex, protection_set:
-/// Arc<Mutex<ProtectionSet<ATermIndex>>> }`.
-/// - `term` is `Send`/`Sync` by the contract on `ATermRef`'s own impls above.
-/// - `root` (`ProtectionIndex`, a `Copy` newtype over a plain generational `usize` index) has no
-///   interior mutability, so it is trivially both.
-/// - `protection_set` is `Arc<Mutex<ProtectionSet<ATermIndex>>>`, which is `Send`/`Sync`
-///   automatically as soon as `ATermIndex = StablePointer<SharedTerm>` is -- exactly the
-///   property the `ATermRef` impls above establish (`Mutex<X>` needs `X: Send` to be `Sync`,
-///   `Arc<X>` needs `X: Send + Sync` to be `Send`, and `ProtectionSet<ATermIndex>`'s only
-///   `ATermIndex`-typed storage is a plain `Vec`, adding no further raw-pointer field of its
-///   own).
-///
-/// So nothing here needs re-deriving from scratch: this impl exists only because `SharedTerm`
-/// (embedded in `ATermIndex` via `ATermRef`) is a self-referential type that already required
-/// one manual `Send`/`Sync` assertion, and a struct that contains an unasserted `!Send`/`!Sync`
-/// field anywhere in its transitive closure cannot have those traits auto-derived for it either
-/// -- so the compiler cannot discharge this on `ATermSend`'s behalf even though every field's
-/// own requirement is already met once the `ATermRef` argument above is accepted.
-///
-/// The invariant `ATermSend` itself must additionally uphold across the send is that `root`
-/// stays protected in exactly `protection_set` until `Drop for ATermSend` unprotects it exactly
-/// once (see `ATermSend::from`); that keeps the term reachable by the GC regardless of which
-/// thread is now holding it, so point 2 of the `ATermRef` argument above (no use-after-free)
-/// still holds after the move, on the receiving thread.
+/// `term: ATermRef<'static>` is `Send`/`Sync` per the impls above; `root: ProtectionIndex` is a
+/// `Copy` newtype with no interior mutability; `protection_set:
+/// Arc<Mutex<ProtectionSet<ATermIndex>>>` is `Send`/`Sync` automatically once `ATermIndex` is.
+/// The manual impl exists only because `SharedTerm` (reached through `term`) is self-referential,
+/// which blocks auto-derivation. `ATermSend` additionally keeps `root` protected in
+/// `protection_set` until `Drop` unprotects it exactly once (see `ATermSend::from`), so the term
+/// stays reachable by the GC after the move.
 unsafe impl Send for ATermSend {}
 unsafe impl Sync for ATermSend {}
 

@@ -100,14 +100,11 @@ impl<T: Send, const N: usize> BlockAllocator<T, N> {
         let offset = state.bump_offset.get();
         if !block_ptr.is_null() && offset < N {
             state.bump_offset.set(offset + 1);
-            // SAFETY: `block_ptr` is non-null and owned by this thread's
-            // state; it stays valid until `remove_free_blocks`, which the
-            // caller must not run concurrently with allocation. `offset < N`
-            // was just checked, so `data_ptr.add(offset)` stays within the
-            // block's `N`-element array. We use `addr_of_mut!` instead of
-            // forming a reference so this does not race with other in-bounds
-            // accesses to the same block via `UnsafeCell`, and the result is
-            // never null.
+            // SAFETY: `block_ptr` is owned by this thread and stays valid until
+            // `remove_free_blocks` (never run concurrently with allocation, per its own doc);
+            // `offset < N` keeps `data_ptr.add(offset)` in bounds. We index through
+            // `addr_of_mut!` rather than a reference so this doesn't race with other in-bounds
+            // `UnsafeCell` accesses to the same block.
             return unsafe {
                 let data_ptr = (*block_ptr).data.get() as *mut Entry<T>;
                 let entry_ptr = data_ptr.add(offset);
@@ -539,13 +536,9 @@ impl<T: Send, const N: usize> AllocBlock<T, N> {
     }
 }
 
-// SAFETY: `allocate` only ever hands out pointers obtained from
-// `block_allocator.allocate_object()`, which are valid `NonNull<T>` slots
-// owned by this same `block_allocator`; `deallocate` requires (via its own
-// safety contract) that `ptr`/`layout` came from a matching `allocate` call
-// on this allocator, which is exactly what `deallocate_object` expects. Since
-// `allocate` rejects any layout other than `Layout::new::<T>()`, every
-// pointer that reaches `deallocate` was produced for that same layout.
+// SAFETY: `allocate` only hands out pointers from `block_allocator.allocate_object()` for the
+// fixed layout `Layout::new::<T>()`; `deallocate_object` expects exactly that kind of pointer,
+// matching what `Allocator::deallocate`'s own contract requires of its caller.
 unsafe impl<T: Send, const N: usize> Allocator for AllocBlock<T, N> {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         // The blocks only fit objects with exactly T's layout; returning one for a larger

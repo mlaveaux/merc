@@ -162,30 +162,12 @@ pub struct SharedSymbol {
     arity: usize,
 }
 
-// SAFETY: `BlockAllocatorSafe`'s two required properties (see its own `# Safety` doc in
-// `merc_unsafety`), checked against `SharedSymbol { name: String, arity: usize }`:
-//
-// 1. The sentinel (`usize::MAX`, i.e. all bytes `0xFF`) must never occur as the first
-//    `size_of::<*mut _>()` bytes of a live `SharedSymbol`. With `#[repr(C)]` guaranteeing `name`
-//    occupies the struct's first bytes (pinned below), those bytes are `name`'s internal heap
-//    pointer (or, for
-//    an unallocated `String`, `NonNull::dangling()`, `align_of::<u8>() == 1`): no allocator in
-//    this codebase or on the platforms it targets ever hands out the address `usize::MAX` (not a
-//    valid, mappable heap address on any supported target), which is exactly why that bit
-//    pattern was chosen as the sentinel. That allocator-never-returns-this-address part is an
-//    axiom about the platform, not something a test or a Kani proof can establish -- no more
-//    than either could prove the standard library's own niche-value optimisations.
-// 2. Those same bytes must always be fully initialized: `RawVec::ptr` carries no padding and is
-//    never uninitialized for a constructed `String` (empty or not), so this half holds
-//    regardless of which field ends up first.
-//
-// Caveat this impl does NOT fully discharge: `SharedSymbol` is not `#[repr(C)]` (unlike
-// `SharedTermFixed`/`SharedTermInt` in `aterm_storage.rs`, which are, with an analogous
-// first-field comment), so property 1 additionally assumes `name` occupies the struct's first
-// `size_of::<*mut _>()` bytes -- guaranteed by `#[repr(C)]` on `SharedSymbol` (pinned by the
-// `offset_of!` static assertion below, as the other two `BlockAllocatorSafe` types already
-// have), not merely typical of the layout an unannotated `#[repr(Rust)]` struct happens to get
-// from the current compiler.
+// SAFETY: `BlockAllocatorSafe` requires the first `size_of::<*mut _>()` bytes of a live value to
+// never read as the sentinel `usize::MAX` and to always be fully initialized. `#[repr(C)]`
+// guarantees `name: String` occupies those bytes (pinned by the `offset_of!` assertion in `mod
+// tests` below), which are `name`'s heap pointer -- always initialized (`RawVec::ptr` carries no
+// padding), and never `usize::MAX` since no allocator on a supported platform returns that
+// address.
 unsafe impl BlockAllocatorSafe for SharedSymbol {}
 
 impl SharedSymbol {

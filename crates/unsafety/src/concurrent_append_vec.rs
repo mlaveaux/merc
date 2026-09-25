@@ -60,30 +60,16 @@ pub struct ConcurrentAppendVec<T, const BLOCK: usize = 256> {
 }
 
 /// SAFETY: `_marker: PhantomData<*mut T>` is what blocks auto-`Send`/`Sync`; every other field
-/// (`AtomicUsize`, `AtomicPtr`, `ThreadLocal<CachePadded<Local>>`) is already `Send + Sync`
-/// independent of `T`.
-///
-/// Contract discharged by this impl, given `T: Send`: the vector's buckets own up to
-/// `reserved_blocks * BLOCK` values of `T` (`Bucket::drop` drops every committed slot), and
-/// `Drop for ConcurrentAppendVec` runs wherever the value is finally dropped — not necessarily
-/// the thread(s) that wrote those values via `push`. `T: Send` is exactly the bound that makes
-/// a value written on one thread being freed on another sound; the struct never exposes `&T`
-/// on its own (that needs `Sync`, asserted separately below), so no further bound is needed
-/// here.
+/// is already `Send + Sync` independent of `T`. Given `T: Send`, sending the vector is sound:
+/// `Drop` reclaims every committed slot's `T` and may run on a thread other than the one(s) that
+/// `push`ed it.
 unsafe impl<T: Send, const BLOCK: usize> Send for ConcurrentAppendVec<T, BLOCK> {}
 
-/// SAFETY: same blocking field as the `Send` impl above (`_marker: PhantomData<*mut T>`).
-///
-/// Contract discharged by this impl, given `T: Send + Sync`: sharing `&self` across threads
-/// lets any of them call `push` (writing a `T`, requiring `T: Send` since another thread may
-/// later `get`/drop it) and `get`/`iter` (returning `&T`, requiring `T: Sync`). Two threads
-/// never write the same slot: `push` reserves its slot via a single `fetch_add` on
-/// `reserved_blocks` (globally unique per block) composed with a purely thread-local bump
-/// within that block, so the `(bucket, block, offset)` triple `push` computes is unique per
-/// call. A slot's write (the `ptr::write` in `push`) happens-before any `get`/`iter` that
-/// observes it, because both sides serialise through the same per-block `commits[block]`
-/// counter with `Release` (write side) / `Acquire` (read side) ordering, so no `get` can race a
-/// `push` to the slot it reads.
+/// SAFETY: same blocking field as the `Send` impl above. Given `T: Send + Sync`, sharing `&self`
+/// is sound: `push` reserves its `(bucket, block, offset)` slot via a global `fetch_add` on
+/// `reserved_blocks` composed with a thread-local offset, so two threads never write the same
+/// slot; a slot's write happens-before any `get`/`iter` that observes it, since both sides
+/// serialise through the per-block `commits[block]` counter with Release/Acquire ordering.
 unsafe impl<T: Send + Sync, const BLOCK: usize> Sync for ConcurrentAppendVec<T, BLOCK> {}
 
 /// Per-thread state: the half-open range `[next, end)` of indices still free in
@@ -234,11 +220,10 @@ impl<T, const BLOCK: usize> ConcurrentAppendVec<T, BLOCK> {
     ///
     /// # Safety
     ///
-    /// `index` must have been returned by a previous [`push`](Self::push) whose
-    /// effect is visible to the caller through external synchronization (a lock,
-    /// or joining the producing thread). Passing an out-of-range index or a
-    /// reserved-but-unwritten gap is undefined behavior. Skipping the per-block
-    /// commit load makes this cheaper than [`get`](Self::get) on hot read paths.
+    /// `index` must come from a [`push`](Self::push) whose write is visible to the caller (e.g.
+    /// via a lock or by joining the producing thread); an out-of-range or reserved-but-unwritten
+    /// index is undefined behavior. Skips the per-block commit load that
+    /// [`get`](Self::get) performs, for cheaper hot-path reads.
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
         let (bucket_index, block, offset) = Self::locate(index);
         let pointer = self.buckets[bucket_index].load(Ordering::Acquire);
