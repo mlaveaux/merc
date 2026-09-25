@@ -15,12 +15,29 @@ below.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Tooling: kani, miri, loom, sanitizers, nextest, cargo-deny | done — see [phase-0-tooling.md](phase-0-tooling.md) |
-| 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling` | in progress (3 parallel review-adversary agents) |
-| 1b | mcrl2 FFI boundary (`tools/mcrl2/crates/mcrl2`) — miri boundary tests + written contracts only, kani doesn't model-check across the C++ FFI boundary | in progress (2 parallel review-adversary agents: atermpp core, higher-level wrappers) |
-| 2 | `typecheck` / `syntax` core (highest churn + lowest health) | in progress (3 parallel review-adversary agents: typecheck inference/resolution, typecheck signature/checking, syntax) |
+| 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling` | done — see phase-1-foundation-unsafe-{aterm,sharedmutex-unsafety,sabre}.md |
+| 1b | mcrl2 FFI boundary (`tools/mcrl2/crates/mcrl2`) — miri boundary tests + written contracts only, kani doesn't model-check across the C++ FFI boundary | done — see phase-1b-mcrl2-ffi-{atermpp,wrappers}.md |
+| 2 | `typecheck` / `syntax` core (highest churn + lowest health) | done — see phase-2-typecheck-{inference,signature}.md, phase-2-syntax.md |
 | 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | not started |
 | 4 | Tool binaries & GUI, three-workspace boundary check | not started |
 | 5 | Cross-cutting: import cycles, doc audit, coverage gaps | not started |
+
+## Findings so far
+
+| Severity | Finding | Location | Status |
+|---|---|---|---|
+| Critical | `RecursiveLock` write/read aliasing — safe code could manufacture a `&mut T`/`&T` pair, real Stacked Borrows UB | `crates/sharedmutex` | **FIXED**, miri-clean |
+| Critical | 3× `unsafe impl Send` let safe code SIGABRT the process | `tools/mcrl2` (merc_pbes, merc_lps) | **FIXED**, compile-fail regression tests added |
+| High | Unbounded recursion → stack overflow (SIGABRT) on deep input, 3 independent instances | `crates/typecheck` (`modal/check.rs`, `process/check.rs`, structurally identical pattern also in `pres/check.rs`, untested) | confirmed, not yet fixed |
+| High | `func_update` sort-inference gap: inference-only function sorts get no ground rewrite equations, permanently stuck term | `crates/typecheck/src/lowering/instantiate.rs` | confirmed, not yet fixed |
+| High | Real SIGSEGV: release-mode `debug_assert_eq!` compiled out, arity mismatch reads OOB across the FFI | `tools/mcrl2/crates/mcrl2/src/atermpp` | confirmed (structurally + agent's real repro), not yet fixed |
+| Medium | `MultiAction::eq` is not multiset equality, breaks `Hash`/`Eq` contract | `crates/syntax` | confirmed, not yet fixed |
+| Medium | `DataApplication::sort()` silently returns the wrong term (dead code, zero callers) | `tools/mcrl2/crates/mcrl2` | confirmed, deferred (no user impact today) |
+| Low/Plausible | `SharedSymbol` relied on undefined `#[repr(Rust)]` field order | `crates/aterm` | **FIXED** (`#[repr(C)]` added) |
+| Low | Dead `arity` parameter, discarded and recomputed elsewhere | `crates/aterm` | confirmed, cosmetic |
+| Plausible | Data race: `Debug for GlobalTermPool` reads protection sets with no coordination against a concurrent `write_exclusive` | `tools/mcrl2/crates/mcrl2/src/atermpp` | confirmed by source tracing, unreachable in practice (no current callers), not fixed |
+
+Both crates reviewed as sound with no defects: `crates/sabre`, `crates/sabre_compiling`.
 
 ## Baseline (repowise index, commit `c48abb3`)
 
