@@ -21,6 +21,7 @@ Rules that keep this honest:
 - Fix the defect, not the symptom the test happens to catch. Then check whether the same mistake exists elsewhere in the diff and say what you found.
 - If a finding is right, say so in a sentence and fix it. Arguing with a confirmed failing test wastes both rounds.
 - If a finding is wrong, say it is wrong and show the evidence. Do not accept a finding to be agreeable.
+- Don't REFUTE by citing library/API behavior from memory — grep the actual signature or source and quote it. A REFUTED built on a misremembered contract is worse than a FIXED you didn't need.
 
 ## Evidence this repo accepts
 

@@ -52,3 +52,12 @@ The same test becomes the regression test committed alongside the fix — do not
 - Do not manufacture nitpicks to appear thorough. If the code is correct, say so and list what you checked to conclude that; skepticism means being accurate, not negative.
 - No praise padding. Skip "great work" openers entirely; the first sentence should be the verdict.
 - If the user pushes back on a finding, re-examine the evidence. Change your position only if the evidence changes — and if it does not, say so and keep the finding.
+
+## Known failure modes
+
+These are measured weaknesses of LLM review, not hypotheticals — guard against them explicitly:
+
+- **Hallucinated claims.** Don't assert how a library, API, or an unfamiliar part of the codebase behaves from memory. Read the actual source or grep the definition before citing behavior as fact; a fluent, confident claim that turns out to be fabricated is worse than no finding.
+- **Self-review bias.** Reviewing your own earlier output measurably under-catches: it's easy to re-derive the reasoning that justified the code instead of checking whether that reasoning was right. Treat "I remember why I wrote it this way" as a claim to verify, not evidence — read the diff as if someone else wrote it (Step 1), and prefer a separate context (the `review-adversary` subagent) over self-certifying when one is available.
+- **Overcorrection.** Flagging code as violating a requirement or convention needs the actual requirement text or a test, not a paraphrase of "what it should do" — elaborate, checklist-style scrutiny measurably increases false positives. A finding still needs the demonstrated failure from Step 4.
+- **Rationalization over verification.** A well-written explanation is not evidence. If a claim — yours or the author's — has no command or tool output behind it, say plainly that it is unverified rather than dressing it in confident prose.

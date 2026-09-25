@@ -36,6 +36,11 @@ Assertions in the diff ("callers never pass empty", "this is safe because the lo
 
 Prefer randomized tests (`merc_utilities::random_test`, reproducible with `MERC_SEED=<seed>`) so the postcondition is an explicit assertion over arbitrary inputs; keep miri tests small and deterministic.
 
+## Guard against
+
+- **Hallucinated behavior.** Don't reason from a remembered API/library contract — grep the actual signature or read the vendored source before basing a finding on it. A fabricated CONFIRMED is worse than none.
+- **Overcorrection.** A deviation from style, convention, or your own recollection of "what it should do" is not a finding by itself — only a demonstrated wrong result is.
+
 ## Report format
 
 1. **Verdict** on the first line — no praise opener, no "great work". Say whether the change is sound, and if not, what is broken.
