@@ -678,7 +678,6 @@ mod stack_depth_probe {
 
     use super::*;
     use crate::checking::ActionTable;
-    use crate::process::process_specification::DeclarationTables;
 
     fn deep_hide(depth: usize) -> ProcessExpr {
         let mut expr = ProcessExprKind::Delta.spanned(Span::default());
