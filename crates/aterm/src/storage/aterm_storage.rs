@@ -326,8 +326,22 @@ pub(crate) struct SharedTermFixed<const N: usize> {
     pub(crate) args: [ATermIndex; N],
 }
 
-// Safety: The first field is a heap pointer. Heap pointers are always well above the small alignment value returned by
-// `std::ptr::dangling_mut()`, so the sentinel can never collide with a live entry.
+// SAFETY: `BlockAllocatorSafe`'s two required properties (see its own `# Safety` doc in
+// `merc_unsafety`), checked against `SharedTermFixed<N> { symbol: SymbolRef<'static>, args:
+// [ATermIndex; N] }`, `#[repr(C)]` so `symbol` is guaranteed (not merely typical) to occupy the
+// struct's first bytes, pinned by the `offset_of!` static assertion in `mod tests` below:
+//
+// 1. The sentinel (`usize::MAX`, all bytes `0xFF`) never occurs as the first
+//    `size_of::<*mut _>()` bytes, because those bytes are `symbol`'s `StablePointer<SharedSymbol>`
+//    -- a real address returned by `SymbolPool`'s `BlockAllocator` (backed by `Box`-allocated
+//    blocks; see `BlockList::drop`'s `Box::from_raw`), which, like any allocator on the
+//    platforms this crate targets, never hands out the address `usize::MAX` (not a valid,
+//    mappable heap address anywhere). As with `SharedSymbol`'s impl, this final step is an axiom
+//    about allocator behaviour that no test or Kani proof can establish on its own.
+// 2. Those same bytes are always fully initialized: every `SharedTermFixed<N>` is built by
+//    `SharedTermFixed { symbol: SymbolRef::from_symbol(..), args: .. }` (`insert_fixed_iter`),
+//    which always supplies a genuine `symbol` value -- there is no path that leaves it
+//    uninitialized.
 unsafe impl<const N: usize> BlockAllocatorSafe for SharedTermFixed<N> {}
 
 /// Storage for integer ATerms.
@@ -343,7 +357,13 @@ pub(crate) struct SharedTermInt {
     annotation: usize,
 }
 
-// Safety: Same reasoning as `SharedTermFixed` — the first field is a heap pointer.
+// SAFETY: Same reasoning as `SharedTermFixed<N>` above -- `#[repr(C)]` with `symbol` first
+// (pinned by the `offset_of!` static assertion in `mod tests` below), so the sentinel-avoidance
+// and full-initialization properties both hold for the same reason: `symbol` is always a real,
+// fully-initialized `StablePointer<SharedSymbol>` from `SymbolPool`'s allocator, never
+// `usize::MAX`. `annotation: usize` (the payload `ATermInt::value_unchecked` reads) is *not*
+// covered by this impl -- and does not need to be, since `BlockAllocatorSafe` only constrains
+// the first `size_of::<*mut _>()` bytes, which is exactly `symbol`'s slot, not `annotation`'s.
 unsafe impl BlockAllocatorSafe for SharedTermInt {}
 
 impl SharedTermInt {

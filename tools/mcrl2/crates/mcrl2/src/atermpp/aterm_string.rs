@@ -45,8 +45,23 @@ impl ATermStringRef<'static> {
     ///
     /// # Safety
     ///
-    /// The term at `term` must stay live for the whole of `'static`, i.e. for as
-    /// long as the returned reference is reachable; see [`crate::ATermRef`].
+    /// Requires: `term` is non-null, names an `aterm_string` (arity-0) node,
+    /// and stays reachable from some GC root for as long as the caller
+    /// actually *reads* through the returned reference — not merely for as
+    /// long as whatever value `term` was borrowed from happens to be in
+    /// scope syntactically (that owner may be a temporary already dropped by
+    /// the time the reference is read), and not necessarily forever: the
+    /// chosen lifetime `'static` is a type-level upper bound the caller
+    /// promises to respect, not a runtime guarantee this function creates —
+    /// unlike `ATerm::from_ptr`/`Symbol::from_ptr`, this is a bare reference
+    /// and registers no new GC root of its own. See callers such as
+    /// `merc_pbes::explore_pbes::name_key` for how that root is actually
+    /// supplied (typically a longer-lived owning value, like a `Pbes` kept
+    /// alive by the caller, that transitively keeps `term` reachable).
+    /// Guarantees: the returned `ATermStringRef<'static>` is safe to copy,
+    /// compare and hash unconditionally (no dereference), and safe to
+    /// dereference (`str()`, `Display`) for as long as the precondition is
+    /// upheld.
     pub unsafe fn from_address(term: *const crate::_aterm) -> ATermStringRef<'static> {
         // SAFETY: the caller upholds that the term stays live for `'static`.
         ATermStringRef::new(unsafe { ATermRef::new(term) })

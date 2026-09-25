@@ -484,6 +484,76 @@ mod tests {
         );
     }
 
+    /// `BfTermPool::write_exclusive` documents that it is sound "given that
+    /// other threads use [Self::write] and [Self::read] exclusively" against
+    /// this same pool, i.e. it relies on no *other* thread calling `.read()`
+    /// on the very `SharedProtectionSet` a thread is mutating through
+    /// `write_exclusive`. But `write_exclusive` only takes the C++
+    /// *shared* (busy) lock, the same lock class `.read()` takes, so the two
+    /// are mutually compatible under the busy/forbidden protocol and do not
+    /// exclude each other.
+    ///
+    /// `ThreadTermPool`'s `Display` impl (via `GlobalTermPool`'s `Debug`)
+    /// calls `.read()` on *every* thread's protection set, including ones
+    /// concurrently being mutated by their owning thread through
+    /// `write_exclusive` (e.g. from `protect_with` while creating terms).
+    /// That is exactly the forbidden interleaving: one thread observes
+    /// `&ProtectionSet<ATermPtr>` (via `.read()`) while another thread holds
+    /// `&mut ProtectionSet<ATermPtr>` (via `write_exclusive`) on the very same
+    /// object, which is undefined behaviour (aliased mutable/shared access)
+    /// and a genuine data race on the underlying `Vec` if it reallocates
+    /// mid-iteration.
+    ///
+    /// This test drives that interleaving directly: one thread continuously
+    /// creates terms (mutating its own protection set through
+    /// `write_exclusive`) while another repeatedly formats the pool (reading
+    /// every thread's protection set through `.read()`), and expects it not
+    /// to crash / corrupt memory. On the reviewed code this is unsound even
+    /// though it is not exercised anywhere else in the crate today; run it
+    /// under a thread sanitizer (`cargo +nightly xtask thread-sanitizer test
+    /// -p mcrl2 -- read_races_with_concurrent_term_creation`) for conclusive
+    /// evidence, since a plain debug build may not reproduce the race on
+    /// every run.
+    #[test]
+    fn read_races_with_concurrent_term_creation() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicBool;
+        use std::sync::atomic::Ordering;
+
+        let stop = Arc::new(AtomicBool::new(false));
+
+        thread::scope(|s| {
+            // Several threads continuously creating terms, which mutates
+            // their own `SharedProtectionSet` through `write_exclusive`
+            // (a merely-*shared* C++ lock).
+            for _ in 0..4 {
+                let stop = stop.clone();
+                s.spawn(move || {
+                    let mut rng = rand::rng();
+                    while !stop.load(Ordering::Relaxed) {
+                        let _term = random_term(
+                            &mut rng,
+                            &[("f".to_string(), 2)],
+                            &["a".to_string(), "b".to_string()],
+                            50,
+                        );
+                    }
+                });
+            }
+
+            // Concurrently format the pool, which calls `.read()` on every
+            // thread's protection set -- including the ones the threads
+            // above are mutating right now.
+            for _ in 0..2000 {
+                THREAD_TERM_POOL.with_borrow(|tp| {
+                    let _ = format!("{tp}");
+                });
+            }
+
+            stop.store(true, Ordering::Relaxed);
+        });
+    }
+
     #[test]
     fn test_thread_aterm_pool_parallel() {
         let mut rng = rand::rng();

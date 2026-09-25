@@ -35,9 +35,21 @@ impl ATermPtr {
     }
 }
 
+// SAFETY: `ATermPtr` is a bare `*const _aterm` with no lifetime attached at
+// all (unlike `ATermRef<'a>`), so moving one to another thread cannot itself
+// shorten any borrow. It carries no protection: whatever `ProtectionSet<
+// ATermPtr>` slot it was inserted into is what keeps the pointee alive, and
+// that set's own root (`ProtectionIndex`) determines the real lifetime,
+// tracked separately by `ATerm`/`ATermSend`/`Protected`'s `Drop` impls. A
+// caller storing a raw `ATermPtr` outside of a `ProtectionSet` it also holds
+// a root for can create a dangling pointer regardless of `Send`.
 unsafe impl Send for ATermPtr {}
 
-// SAFETY: Terms are immutable, so reading the pointed-to term from multiple threads is fine.
+// SAFETY: the pointee is only ever read (term content is immutable from
+// Rust's perspective; GC bookkeeping uses relaxed atomics and requires every
+// thread to be non-busy first, see `ATermRef`'s `Send`/`Sync` impl), so
+// sharing `&ATermPtr` — and thus `&*const _aterm` — across threads performs
+// no racing writes.
 unsafe impl Sync for ATermPtr {}
 
 /// The protection set for terms.

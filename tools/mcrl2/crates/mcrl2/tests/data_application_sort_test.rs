@@ -9,31 +9,41 @@
 //! the reinterpretation is a straightforward runtime-tag mismatch of the kind
 //! the `mcrl2_term` macro's `debug_assert!` exists to catch.
 //!
-//! This is exercised through the public `DataSpecification`/`ATerm` API rather
-//! than by constructing terms directly, since every `DataExpression` in this
-//! crate is ultimately backed by the C++ mCRL2 term pool.
+//! The application term is obtained from a `Pbes`'s initial state rather than
+//! from `DataSpecification::user_defined_equations()`: the latter returns
+//! terms in the index-*stripped* `OpIdNoIndex` serialisation (see
+//! `lowering_conformance.rs`), which does not satisfy `is_function_symbol`
+//! either, and would make a baseline sanity check panic for an unrelated
+//! reason. A PBES initial state is built by the real mCRL2 parser/type-checker
+//! pipeline and yields genuine indexed `data_expression` terms, exactly the
+//! shape every other wrapper in `data_expression.rs` assumes.
 
 use mcrl2::DataApplicationRef;
-use mcrl2::DataSpecification;
+use mcrl2::DataExpressionRef;
+use mcrl2::Pbes;
 use mcrl2::is_application;
 
-/// Parses a tiny data specification with one equation `f(x) = x` and returns
-/// the `f(x)` application term that appears as the left-hand side of the
-/// user-defined equation `eqn f(x) = x;`.
-fn find_application_in_spec() -> mcrl2::ATerm {
-    let spec = DataSpecification::from_string("map f: Nat -> Nat;\nvar x: Nat;\neqn f(x) = x;\n");
+/// Parses a tiny PBES whose initial state passes the data application `f(1)`
+/// as an argument, and returns that application term.
+fn find_application_in_initial_state() -> mcrl2::DataExpression {
+    let pbes = Pbes::from_text(
+        "map f: Nat -> Nat;\n\
+         var x: Nat;\n\
+         eqn f(x) = x;\n\
+         \n\
+         pbes nu X(n: Nat) = val(n == 0) || X(f(n));\n\
+         init X(f(1));\n",
+    )
+    .expect("PBES text should parse and type-check");
 
-    for eq in spec.user_defined_equations().iter() {
-        let arity = eq.get_head_symbol().arity();
-        for i in 0..arity {
-            let arg = eq.arg(i);
-            if is_application(&arg) {
-                return arg.protect();
-            }
+    let initial = pbes.initial_state();
+    for arg in initial.arguments().iter() {
+        if is_application(&arg.copy()) {
+            return DataExpressionRef::from(arg.copy()).protect();
         }
     }
 
-    panic!("expected the data_equation term for `f(x) = x` to contain a data application `f(x)`");
+    panic!("expected the initial state instantiation `X(f(1))` to carry the application `f(1)`");
 }
 
 /// `data_function_symbol()` on a `DataApplication` correctly returns the
@@ -42,7 +52,7 @@ fn find_application_in_spec() -> mcrl2::ATerm {
 /// exercising the `sort()` bug below.
 #[test]
 fn data_application_head_symbol_is_the_function_not_a_sort() {
-    let term = find_application_in_spec();
+    let term = find_application_in_initial_state();
     let appl = DataApplicationRef::from(term.copy());
     assert_eq!(appl.data_function_symbol().name(), "f");
 }
@@ -54,14 +64,14 @@ fn data_application_head_symbol_is_the_function_not_a_sort() {
 /// false and the conversion panics. This failing debug_assert *is* the
 /// evidence of the type-confusion bug: fixing `sort()` to compute the actual
 /// result sort (e.g. by decomposing the function symbol's arrow sort) would
-/// make this test's precondition ("calling sort() on a real application")
-/// stop panicking, so this test would need to be replaced by one that asserts
-/// the sort is e.g. `Nat` — it does not currently, because the bug is live.
+/// make this precondition stop panicking, so this test would then need to be
+/// replaced by one that asserts the sort is `Nat` — it is not currently,
+/// because the bug is live.
 #[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "does not satisfy is_sort_expression")]
 fn data_application_sort_panics_on_type_confusion_in_debug() {
-    let term = find_application_in_spec();
+    let term = find_application_in_initial_state();
     let appl = DataApplicationRef::from(term.copy());
     let _ = appl.sort();
 }
@@ -78,11 +88,11 @@ fn data_application_sort_panics_on_type_confusion_in_debug() {
 #[cfg(not(debug_assertions))]
 #[test]
 fn data_application_sort_silently_returns_function_symbol_not_result_sort_in_release() {
-    let term = find_application_in_spec();
+    let term = find_application_in_initial_state();
     let appl = DataApplicationRef::from(term.copy());
     let sort = appl.sort();
 
-    // A correct `sort()` for `f(x)` (`f: Nat -> Nat`) would report the result
+    // A correct `sort()` for `f(1)` (`f: Nat -> Nat`) would report the result
     // sort `Nat`. Instead it reports "f", proving the returned handle is
     // actually still the function symbol.
     assert_eq!(

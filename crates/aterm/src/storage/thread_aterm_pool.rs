@@ -87,7 +87,7 @@ impl ThreadTermPool {
         let mut pool = term_pool.write().expect("Lock poisoned!");
 
         let (protection_sets, send_term_protection_set, send_container_protection_set) =
-            pool.register_thread_term_pool();
+            pool.with_mut(|pool| pool.register_thread_term_pool());
         let int_symbol = pool.get_int_symbol().copy();
         let empty_list_symbol = pool.get_empty_list_symbol().copy();
         let list_symbol = pool.get_list_symbol().copy();
@@ -464,14 +464,16 @@ impl ThreadTermPool {
     /// Enables or disables automatic garbage collection.
     pub fn automatic_garbage_collection(&self, enabled: bool) {
         let mut guard = self.term_pool.write().expect("Lock poisoned!");
-        guard.automatic_garbage_collection(enabled);
+        guard.with_mut(|guard| guard.automatic_garbage_collection(enabled));
     }
 
     /// Forces a garbage collection to occur regardless of the current GC budget.
     pub fn force_collect_garbage(&self) {
         let mut guard = self.term_pool.write().expect("Lock poisoned!");
-        guard.collect_garbage();
-        guard.reset_gc_budget();
+        guard.with_mut(|guard| {
+            guard.collect_garbage();
+            guard.reset_gc_budget();
+        });
 
         // Reset the counter.
         self.garbage_collection_counter.set(GC_BUDGET_CHUNK);
@@ -481,7 +483,7 @@ impl ThreadTermPool {
     /// collection actually ran; it is skipped when another thread already holds the write lock.
     pub fn collect_garbage(&self) {
         if let Some(mut guard) = self.term_pool.try_write().expect("Lock poisoned!") {
-            guard.trigger_garbage_collection();
+            guard.with_mut(|guard| guard.trigger_garbage_collection());
 
             // Reset the counter.
             self.garbage_collection_counter.set(GC_BUDGET_CHUNK);
@@ -608,10 +610,10 @@ impl Drop for ThreadTermPool {
         // such as the default data symbols in `merc_data`). Adopt them as global orphan roots so
         // that later read-only inspection cannot dereference reclaimed memory. The orphan sets
         // deduplicate, so repeatedly leaking the same shared roots does not grow memory unboundedly.
-        write.protect_orphan_roots(protection);
+        write.with_mut(|write| write.protect_orphan_roots(protection));
 
         debug!("{}", write.metrics());
-        write.deregister_thread_pool(protection.index);
+        write.with_mut(|write| write.deregister_thread_pool(protection.index));
 
         debug!("{}", unsafe { &mut *self.protection_sets.get() }.metrics());
         debug!(

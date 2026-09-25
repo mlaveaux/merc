@@ -19,6 +19,29 @@ use mcrl2_sys::atermpp::ffi::mcrl2_aterm_pool_unlock_shared;
 /// while holding a lock (read or write) on a `BfTermPool`**. This can result in a
 /// deadlock if the FFI function attempts to acquire a lock that is already held by
 /// the current thread.
+/// A `T` accessed exclusively through the mCRL2 busy/forbidden protocol.
+///
+/// # Safety contract
+///
+/// The protocol distinguishes two lock classes on the underlying C++ pool:
+/// *shared* (`mcrl2_aterm_pool_lock_shared`/`unlock_shared`, a per-thread
+/// "busy" flag; any number of threads may hold it concurrently) and
+/// *exclusive* (`mcrl2_aterm_pool_lock_exclusive`/`unlock_exclusive`, which
+/// waits for every thread's busy flag to clear). [`BfTermPool::read`] and
+/// [`BfTermPool::write_exclusive`] both take the *shared* lock and hand out
+/// `&T`/`&mut T` respectively; [`BfTermPool::write`] takes the *exclusive*
+/// lock. Consequently `read()` and `write_exclusive()` do **not** exclude
+/// each other — the invariant that makes this sound is not "the lock is
+/// held" but:
+///
+/// **At most one thread may ever call `write_exclusive` (or hold its guard)
+/// on a given `BfTermPool<T>` value at a time, and for the whole time some
+/// thread's `write_exclusive` guard is live, no *other* thread may call
+/// `read` or `get` on that same value.** (Two threads may freely call
+/// `read`/`get` concurrently with each other, and `write` is genuinely
+/// exclusive against everything, since it takes the C++ exclusive lock.)
+/// It is the caller's responsibility to uphold this — the type itself does
+/// not enforce it.
 pub(crate) struct BfTermPool<T: ?Sized> {
     object: UnsafeCell<T>,
 }
@@ -27,8 +50,12 @@ pub(crate) struct BfTermPool<T: ?Sized> {
 // protocol, so sending the pool to another thread is sound whenever `T` itself
 // is `Send`.
 unsafe impl<T: Send> Send for BfTermPool<T> {}
-// SAFETY: concurrent `&self` access goes through the busy/forbidden lock, which
-// serialises writers against readers, so sharing is sound when `T` is `Send + Sync`.
+// SAFETY: `T: Sync` lets `&T` be shared across threads, which is what `read`
+// and `get` hand out; the busy/forbidden protocol above is what actually
+// keeps those shared borrows from overlapping a `write`/`write_exclusive`
+// `&mut T`, not this bound. Declaring `Sync` merely admits `&BfTermPool<T>`
+// as shared state (e.g. behind an `Arc`); see the struct's safety contract
+// for what a caller must still guarantee before calling `write_exclusive`.
 unsafe impl<T: Send + Sync> Sync for BfTermPool<T> {}
 
 impl<T> BfTermPool<T> {
@@ -59,22 +86,45 @@ impl<'a, T: ?Sized> BfTermPool<T> {
         }
     }
 
-    /// Provides read access to the underlying object.
+    /// Provides read access to the underlying object without taking either
+    /// C++ lock.
     ///
     /// # Safety
     ///
-    /// Assumes that we are in an exclusive section.
+    /// Requires the calling thread to already be inside a section where no
+    /// other thread can be concurrently reading or writing `self` — in
+    /// practice, the calling thread must hold the C++ *exclusive* lock (as
+    /// during a stop-the-world garbage collection callback), which per the
+    /// class' safety contract guarantees no `write_exclusive` guard on this
+    /// value is live on any thread, this one included. Guarantees: the
+    /// returned `&'a T` is valid to dereference for `'a` and observes no
+    /// concurrent mutation, provided the precondition holds.
     pub unsafe fn get(&'a self) -> &'a T {
         unsafe { &*self.object.get() }
     }
 
-    /// Provides write access to the underlying object
+    /// Provides exclusive mutable access to the underlying object while only
+    /// taking the C++ *shared* (busy) lock, not the exclusive one.
     ///
     /// # Safety
     ///
-    /// Provides mutable access given that other threads use [Self::write] and [Self::read]
-    /// exclusively. If we are already in an exclusive context then lock can be
-    /// set to false.
+    /// Requires: for the entire lifetime of the returned guard, no thread
+    /// other than the caller may call [`Self::read`], [`Self::get`] or
+    /// `write_exclusive` again on this same `BfTermPool<T>` value (see the
+    /// class' safety contract) — equivalently, `self` must be a protection
+    /// set that only the calling thread ever touches outside of a
+    /// stop-the-world collection. `ThreadTermPool` upholds this because each
+    /// thread's `SharedProtectionSet`/`SharedContainerProtectionSet` is
+    /// mutated (via `write_exclusive`) only from its own thread; the
+    /// precondition is violated by code that calls `BfTermPool::read` (or
+    /// `Debug`/`Markable::contains_term`/`Markable::len`, which call it) on
+    /// *another* thread's set from outside a collection, e.g.
+    /// `GlobalTermPool`'s `Debug` impl.
+    ///
+    /// Guarantees: the returned guard's `DerefMut` yields a `&mut T` valid
+    /// until the guard is dropped or [`BfTermPoolThreadWrite::unlock`] is
+    /// called, after which further mutation through it is a type error
+    /// (the guard is consumed/no longer mutably borrowable), not UB.
     pub unsafe fn write_exclusive(&'a self) -> BfTermPoolThreadWrite<'a, T> {
         // This is a lock shared, but assuming that only ONE thread uses this function.
         mcrl2_aterm_pool_lock_shared();
