@@ -25,3 +25,7 @@ loom.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(loom)'] }
+
+# Makes it possible to check functional contracts in kani.
+[package.metadata.kani]
+unstable = { function-contracts = true, mem-predicates = true }

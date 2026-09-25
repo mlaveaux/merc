@@ -411,6 +411,85 @@ impl fmt::Display for ConfigurationStack<'_> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    //! Boundary tests for the `unsafe { write_terms.protect(...) }` call sites in
+    //! this file (`grow`, `prune`, `integrate_updated_subterms`), driven through the
+    //! public `SabreRewriter`, which is the only user of [ConfigurationStack]. Each
+    //! `unsafe fn protect` call here is followed, on the very next statement and
+    //! with no intervening term allocation, by a store into the same `write_terms`
+    //! container; these tests exercise the depths and shapes at which that
+    //! discipline is easiest to get wrong (root-level rewrite, a no-match leaf, and
+    //! multi-level `grow`/`jump_back` requiring more than one loop turn of
+    //! `integrate_updated_subterms`), rather than relying on the larger end-to-end
+    //! suites in `crates/sabre/tests`, most of which are `#[cfg_attr(miri, ignore)]`
+    //! for speed and so never run under miri.
+    use ahash::AHashSet;
+
+    use merc_aterm::ATerm;
+    use merc_data::DataExpression;
+    use merc_data::to_untyped_data_expression;
+
+    use crate::RewriteEngine;
+    use crate::RewriteSpecification;
+    use crate::SabreRewriter;
+    use crate::test_utility::create_rewrite_rule;
+
+    /// Parses `input`, treating `variables` as variables.
+    fn term(input: &str, variables: &[&str]) -> DataExpression {
+        let vars: AHashSet<String> = variables.iter().map(|v| v.to_string()).collect();
+        to_untyped_data_expression(ATerm::from_string(input).unwrap(), Some(&vars))
+    }
+
+    /// A match at the root (`depth == 0`): the configuration stack never grows
+    /// beyond its single initial entry, so `prune` is called with `depth == 0`
+    /// and `terms_base + depth` is the very first slot pushed by
+    /// `ConfigurationStack::new`. This is the shallowest possible case of the
+    /// `unsafe { write_terms.protect(...) }` call in `prune`.
+    #[test]
+    fn test_root_level_match_prunes_at_depth_zero() {
+        let spec = RewriteSpecification::new(vec![create_rewrite_rule("a", "b", &[]).unwrap()]);
+        let mut rewriter = SabreRewriter::new(&spec);
+
+        assert_eq!(rewriter.rewrite(&term("a", &[])), term("b", &[]));
+    }
+
+    /// A leaf with no matching rule at all: `jump_back` is called at `depth == 0`
+    /// with `oldest_reliable_subterm == 0`, so `integrate_updated_subterms` takes
+    /// its early-return guard (`up_to_date == 0`) without touching `write_terms`.
+    /// This is the boundary the guard exists for; removing it (or getting the
+    /// `unsafe { write_terms.protect(&write_terms[base + up_to_date]) }` read on
+    /// the next line to run anyway) would read `write_terms[base]`, which is
+    /// always in bounds here but must not be reached down this path.
+    #[test]
+    fn test_no_match_leaf_leaves_term_unchanged() {
+        let spec = RewriteSpecification::new(vec![create_rewrite_rule("a", "b", &[]).unwrap()]);
+        let mut rewriter = SabreRewriter::new(&spec);
+
+        // `c` matches no rule; the automaton finds no transition and the term
+        // is returned as-is without ever calling `prune`.
+        assert_eq!(rewriter.rewrite(&term("c", &[])), term("c", &[]));
+    }
+
+    /// A pattern nested two symbols deep (`f(f(x))`), applied repeatedly to a
+    /// four-deep chain of `f`s. Matching `f(f(x))` against `f(f(f(f(c))))`
+    /// requires `ConfigurationStack::grow` to push more than one configuration
+    /// before a match is found, and each successful rewrite calls `prune` at a
+    /// non-zero depth followed by `jump_back`/`integrate_updated_subterms` over
+    /// more than one stack level (`up_to_date` walks down across several `Some`
+    /// positions before reaching `end`), unlike the single-argument, shallow
+    /// rules used elsewhere in this crate's miri-covered tests.
+    #[test]
+    fn test_nested_match_forces_multi_level_grow_and_integrate() {
+        let spec = RewriteSpecification::new(vec![create_rewrite_rule("f(f(x))", "x", &["x"]).unwrap()]);
+        let mut rewriter = SabreRewriter::new(&spec);
+
+        assert_eq!(rewriter.rewrite(&term("f(f(f(f(c))))", &[])), term("c", &[]));
+        // An odd number of wrapping `f`s leaves exactly one behind.
+        assert_eq!(rewriter.rewrite(&term("f(f(f(c)))", &[])), term("f(c)", &[]));
+    }
+}
+
 impl fmt::Debug for SideInfoType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

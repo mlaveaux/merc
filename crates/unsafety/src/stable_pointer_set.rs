@@ -134,6 +134,18 @@ impl<T: ?Sized + Erasable> Hash for StablePointer<T> {
     }
 }
 
+// SAFETY: `ptr: Thin<T>` wraps an `ErasedPtr` (a `NonNull`), which is what blocks
+// auto-`Send`/auto-`Sync` regardless of `T`; `reference_counter: Arc<()>` (debug builds only)
+// is always `Send + Sync` on its own.
+//
+// Contract discharged by these impls: `StablePointer<T>` is an inert handle — holding, copying,
+// comparing and hashing it never touches the pointee (see the type's own doc comment) — so
+// `Send` needs only that the *handle* is safe to move to another thread, which holds
+// unconditionally since moving it performs no access. `unsafe fn deref(&self) -> &T` is the one
+// operation that reads the pointee, and its own `# Safety` contract already requires the caller
+// to prove the element is still live in its owning set; given that, sharing `&StablePointer<T>`
+// across threads to call `deref` concurrently is sound exactly when `T: Sync` licenses sharing
+// the resulting `&T`. `T: Erasable` is required structurally (by `Thin<T>`), not for either bound.
 unsafe impl<T: ?Sized + Erasable + Send> Send for StablePointer<T> {}
 unsafe impl<T: ?Sized + Erasable + Sync> Sync for StablePointer<T> {}
 
@@ -696,6 +708,15 @@ struct Entry<T: ?Sized> {
     reference_counter: Arc<()>,
 }
 
+// SAFETY: `ptr: NonNull<T>` is the field that blocks auto-`Send`/auto-`Sync`; the debug-only
+// `reference_counter: Arc<()>` is always `Send + Sync` on its own.
+//
+// Contract discharged by these impls: `Entry<T>` is the value the `DashSet<Entry<T>, S>` index
+// stores — one allocation per set element, owned by the set — so a thread other than the one
+// that inserted it may end up dropping it (via `drop_and_deallocate_entry`) or reading it (via
+// `Deref`/hashing/equality when another thread's lookup walks the map's shards), requiring
+// `T: Send` for the former and `T: Sync` for the latter; both are exactly the bounds required
+// here.
 unsafe impl<T: ?Sized + Send> Send for Entry<T> {}
 unsafe impl<T: ?Sized + Sync> Sync for Entry<T> {}
 

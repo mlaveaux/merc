@@ -273,3 +273,40 @@ impl Ord for Symbol {
 }
 
 impl Eq for Symbol {}
+
+#[cfg(kani)]
+mod verification {
+    use std::ptr::NonNull;
+
+    use merc_unsafety::StablePointer;
+
+    use super::*;
+
+    /// `SymbolRef::from_index` must produce a reference whose pointer identity matches the
+    /// source index exactly, and whose subsequent `name()`/`arity()` reads observe the same
+    /// `SharedSymbol` the index pointed at -- the property every other unsafe read of a
+    /// `SymbolRef` in this crate (`arity`, `index`, `Markable::mark_symbol`, ...) relies on.
+    /// This does not, and cannot, check the temporal half of `from_index`'s safety contract
+    /// (that `'a` does not outlive the pointee) -- Kani verifies a single bounded execution, not
+    /// a claim about the future, so that half is covered by the mathematical `# Safety` contract
+    /// on `from_index` and by the GC/protection-set regression tests instead.
+    #[kani::proof]
+    fn symbol_ref_from_index_preserves_identity_and_reads() {
+        let arity: usize = kani::any();
+        kani::assume(arity <= 16);
+
+        let boxed = Box::new(SharedSymbol::new("s", arity));
+        let ptr = NonNull::from(Box::leak(boxed));
+        // SAFETY: `ptr` points at a leaked allocation that is live for the rest of this
+        // (single, bounded) proof execution.
+        let index: SymbolIndex = unsafe { StablePointer::from_ptr(ptr) };
+
+        // SAFETY: the elided `'a` does not outlive this proof's scope, and `index` stays valid
+        // for that whole scope.
+        let symbol_ref: SymbolRef<'_> = unsafe { SymbolRef::from_index(&index) };
+
+        assert_eq!(symbol_ref.shared().ptr(), index.ptr());
+        assert_eq!(symbol_ref.arity(), arity);
+        assert_eq!(symbol_ref.name(), "s");
+    }
+}

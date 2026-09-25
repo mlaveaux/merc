@@ -155,6 +155,68 @@ mod tests {
 
     use super::SabreCompilingRewriter;
 
+    /// `innermost_codegen.rs` bakes the *raw pool address* of every symbol and
+    /// machine-number literal reachable from a rule's right-hand side directly
+    /// into the generated `lib.rs` (`DataExpressionRefFFI::from_ptr(<addr>)`).
+    /// Those addresses are read once, at codegen time; nothing re-validates them
+    /// when the compiled function runs later. The only thing standing between
+    /// that and a dangling pointer is `SabreCompilingRewriter::_spec`, which is
+    /// documented to keep every such term rooted for as long as the rewriter
+    /// lives (`sabre_compiling.rs:30`-`32`).
+    ///
+    /// This test is the executable check of that invariant: it forces garbage
+    /// collection, including collections triggered by ordinary allocation
+    /// pressure from unrelated terms, both before and *between* calls into the
+    /// compiled library, and confirms the compiled `rewrite` entry point still
+    /// produces the correct result afterwards. If `_spec` (or the reachability
+    /// argument behind it, see the comment on `TermStack::from_term`'s
+    /// `is_data_machine_number` branch) ever stopped covering one of the
+    /// embedded addresses, this is the kind of test that would start segfaulting
+    /// or silently returning a term rebuilt from a reused, unrelated pool slot.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Miri does not support FFI.
+    fn test_sabre_compiling_survives_garbage_collection_between_calls() {
+        let (spec, terms) = load_rec_from_strings(&[
+            include_str!("../../../examples/REC/rec/factorial5.rec"),
+            include_str!("../../../examples/REC/rec/factorial.rec"),
+        ])
+        .unwrap();
+
+        let spec = spec.to_rewrite_spec();
+        let mut rewriter = SabreCompilingRewriter::new(&spec, true, true).unwrap();
+
+        // Force collection before the compiled library is used at all: every
+        // address it embeds must already be reachable through `_spec` at this
+        // point, not just transiently alive from the (now-dropped) codegen call.
+        merc_aterm::storage::THREAD_TERM_POOL.with(|tp| {
+            tp.force_collect_garbage();
+            tp.force_collect_garbage();
+        });
+
+        for t in terms {
+            let data_term = to_untyped_data_expression(t, None);
+
+            // Generate unrelated allocation pressure and force another collection
+            // between every call into the generated library, so a GC can run
+            // while the compiled `rewrite`/`match_*` functions are on the stack
+            // across separate top-level calls.
+            for i in 0..64u64 {
+                let _garbage: merc_data::DataExpression = merc_data::MachineNumber::new(i).into();
+            }
+            merc_aterm::storage::THREAD_TERM_POOL.with(|tp| tp.force_collect_garbage());
+
+            let rewritten_term = rewriter.rewrite(&data_term);
+
+            merc_aterm::storage::THREAD_TERM_POOL.with(|tp| tp.force_collect_garbage());
+
+            assert_eq!(
+                rewritten_term.to_string().chars().filter(|c| *c == 's').count(),
+                120, // 5! = 120.
+                "The rewritten result does not match the expected result after forced GC"
+            );
+        }
+    }
+
     #[test]
     #[cfg_attr(miri, ignore)] // Miri does not support FFI.
     fn test_sabre_compiling_example() {

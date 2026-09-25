@@ -345,12 +345,16 @@ mod tests {
     use ahash::AHashSet;
     use ahash::HashMap;
     use ahash::HashMapExt;
+    use merc_aterm::ATerm;
     use merc_aterm::Protected;
     use merc_data::DataExpression;
     use merc_data::DataFunctionSymbol;
     use merc_data::DataVariable;
+    use merc_data::MachineNumber;
+    use merc_data::to_untyped_data_expression;
     use merc_utilities::test_logger;
 
+    use crate::Rule;
     use crate::test_utility::create_rewrite_rule;
     use crate::utilities::Config;
     use crate::utilities::DataPosition;
@@ -443,5 +447,43 @@ mod tests {
 
         let sctt = TermStack::from_term(&rhs.copy(), &map);
         assert!(sctt.contains_duplicate_var_references(), "This sctt is duplicating");
+    }
+
+    /// Boundary case not covered by [test_rhs_stack] (a `Construct`-only rhs) or
+    /// [test_rhs_stack_variable] (a bare-variable rhs, `stack_size == 1` with zero
+    /// `Config`s): a right-hand side that is itself a machine-number literal, e.g.
+    /// `f(x) -> 42`. `TermStack::from_term`'s `is_data_machine_number` branch
+    /// (`term_stack.rs:150`) is the only place that pushes a `Config::Term` for the
+    /// *root* of the rhs rather than for a variable occurrence reached through a
+    /// `Construct`, so `stack_size == 1` here comes from a single `Config::Term`
+    /// slot, not from a variable. This exercises the `unsafe { write.protect(&term) }`
+    /// call at `term_stack.rs:158` (construction) and the `Config::Term` arm's
+    /// `unsafe { write_terms.protect(&term) }` at `term_stack.rs:240` (evaluation),
+    /// neither of which any other test in this module reaches.
+    #[test]
+    fn test_rhs_stack_machine_number_constant() {
+        let lhs = to_untyped_data_expression(
+            ATerm::from_string("f(x)").unwrap(),
+            Some(&AHashSet::from([String::from("x")])),
+        );
+        let rule = Rule::new(lhs, MachineNumber::new(42).into());
+
+        let rhs_stack = TermStack::new(&rule);
+        assert_eq!(rhs_stack.stack_size, 1, "a single Config::Term slot for the literal");
+        assert!(rhs_stack.variables.is_empty(), "the rhs does not mention the lhs variable");
+        assert_eq!(
+            rhs_stack.innermost_stack.read().len(),
+            1,
+            "exactly one Config::Term entry"
+        );
+        assert!(matches!(&rhs_stack.innermost_stack.read()[0], Config::Term(_, 0)));
+
+        let input = DataExpression::from_string_untyped("f(a)", &AHashSet::new()).unwrap();
+        let expected: DataExpression = MachineNumber::new(42).into();
+        assert_eq!(
+            rhs_stack.evaluate(&input),
+            expected,
+            "evaluating a constant-only rhs stack must reproduce the literal"
+        );
     }
 }

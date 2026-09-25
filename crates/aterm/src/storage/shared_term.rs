@@ -237,3 +237,87 @@ mod tests {
         Global.deallocate_slice_dst(ptr, 2);
     }
 }
+
+#[cfg(kani)]
+mod verification {
+    use std::ptr::NonNull;
+
+    use allocator_api2::alloc::Global;
+
+    use merc_unsafety::AllocatorDst;
+    use merc_unsafety::StablePointer;
+
+    use crate::ATermIndex;
+    use crate::ATermRef;
+    use crate::Symb;
+    use crate::SymbolRef;
+    use crate::Term;
+    use crate::storage::SharedSymbol;
+
+    use super::SharedTerm;
+    use super::SharedTermLookup;
+
+    fn leak_symbol(arity: usize) -> crate::SymbolIndex {
+        let boxed = Box::new(SharedSymbol::new("s", arity));
+        let ptr = NonNull::from(Box::leak(boxed));
+        // SAFETY: `ptr` points at a leaked allocation, live for the rest of this proof.
+        unsafe { StablePointer::from_ptr(ptr) }
+    }
+
+    /// Allocates and constructs a zero-argument `SharedTerm` through the crate's real
+    /// `SliceDst`/`Erasable` machinery (`Global.allocate_slice_dst` + `SharedTerm::construct`),
+    /// exactly as `ATermStorage::insert` does for the unbounded-arity path (`terms:
+    /// StablePointerSet<SharedTerm, ..>`, used once a term's arity exceeds `MAX_FIXED_ARITY`).
+    fn build_leaf_ref() -> ATermRef<'static> {
+        let symbol_index = leak_symbol(0);
+        // SAFETY: `symbol_index` is a leaked, live `SharedSymbol`.
+        let symbol: SymbolRef<'_> = unsafe { SymbolRef::from_index(&symbol_index) };
+        let lookup = SharedTermLookup { symbol, arguments: &[] };
+
+        let ptr = Global
+            .allocate_slice_dst::<SharedTerm>(0)
+            .expect("a zero-length allocation must succeed for a bounded proof");
+        // SAFETY: `ptr` was just allocated with `SharedTerm::layout_for(0)` (via
+        // `allocate_slice_dst`), matching what `construct` requires.
+        unsafe { SharedTerm::construct(ptr.as_ptr(), &lookup) };
+
+        // SAFETY: `ptr` now points at a fully initialized, live `SharedTerm` of arity 0.
+        let stable: ATermIndex = unsafe { StablePointer::from_ptr(ptr) };
+        // SAFETY: the elided `'static` does not outlive this leaked, never-freed allocation.
+        unsafe { ATermRef::from_index(&stable) }
+    }
+
+    /// `SharedTerm::construct` writes the header (`symbol`) and the argument slice using the
+    /// layout `SliceDst::layout_for`/`Erasable::unerase` reconstruct on every later read; the
+    /// two must therefore agree exactly, for both the zero-argument case (covered indirectly by
+    /// `build_leaf_ref` above) and a populated argument slot: `symbol()` and `arguments()[0]`
+    /// must observe precisely what was written, at the identical address -- the invariant
+    /// `ATermStorage::insert`'s unbounded-arity path depends on for every multi-argument term.
+    #[kani::proof]
+    fn shared_term_construct_then_read_roundtrips_one_argument() {
+        let arg = build_leaf_ref();
+
+        let symbol_index = leak_symbol(1);
+        // SAFETY: `symbol_index` is a leaked, live `SharedSymbol`.
+        let symbol: SymbolRef<'_> = unsafe { SymbolRef::from_index(&symbol_index) };
+        let arguments = [arg.copy()];
+        let lookup = SharedTermLookup {
+            symbol,
+            arguments: &arguments,
+        };
+
+        let ptr = Global
+            .allocate_slice_dst::<SharedTerm>(1)
+            .expect("a one-length allocation must succeed for a bounded proof");
+        // SAFETY: `ptr` was just allocated with `SharedTerm::layout_for(1)`, matching what
+        // `construct` requires for a `lookup` whose `arguments` slice has length 1.
+        unsafe { SharedTerm::construct(ptr.as_ptr(), &lookup) };
+
+        // SAFETY: `ptr` now points at a fully initialized, live `SharedTerm` of arity 1.
+        let term: &SharedTerm = unsafe { ptr.as_ref() };
+
+        assert_eq!(term.arguments().len(), 1);
+        assert_eq!(term.arguments()[0].shared().ptr(), arg.shared().ptr());
+        assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+    }
+}

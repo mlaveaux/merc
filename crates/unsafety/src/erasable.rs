@@ -114,3 +114,37 @@ const _: () = assert!(std::mem::size_of::<ErasedPtr>() == std::mem::size_of::<us
 /// If you want to offset the pointer, make sure to cast to a `u8` or other known type pointer first.
 /// When `Erased` becomes an extern type, it will properly have unknown size and align.
 pub type ErasedPtr = NonNull<Erased>;
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Checks the `Erasable` trait's own round-trip contract (`# Safety` on
+    /// [`Erasable::unerase`]) for the blanket `T: Sized` impl: for every non-null, well-aligned
+    /// pointer `p: NonNull<T>`, `unerase(erase(p)) == p`. `erase`/`unerase` for `Sized` types are
+    /// plain pointer casts (no metadata to lose), so this holds for arbitrary `T` without
+    /// touching the pointee — verified here for `u64` as a representative sized type.
+    #[kani::proof]
+    fn erase_unerase_roundtrip_is_identity() {
+        let mut value: u64 = kani::any();
+        let ptr = NonNull::from(&mut value);
+
+        let erased = <u64 as Erasable>::erase(ptr);
+        // SAFETY: `erased` was just produced by `erase` on the same type, satisfying
+        // `unerase`'s precondition.
+        let unerased = unsafe { <u64 as Erasable>::unerase(erased) };
+
+        assert_eq!(unerased, ptr);
+    }
+
+    /// `Thin::new`/`Thin::as_nonnull` must round-trip through the same `erase`/`unerase` pair,
+    /// so a `Sized` pointee's address survives being stored in a `Thin<T>`.
+    #[kani::proof]
+    fn thin_new_as_nonnull_roundtrip_is_identity() {
+        let mut value: u32 = kani::any();
+        let ptr = NonNull::from(&mut value);
+
+        let thin = Thin::new(ptr);
+        assert_eq!(thin.as_nonnull(), ptr);
+    }
+}

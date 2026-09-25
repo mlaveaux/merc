@@ -458,12 +458,23 @@ impl<T, const N: usize> ThreadLocalAllocState<T, N> {
     }
 }
 
-// SAFETY: each `ThreadLocalAllocState` is created and dereferenced only by
-// the thread that owns it via `ThreadLocal::get_or`; the raw pointer and
-// bump offset it holds are never read or written from another thread. If the
-// state is dropped from a different thread (e.g. alongside the owning
-// `ThreadLocal`), dropping it performs no dereference, so no thread-affinity
-// requirement is violated.
+// SAFETY: `current_block: Cell<*mut Block<T, N>>` (a raw pointer) is what blocks
+// auto-`Send`/auto-`Sync`; `bump_offset: Cell<usize>` is `Send` but not `Sync` regardless of
+// `T` (any `Cell` is `!Sync`), and `free: FreeList<Entry<T>>` is `Send` for `T: Send` (see
+// `FreeList`'s own `unsafe impl Send`) and likewise never `Sync`.
+//
+// Contract discharged by this impl (`Send` only — no `Sync` impl exists or is needed, since
+// `ThreadLocal<X>` only requires `X: Send` to itself be `Send + Sync`, exposing each thread's
+// slot only to that same thread): `ThreadLocal::get_or` guarantees a given
+// `ThreadLocalAllocState` instance is created by, and every subsequent `current_block`/
+// `bump_offset`/`free` access (`allocate_object`, `deallocate_object`) is performed by, only the
+// thread that owns that `ThreadLocal` slot — never concurrently by two threads. `Send` is
+// needed only because the whole `ThreadLocal<..>` collection (and thus every thread's
+// `ThreadLocalAllocState`) may be dropped from a different thread than created it (e.g.
+// alongside `BlockAllocator` itself); that drop path performs no dereference of `current_block`
+// (`FreeList::drop`/`Cell::drop` are pure memory reclamation of the `Cell`/`FreeList` structure,
+// not of the pointee), so no thread-affinity requirement is violated by the value's final drop
+// running elsewhere. `T: Send` is required transitively by `free: FreeList<Entry<T>>`.
 unsafe impl<T: Send, const N: usize> Send for ThreadLocalAllocState<T, N> {}
 
 /// Implementing this trait for a type `T` asserts that the special sentinel
@@ -640,6 +651,55 @@ impl<T, const N: usize> Drop for Block<T, N> {
             // the list here before being dropped, so this is its sole owner.
             let mut block = unsafe { Box::from_raw(block_ptr.as_ptr()) };
             current = block.next.take();
+        }
+    }
+}
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// `Entry<T>`'s `FreeListEntry` impl reinterprets the union's `next` variant; check that
+    /// writing a next-pointer through `set_next` and reading it back through `get_next` is the
+    /// identity, for an arbitrary (possibly null, possibly dangling — never dereferenced here)
+    /// pointer value.
+    #[kani::proof]
+    fn entry_get_next_set_next_roundtrip() {
+        let mut entry: Entry<u64> = Entry {
+            next: ManuallyDrop::new(std::ptr::null_mut()),
+        };
+        let entry_ptr: *mut Entry<u64> = &mut entry;
+        let next_value: *mut Entry<u64> = kani::any::<usize>() as *mut Entry<u64>;
+
+        // SAFETY: `entry_ptr` is a valid pointer to `entry`, a local variable; `set_next`/
+        // `get_next` only read/write the `next` field, never dereferencing `next_value` itself.
+        unsafe {
+            Entry::set_next(entry_ptr, next_value);
+            assert_eq!(Entry::get_next(entry_ptr), next_value);
+        }
+    }
+
+    /// Proves the safety comment on `allocate_object`'s fast (bump-allocation) path: for any
+    /// `offset < N`, `data_ptr.add(offset)` stays within the block's `N`-element array, and the
+    /// `T`-typed pointer built via `addr_of_mut!` from it is never null.
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn bump_allocation_offset_stays_in_bounds() {
+        const N: usize = 4;
+        let block: Block<u64, N> = Block::new();
+        let offset: usize = kani::any();
+        kani::assume(offset < N);
+
+        let data_ptr = block.data.get() as *mut Entry<u64>;
+        // SAFETY: mirrors the indexing done in `allocate_object`'s fast path; `offset < N` is
+        // the exact precondition for `data_ptr.add(offset)` to stay in the block's array.
+        unsafe {
+            let entry_ptr = data_ptr.add(offset);
+            assert!(entry_ptr >= data_ptr);
+            assert!(entry_ptr < data_ptr.add(N));
+
+            let t_ptr = NonNull::new_unchecked(std::ptr::addr_of_mut!((*entry_ptr).data) as *mut u64);
+            assert!(!t_ptr.as_ptr().is_null());
         }
     }
 }

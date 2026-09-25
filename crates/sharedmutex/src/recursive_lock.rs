@@ -260,6 +260,39 @@ mod tests {
     use crate::BfSharedMutex;
     use crate::RecursiveLock;
 
+    /// A `&mut T` obtained from `RecursiveLockWriteGuard::deref_mut` while no nested
+    /// recursive read guard is alive must not alias a `&T` obtained from a
+    /// subsequently-created nested `read_recursive` guard, even though nothing borrows
+    /// the `&mut T` returned from `deref_mut` past the point where it is checked.
+    ///
+    /// `deref_mut`'s `recursive_depth == 1` assertion is only evaluated at call time; it
+    /// does not prevent the caller from retaining the `&mut T` it returns while a nested
+    /// `read_recursive` guard is created afterwards, which manufactures a live `&mut T`
+    /// and a live `&T` to the same location with no `unsafe` on the caller's part.
+    #[test]
+    fn test_deref_mut_alias_survives_nested_read_recursive() {
+        let lock = RecursiveLock::new(42i32);
+        let mut write = lock.write().unwrap();
+
+        // Obtain `&mut i32` through the safe API; depth is 1, so `deref_mut`'s assert
+        // passes and this borrow is handed out.
+        let data: &mut i32 = &mut *write;
+        *data = 100;
+
+        // Nothing about holding `data` prevents this: `read_recursive` only touches
+        // `lock`, a value distinct from `write`/`data` as far as the borrow checker is
+        // concerned.
+        let read = lock.read_recursive().unwrap();
+
+        // Read through the alias first, then write through `data` again: this ordering
+        // is what actually exercises the aliasing violation under Stacked Borrows,
+        // since a tag invalidated by a foreign access is only caught on its own next
+        // use.
+        assert_eq!(*read, 100);
+        *data += 1;
+        assert_eq!(*data, 101);
+    }
+
     #[test]
     fn test_from_mutex() {
         let mutex = BfSharedMutex::new(100);

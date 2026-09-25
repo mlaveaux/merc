@@ -5,8 +5,11 @@
 //! too slow), these are cheap enough to run under miri, so they exercise the pointer/transmute and
 //! protection-set code with Stacked/Tree Borrows checking.
 
+use std::collections::VecDeque;
+
 use merc_aterm::ATerm;
 use merc_aterm::ATermRead;
+use merc_aterm::ATermRef;
 use merc_aterm::ATermSend;
 use merc_aterm::ATermWrite;
 use merc_aterm::BinaryATermReader;
@@ -16,6 +19,7 @@ use merc_aterm::Symb;
 use merc_aterm::Symbol;
 use merc_aterm::SymbolRef;
 use merc_aterm::Term;
+use merc_aterm::Transmutable;
 use merc_aterm::storage::THREAD_TERM_POOL;
 
 /// Builds the term `f(a, g(a))` from freshly created symbols on every call.
@@ -183,4 +187,125 @@ fn test_aterm_args_size_hint_is_exact() {
         2,
         "skip(1) on a 3-argument iterator must report len 2"
     );
+}
+
+/// Empty boundary: an arity-0 term's argument iterator must be empty in both directions with
+/// no underflow in `ATermArgs::next_back` (`self.arity -= 1` is only reached after `self.index
+/// < self.arity` is checked, so `arity == 0` must short-circuit before that subtraction).
+#[test]
+fn test_boundary_zero_arity_term_has_no_arguments() {
+    let c = ATerm::constant(&Symbol::new("boundary_zero_arity", 0));
+    let mut args = c.arguments();
+    assert!(args.is_empty());
+    assert_eq!(args.len(), 0);
+    assert_eq!(args.next(), None);
+    assert_eq!(args.next_back(), None);
+}
+
+/// Boundary between the fixed-arity storage tables and the dynamically sized fallback:
+/// `MAX_FIXED_ARITY == 7`, so arity 7 is the last symbol handled by `insert_fixed_iter`
+/// (`terms_7`) and arity 8 is the first to fall through to `ATermStorage::insert`'s
+/// `SliceDst`-based `terms` table. Both must construct and read back correctly.
+#[test]
+fn test_boundary_max_fixed_arity_and_first_dynamic_arity() {
+    let leaf = ATerm::constant(&Symbol::new("boundary_leaf", 0));
+
+    let seven_args: Vec<ATerm> = (0..7).map(|_| leaf.copy().protect()).collect();
+    let seven = ATerm::with_args(&Symbol::new("boundary_seven", 7), &seven_args).protect();
+    assert_eq!(seven.get_head_symbol().arity(), 7);
+    assert_eq!(seven.arguments().len(), 7);
+    for arg in seven.arguments() {
+        assert_eq!(arg.index(), leaf.index());
+    }
+
+    let eight_args: Vec<ATerm> = (0..8).map(|_| leaf.copy().protect()).collect();
+    let eight = ATerm::with_args(&Symbol::new("boundary_eight", 8), &eight_args).protect();
+    assert_eq!(eight.get_head_symbol().arity(), 8);
+    assert_eq!(eight.arguments().len(), 8);
+    for arg in eight.arguments() {
+        assert_eq!(arg.index(), leaf.index());
+    }
+}
+
+/// Aliasing boundary: in `f(a, a)`, `arg(0)` and `arg(1)` are the very same interned node
+/// (maximal sharing), so reading through both `ATermRef` handles at once is reading the same
+/// address through two independently reconstructed shared borrows -- sound under Stacked/Tree
+/// Borrows only because both accesses are read-only (there is no `&mut` anywhere in this path).
+#[test]
+fn test_boundary_shared_argument_aliasing() {
+    let a = ATerm::constant(&Symbol::new("boundary_alias_a", 0));
+    let f = ATerm::with_args(&Symbol::new("boundary_alias_f", 2), &[a.copy(), a.copy()]).protect();
+
+    let arg0 = f.arg(0);
+    let arg1 = f.arg(1);
+    assert_eq!(arg0.index(), arg1.index(), "both arguments are the same shared node");
+
+    // Read through both aliases "at once" (interleaved, not just sequentially dropped).
+    let name0 = arg0.get_head_symbol().name();
+    let name1 = arg1.get_head_symbol().name();
+    assert_eq!(name0, name1);
+    assert_eq!(name0, "boundary_alias_a");
+}
+
+/// Exact end of the valid region: `arg(arity - 1)` is the last valid index and must succeed.
+#[test]
+fn test_boundary_arg_at_last_valid_index_succeeds() {
+    let a = ATerm::constant(&Symbol::new("boundary_last_arg_a", 0));
+    let b = ATerm::constant(&Symbol::new("boundary_last_arg_b", 0));
+    let term = ATerm::with_args(&Symbol::new("boundary_last_arg_f", 2), &[a.copy(), b.copy()]).protect();
+
+    assert_eq!(term.arg(1).get_head_symbol().name(), "boundary_last_arg_b");
+}
+
+/// One past the end of the valid region: `arg(arity)` must panic via the ordinary checked slice
+/// index in `Term::arg`, never silently read past the arguments array.
+#[test]
+#[should_panic]
+fn test_boundary_arg_one_past_last_valid_index_panics() {
+    let a = ATerm::constant(&Symbol::new("boundary_past_arg_a", 0));
+    let b = ATerm::constant(&Symbol::new("boundary_past_arg_b", 0));
+    let term = ATerm::with_args(&Symbol::new("boundary_past_arg_f", 2), &[a.copy(), b.copy()]).protect();
+
+    let _ = term.arg(2);
+}
+
+/// Empty-container boundary for [`Transmutable`]: shrinking the lifetime of an empty `Vec`,
+/// `VecDeque`, `Option::None` and empty slice must not read or touch any element (there are
+/// none to touch) while still returning a validly typed empty view.
+#[test]
+fn test_boundary_transmutable_empty_containers() {
+    let empty_vec: Vec<ATermRef<'static>> = Vec::new();
+    // SAFETY: the transmuted lifetime does not outlive `empty_vec`.
+    let viewed_vec: &Vec<ATermRef<'_>> = unsafe { empty_vec.transmute_lifetime() };
+    assert!(viewed_vec.is_empty());
+
+    let empty_deque: VecDeque<ATermRef<'static>> = VecDeque::new();
+    // SAFETY: see above.
+    let viewed_deque: &VecDeque<ATermRef<'_>> = unsafe { empty_deque.transmute_lifetime() };
+    assert!(viewed_deque.is_empty());
+
+    let none: Option<ATermRef<'static>> = None;
+    // SAFETY: see above.
+    let viewed_none: &Option<ATermRef<'_>> = unsafe { none.transmute_lifetime() };
+    assert!(viewed_none.is_none());
+
+    let empty_slice: &[ATermRef<'static>] = &[];
+    // SAFETY: see above.
+    let viewed_slice: &[ATermRef<'_>] = unsafe { empty_slice.transmute_lifetime() };
+    assert!(viewed_slice.is_empty());
+}
+
+/// Single-element boundary for [`Transmutable`]: a one-element `Vec` must preserve the
+/// identity (pointer/index) of its one element across the lifetime shrink, exercising the same
+/// transmute the empty case above cannot (there is nothing to compare identity against there).
+#[test]
+fn test_boundary_transmutable_single_element_preserves_identity() {
+    let leaf = ATerm::constant(&Symbol::new("boundary_transmute_leaf", 0));
+    let v: Vec<ATermRef<'static>> = vec![leaf.copy()];
+
+    // SAFETY: the transmuted lifetime does not outlive `v` (which itself does not outlive
+    // `leaf`, the term it borrows from).
+    let viewed: &Vec<ATermRef<'_>> = unsafe { v.transmute_lifetime() };
+    assert_eq!(viewed.len(), 1);
+    assert_eq!(viewed[0].index(), leaf.index());
 }

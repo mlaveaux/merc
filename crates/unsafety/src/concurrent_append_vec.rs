@@ -59,14 +59,31 @@ pub struct ConcurrentAppendVec<T, const BLOCK: usize = 256> {
     _marker: PhantomData<*mut T>,
 }
 
-/// SAFETY: the vector owns its `T` values; moving it to another thread is sound
-/// exactly when `T` may move between threads.
+/// SAFETY: `_marker: PhantomData<*mut T>` is what blocks auto-`Send`/`Sync`; every other field
+/// (`AtomicUsize`, `AtomicPtr`, `ThreadLocal<CachePadded<Local>>`) is already `Send + Sync`
+/// independent of `T`.
+///
+/// Contract discharged by this impl, given `T: Send`: the vector's buckets own up to
+/// `reserved_blocks * BLOCK` values of `T` (`Bucket::drop` drops every committed slot), and
+/// `Drop for ConcurrentAppendVec` runs wherever the value is finally dropped — not necessarily
+/// the thread(s) that wrote those values via `push`. `T: Send` is exactly the bound that makes
+/// a value written on one thread being freed on another sound; the struct never exposes `&T`
+/// on its own (that needs `Sync`, asserted separately below), so no further bound is needed
+/// here.
 unsafe impl<T: Send, const BLOCK: usize> Send for ConcurrentAppendVec<T, BLOCK> {}
 
-/// SAFETY: sharing `&self` lets threads push values (dropped or read by other
-/// threads, needing `T: Send`) and obtain `&T` (needing `T: Sync`). Per-slot
-/// writes are published through the per-block release/acquire counter, so no two
-/// accesses to the same slot race.
+/// SAFETY: same blocking field as the `Send` impl above (`_marker: PhantomData<*mut T>`).
+///
+/// Contract discharged by this impl, given `T: Send + Sync`: sharing `&self` across threads
+/// lets any of them call `push` (writing a `T`, requiring `T: Send` since another thread may
+/// later `get`/drop it) and `get`/`iter` (returning `&T`, requiring `T: Sync`). Two threads
+/// never write the same slot: `push` reserves its slot via a single `fetch_add` on
+/// `reserved_blocks` (globally unique per block) composed with a purely thread-local bump
+/// within that block, so the `(bucket, block, offset)` triple `push` computes is unique per
+/// call. A slot's write (the `ptr::write` in `push`) happens-before any `get`/`iter` that
+/// observes it, because both sides serialise through the same per-block `commits[block]`
+/// counter with `Release` (write side) / `Acquire` (read side) ordering, so no `get` can race a
+/// `push` to the slot it reads.
 unsafe impl<T: Send + Sync, const BLOCK: usize> Sync for ConcurrentAppendVec<T, BLOCK> {}
 
 /// Per-thread state: the half-open range `[next, end)` of indices still free in
@@ -349,6 +366,55 @@ fn bucket_blocks(bucket: usize) -> usize {
         FIRST_BLOCKS
     } else {
         FIRST_BLOCKS << (bucket - 1)
+    }
+}
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// `bucket_of_block` must always return an in-bounds index into `buckets: [_; NUM_BUCKETS]`
+    /// for the full range of `usize`, and `bucket_start_blocks`/`bucket_blocks` must agree with
+    /// it: `block` must fall in `[start, start + count)` for its own bucket. Every unsafe
+    /// indexing downstream (`push`, `get`, `get_unchecked`, `bucket_or_alloc`) relies on this.
+    #[kani::proof]
+    fn bucket_of_block_bounds_and_offset_consistent() {
+        let block: usize = kani::any();
+
+        let bucket = bucket_of_block(block);
+        assert!(bucket < NUM_BUCKETS, "bucket index must fit the fixed-size buckets array");
+
+        let start = bucket_start_blocks(bucket);
+        let count = bucket_blocks(bucket);
+        assert!(block >= start, "block must not precede its own bucket's first block");
+        assert!(
+            block - start < count,
+            "block's offset within its bucket must stay under the bucket's block count"
+        );
+    }
+
+    /// `locate` must return a slot that fits within the bucket it names: the block offset
+    /// within a `BLOCK`-sized block is always `< BLOCK`, and the flattened `block * BLOCK +
+    /// offset` slot index stays under `bucket_blocks(bucket_index) * BLOCK`, the exact slot
+    /// count `Bucket::new` allocates for that bucket (`bucket_or_alloc`).
+    #[kani::proof]
+    fn locate_slot_within_bucket_bounds() {
+        type Vec256 = ConcurrentAppendVec<u64, 256>;
+
+        let index: usize = kani::any();
+        // Bound the index so the flattened slot computation cannot itself overflow `usize`;
+        // this still covers every index reachable from a realistic number of pushes.
+        kani::assume(index < (1usize << 40));
+
+        let (bucket_index, block, offset) = Vec256::locate(index);
+        assert!(bucket_index < NUM_BUCKETS);
+        assert!(offset < 256, "offset within a block must be less than BLOCK");
+
+        let slot = block * 256 + offset;
+        assert!(
+            slot < bucket_blocks(bucket_index) * 256,
+            "flattened slot index must fit the bucket's allocated slot count"
+        );
     }
 }
 

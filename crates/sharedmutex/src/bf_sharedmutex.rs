@@ -60,10 +60,23 @@ pub struct BfSharedMutex<T> {
     shared: Arc<CachePadded<SharedData<T>>>,
 }
 
-// SAFETY: Sending a BfSharedMutex to another thread transfers ownership of this
-// clone's control bits along with it; those bits are only ever touched by the
-// thread that owns the clone. `T` is accessed from whichever thread holds a
-// clone, so it must be both `Send` and `Sync`.
+// SAFETY: `BfSharedMutex<T>` is not auto-`Send` because `shared: Arc<CachePadded<SharedData<T>>>`
+// contains `object: UnsafeCell<T>`, which is never `Sync`, so `Arc<..UnsafeCell<T>..>` is not
+// auto-`Send` regardless of `T`.
+//
+// Contract discharged by this impl, given `T: Send + Sync`:
+//   - `control: Arc<CachePadded<SharedMutexControl>>` is unique per clone (freshly allocated in
+//     `new`/`clone`, never shared with another clone's `control`), so moving it only transfers
+//     bits that the destination thread already exclusively owns; this field imposes no bound
+//     on `T`.
+//   - `shared: Arc<CachePadded<SharedData<T>>>` is aliased by every clone of this mutex, and its
+//     `object: UnsafeCell<T>` is dereferenced as `&T` by any thread holding a live read guard and
+//     as `&mut T` by any thread holding the live write guard, and dropped (`SharedData::drop`) by
+//     whichever thread drops the last `Arc` — not necessarily the thread that produced `T`.
+//     `T: Send` makes that final drop (and any other thread taking ownership of `T`) sound;
+//     `T: Sync` makes a `&T` produced on one thread and observed on another sound.
+//   - `index: usize` is `Copy` data with no aliasing to preserve.
+// So after the move, every field the destination thread now owns is safe to drive from there.
 unsafe impl<T: Send + Sync> Send for BfSharedMutex<T> {}
 
 /// The busy and forbidden flags used to implement the protocol.
@@ -209,7 +222,21 @@ impl<T> Drop for BfSharedMutexWriteGuard<'_, T> {
     }
 }
 
-// SAFETY: Sharing &WriteGuard across threads only exposes &T.
+// SAFETY: `BfSharedMutexWriteGuard<'_, T>` holds `mutex: &'a BfSharedMutex<T>`, and
+// `BfSharedMutex<T>` is deliberately not `Sync` (see its doc comment), so `&'a BfSharedMutex<T>`
+// is neither auto-`Send` nor auto-`Sync`, and the field blocks auto-deriving `Sync` for the
+// guard even though `T: Sync` is available.
+//
+// Contract discharged by this impl, given `T: Sync`:
+//   - The only operation reachable through `&BfSharedMutexWriteGuard` is `Deref::deref`, which
+//     reads the (invariant, set-once-at-construction) `mutex`/`guard` pointers and returns `&T`;
+//     no method reachable via `&self` mutates `SharedMutexControl` state or the `other` table.
+//   - Concurrent calls to `deref` from multiple threads, each holding `&Guard`, therefore only
+//     ever produce concurrently-live `&T` values to the one object this guard already has
+//     exclusive access to under the protocol; `T: Sync` is exactly the bound that makes sharing
+//     those `&T` values across threads sound.
+//   - `Drop` (which releases the `forbidden` flags) takes `&mut self`, so it is unreachable
+//     through a shared `&Guard` and is unaffected by this impl.
 unsafe impl<T: Sync> Sync for BfSharedMutexWriteGuard<'_, T> {}
 
 #[must_use = "Dropping the guard unlocks the shared mutex immediately"]
@@ -221,7 +248,18 @@ pub struct BfSharedMutexReadGuard<'a, T> {
     ptr: ManuallyDrop<loom::cell::ConstPtr<T>>,
 }
 
-// SAFETY: Sharing &ReadGuard across threads only exposes &T.
+// SAFETY: `BfSharedMutexReadGuard<'_, T>` holds `mutex: &'a BfSharedMutex<T>`, which — like
+// `BfSharedMutexWriteGuard` above — is neither auto-`Send` nor auto-`Sync` because
+// `BfSharedMutex<T>` is deliberately `!Sync`; that field is what blocks auto-deriving `Sync`
+// for this guard.
+//
+// Contract discharged by this impl, given `T: Sync`:
+//   - The only operation reachable through `&BfSharedMutexReadGuard` is `Deref::deref`,
+//     returning `&T` from the same (already read-locked) object every other live read guard on
+//     this mutex also derefs to; `T: Sync` licenses sharing that `&T` across the threads that
+//     concurrently call `deref` through their own `&Guard`.
+//   - `Drop` (which clears this instance's `busy` flag) takes `&mut self` and so cannot be
+//     invoked through a shared `&Guard`, and is unaffected by this impl.
 unsafe impl<T: Sync> Sync for BfSharedMutexReadGuard<'_, T> {}
 
 /// Allows dereferencing the underlying object.
@@ -327,11 +365,31 @@ impl<T> BfSharedMutex<T> {
     ///
     /// # Safety
     ///
-    /// This method must only be called if the thread logically holds a read lock.
+    /// Formally, at the call site there must exist a single outstanding "logical read
+    /// acquisition" `A` on `self` — established by a prior call to [`Self::acquire_shared`] (or
+    /// to [`Self::read`] followed by `mem::forget`ing the returned guard) on this same clone,
+    /// for which no [`BfSharedMutexReadGuard`] currently exists (any guard previously
+    /// reconstructed from `A` must already have been dropped or `mem::forget`en). Equivalently:
+    /// `self.control.busy` must be `true`, and this call must be the *unique* reconstruction of
+    /// a guard for the acquisition that set it so.
     ///
-    /// This function does not increment the read count of the lock. Calling this function when a
-    /// guard has already been produced is undefined behaviour unless the guard was forgotten
-    /// with `mem::forget`.
+    /// Requires:
+    ///   - `self.control.busy.load(Relaxed) == true` for the entire lifetime of the returned
+    ///     guard (this call does not itself set `busy`, unlike [`Self::read`]).
+    ///   - No writer guard for `self`'s mutex (i.e. `self.control.forbidden`) transitions to
+    ///     forbidding a write while this guard is alive that this guard's own protocol
+    ///     compliance is not already accounting for — in practice, satisfied automatically by
+    ///     `A` having been established through `acquire_shared`.
+    ///   - Exactly one live guard (this one) accounts for acquisition `A` at a time; producing a
+    ///     second live guard for the same `A` without first retiring this one (drop, or
+    ///     `mem::forget` followed by a fresh acquisition) is undefined behaviour, since `Drop`
+    ///     would then clear `busy` twice for what the protocol treats as one acquisition,
+    ///     letting a concurrent writer observe `busy == false` while a live `&T` from the
+    ///     still-outstanding guard remains reachable.
+    ///
+    /// Guarantees: the returned guard derefs to `&T` exactly as [`Self::read`]'s guard would —
+    /// i.e. to a snapshot consistent with holding the busy-forbidden protocol's read access —
+    /// and its `Drop` clears `self.control.busy`, retiring acquisition `A`.
     pub unsafe fn create_read_guard_unchecked(&self) -> BfSharedMutexReadGuard<'_, T> {
         BfSharedMutexReadGuard {
             mutex: self,
@@ -523,13 +581,68 @@ impl<T> GlobalBfSharedMutex<T> {
     }
 }
 
-// SAFETY: Moving the global handle to another thread only moves the inner `BfSharedMutex`,
-// which is itself `Send` for `T: Send + Sync`.
+// SAFETY: `GlobalBfSharedMutex<T>` has one field, `shared_mutex: BfSharedMutex<T>`; it is not
+// auto-`Send`/auto-`Sync` for exactly the reasons `BfSharedMutex<T>` itself is not (see that
+// type's `unsafe impl Send` above): its `shared: Arc<..UnsafeCell<T>..>` field is never
+// auto-`Sync`, and `BfSharedMutex<T>` is deliberately never `Sync` at all.
+//
+// Contract discharged by this impl, given `T: Send + Sync`:
+//   - `Send`: moving `GlobalBfSharedMutex<T>` moves its single `BfSharedMutex<T>` field, which
+//     `unsafe impl<T: Send + Sync> Send for BfSharedMutex<T>` already establishes is sound to
+//     move under this same bound.
+//   - `Sync`: the only operation reachable through `&GlobalBfSharedMutex<T>` is `share()`, which
+//     takes `&self` and returns `self.shared_mutex.clone()`. `BfSharedMutex::clone` serialises
+//     all registration bookkeeping (allocating a fresh `control`, inserting it into the `other`
+//     table) behind `shared.other`'s own `Mutex`, so concurrent `share()` calls from multiple
+//     threads, each racing on that inner lock, produce distinct, non-aliasing `BfSharedMutex<T>`
+//     clones with no data race on `GlobalBfSharedMutex`'s own state.
 unsafe impl<T: Send + Sync> Send for GlobalBfSharedMutex<T> {}
-
-// SAFETY: Multiple threads holding &GlobalBfSharedMutex<T> can call share() concurrently;
-// share() only clones the inner mutex, which serialises registration under its own lock.
 unsafe impl<T: Send + Sync> Sync for GlobalBfSharedMutex<T> {}
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Exercises `create_read_guard_unchecked` along its documented pairing with
+    /// `acquire_shared`: after `acquire_shared` sets `busy`, reconstructing and dropping a guard
+    /// must observe the same value `read()` would and must clear `busy` again — the same
+    /// postcondition a guard obtained through the checked `read()` path gives.
+    #[kani::proof]
+    fn create_read_guard_unchecked_matches_checked_read() {
+        let mutex: BfSharedMutex<u32> = BfSharedMutex::new(42);
+
+        mutex.acquire_shared().expect("uncontended acquire never fails");
+        assert!(mutex.is_locked(), "acquire_shared must set busy");
+
+        // SAFETY: `acquire_shared` above set `busy` for this instance, and no guard for this
+        // acquisition has been produced yet, satisfying `create_read_guard_unchecked`'s contract.
+        let guard = unsafe { mutex.create_read_guard_unchecked() };
+        assert_eq!(*guard, 42);
+        drop(guard);
+
+        assert!(!mutex.is_locked(), "dropping the reconstructed guard must clear busy");
+    }
+
+    /// The write path must never observe a set `busy` flag on any registered clone once it has
+    /// acquired exclusive access, matching `acquire_exclusive`'s debug assertions.
+    #[kani::proof]
+    fn write_excludes_concurrent_reader_state() {
+        let mutex: BfSharedMutex<u32> = BfSharedMutex::new(0);
+        let other = mutex.clone();
+
+        assert!(!mutex.is_locked());
+        assert!(!other.is_locked());
+        assert!(!mutex.is_locked_exclusive());
+        assert!(!other.is_locked_exclusive());
+
+        let mut guard = mutex.write().expect("uncontended write never fails");
+        *guard = 7;
+        drop(guard);
+
+        assert!(!mutex.is_locked_exclusive(), "write guard drop must clear forbidden");
+        assert_eq!(*mutex.read().expect("uncontended read never fails"), 7);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -541,6 +654,70 @@ mod tests {
     use merc_utilities::test_threads;
 
     use super::BfSharedMutex;
+
+    /// Small, deterministic (miri-friendly) exercise of `create_read_guard_unchecked`'s
+    /// documented pairing with `acquire_shared`: the guard it reconstructs must deref to the
+    /// same value a checked `read()` guard would, and dropping it must clear `busy` exactly
+    /// once, matching a guard produced by `read()`.
+    #[test]
+    fn test_create_read_guard_unchecked_paired_with_acquire_shared() {
+        let mutex = BfSharedMutex::new(5);
+
+        mutex.acquire_shared().unwrap();
+        assert!(mutex.is_locked(), "acquire_shared must set busy");
+
+        // SAFETY: `acquire_shared` above set `busy` for this instance's one outstanding
+        // acquisition, and no guard has yet been produced for it.
+        let guard = unsafe { mutex.create_read_guard_unchecked() };
+        assert_eq!(*guard, 5);
+        drop(guard);
+
+        assert!(!mutex.is_locked(), "dropping the reconstructed guard must clear busy");
+    }
+
+    /// Boundary transition: the instant a read guard is dropped, a write on the very same
+    /// clone must succeed without blocking (`busy` must already read `false`), and the value
+    /// it wrote must be visible to a read acquired immediately afterwards.
+    #[test]
+    fn test_read_then_write_guard_boundary() {
+        let mutex = BfSharedMutex::new(1);
+        {
+            let r = mutex.read().unwrap();
+            assert_eq!(*r, 1);
+        }
+
+        *mutex.write().unwrap() = 2;
+        assert_eq!(*mutex.read().unwrap(), 2);
+    }
+
+    /// Boundary transition in the other direction: the instant a write guard is dropped
+    /// (clearing every clone's `forbidden` flag), a read on a *different* clone must succeed
+    /// without blocking.
+    #[test]
+    fn test_write_then_read_guard_boundary_on_other_clone() {
+        let mutex = BfSharedMutex::new(1);
+        let other = mutex.clone();
+
+        {
+            let mut w = mutex.write().unwrap();
+            *w = 9;
+        }
+
+        assert_eq!(*other.read().unwrap(), 9);
+    }
+
+    /// A clone registered and immediately dropped without ever being locked (the empty
+    /// boundary of the `other` registration table) must not disturb a concurrent write on a
+    /// second, still-live clone: the drop path must remove exactly its own slot.
+    #[test]
+    fn test_drop_unused_clone_does_not_block_write() {
+        let mutex = BfSharedMutex::new(0);
+        let unused = mutex.clone();
+        drop(unused);
+
+        *mutex.write().unwrap() = 1;
+        assert_eq!(*mutex.read().unwrap(), 1);
+    }
 
     // These are just simple tests.
     #[test]
