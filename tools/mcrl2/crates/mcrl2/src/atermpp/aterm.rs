@@ -660,10 +660,12 @@ mod tests {
     fn with_args_arity_mismatch_reads_out_of_bounds_in_release() {
         use crate::Symbol;
 
-        // A symbol of arity 4 backed by only 1 real argument: the C++ side
-        // will read 3 elements past the end of the 1-element `Vec` that
-        // backs this slice.
-        let f = Symbol::new("with_args_arity_mismatch_reads_out_of_bounds_in_release_f", 4);
+        // A symbol of arity 40 backed by only 1 real argument: the C++ side
+        // will read 39 elements past the end of the 1-element `Vec` that
+        // backs this slice, i.e. well past its allocation, not just its
+        // length.
+        const BOGUS_ARITY: usize = 40;
+        let f = Symbol::new("with_args_arity_mismatch_reads_out_of_bounds_in_release_f", BOGUS_ARITY);
         let a = ATerm::constant(&Symbol::new(
             "with_args_arity_mismatch_reads_out_of_bounds_in_release_a",
             0,
@@ -671,11 +673,12 @@ mod tests {
 
         let bogus = ATerm::with_args(&f, &[a]);
 
-        // Walk every argument, including the 3 out-of-range ones, which
-        // dereferences whatever garbage pointer was read from adjacent heap
-        // memory as though it were a live `_aterm`.
-        for arg in bogus.arguments() {
-            let _ = format!("{arg:?}");
+        // Walk every argument, including the 39 out-of-range ones, which
+        // dereferences whatever garbage was read from adjacent (or entirely
+        // unmapped) heap memory as though it were a live `_aterm` pointer.
+        for (i, arg) in bogus.arguments().enumerate() {
+            let printed = format!("{arg:?}");
+            eprintln!("arg[{i}] = {printed}");
         }
     }
 

@@ -4,7 +4,9 @@
 
 The unsafe surface `merc_aterm` owns directly (`StablePointer`/`Erasable`/`SliceDst`-based pointer
 casts, the `Transmutable` lifetime-shrink trait, `Send`/`Sync` marker impls, `BlockAllocatorSafe`
-impls) held up under review, 5 new Kani proofs, and 20 new targeted Miri boundary tests — no
+impls) held up under review, 5 new Kani proofs, and 12 new targeted tests (9 boundary tests plus a
+characterization probe, a compile-time layout assertion, and the dedicated regression test for the
+finding below) — no
 memory-safety defect was found in that surface itself, and one existing API (`arity` passed to
 the private `cast_to_shared_term_ptr`) turned out to be dead code, confirmed live under Miri.
 `SharedSymbol`'s `BlockAllocatorSafe` impl rests on a `#[repr(Rust)]` field-order assumption the
@@ -86,7 +88,9 @@ attention before `crates/aterm` can be considered compiling-and-green again.**
   poisons the shared, process-wide `std::sync`-backed lock inside `RecursiveLock`, so every
   subsequent `ThreadTermPool::drop` on any thread (including this test's own, during thread-local
   teardown) panics again, which Rust escalates to a process abort.
-- **Blast radius, confirmed directly**: the crate's own library test suite aborts on this:
+- **Blast radius, confirmed directly, and worse than a single test**: `GLOBAL_TERM_POOL` is one
+  process-wide `static`, so the poisoned lock is shared by *every* thread in the process, not just
+  the one that triggered the first panic. The crate's own library test suite aborts on this:
 
   ```
   cargo test -p merc_aterm --lib -- --test-threads=1
@@ -94,10 +98,19 @@ attention before `crates/aterm` can be considered compiling-and-green again.**
   aborts (`SIGABRT`) the first time `ThreadTermPool::drop` observes the poison, seeded by
   `aterm_binary_stream::tests::test_binary_stream_roundtrips_int_and_list_subterms` (its
   `BinaryATermWriter`/`BinaryATermReader` hold `ProtectedSend`/`Protected` containers and force a
-  collection on `Drop`). Every test that follows it in the same process is also lost. This is not
-  specific to that one test — any test that keeps a `Protected`/`ProtectedSend` container alive
-  across a `collect_garbage()` call (forced, or automatic once the GC budget is exhausted) hits
-  the same panic.
+  collection on `Drop`). Every test that follows it in the same process is also lost, *including
+  tests that never touch a `Protected`/`ProtectedSend` container themselves* — their own
+  `ThreadTermPool::drop` finds the shared lock already poisoned and panics too. I independently
+  reproduced this a second and third time while re-verifying this report's own new tests:
+  `cargo test -p merc_aterm --test miri_aterm` (the integration test file with my new boundary
+  tests in it) also aborts, because two *pre-existing* tests in that same file —
+  `test_miri_binary_writer_survives_gc` and `test_miri_global_protected_send_across_threads` —
+  independently hit the identical panic; excluding just those two, the other 13 tests in the file
+  (11 pre-existing, plus my new boundary tests) pass cleanly on their own (see the "Miri boundary
+  tests" section below for the exact commands and output). This is not specific to any one test —
+  any test that keeps a `Protected`/`ProtectedSend` container alive across a `collect_garbage()`
+  call (forced, or automatic once the GC budget is exhausted) hits the same panic, and poisons the
+  run for every other test sharing its process.
 - **Why this would pass once fixed**: the assertion in `read_recursive` fails only because the
   collector's own marking pass is nested inside `with_mut`'s closure; a fix that lets
   `mark_roots`'s container-marking loop run without needing `&mut GlobalTermPool` for that part
@@ -330,8 +343,8 @@ MIRIFLAGS="-Zmiri-disable-isolation --cfg chacha20_force_soft" \
 - `crates/aterm/src/storage/symbol_pool.rs`, `offset_of!(SharedSymbol, name) == 0` — see finding
   #3 (a compile-time regression guard, not a runtime test).
 
-Real output (the full set above, run together under Miri; the `f(a, a)` aliasing test's log line
-is the interesting one — 15 tests, all passing, no Stacked/Tree Borrows violation):
+Real output, all 15 tests, all passing, no Stacked/Tree Borrows violation — **but this run
+predates the `with_mut` migration** (old, pre-fix `merc_sharedmutex`):
 
 ```
 running 15 tests
@@ -354,10 +367,39 @@ test test_boundary_arg_one_past_last_valid_index_panics - should panic ... ok
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
-(This particular run predates the `with_mut` migration; none of these tests touch
-`Protected`/`ProtectedSend` + `collect_garbage` together, so they are unaffected by finding #1 and
-still pass identically afterward — reconfirmed with a plain, non-Miri `cargo test` run after the
-migration landed, see the "sharedmutex migration" section.)
+**Correction, checked after the `with_mut` migration landed** (do not trust the paragraph that
+used to follow this block in an earlier draft of this report — I re-ran and it was wrong): two of
+these 15 are *not* unaffected. `test_miri_binary_writer_survives_gc` (uses `BinaryATermWriter`,
+which holds `ProtectedSend` containers, and force-collects) and
+`test_miri_global_protected_send_across_threads` (uses `ProtectedSend` directly, and
+force-collects) both now hit finding #1 and abort the process — these are two more, independent,
+concrete repros of finding #1, on top of the dedicated one in
+`gc_reentrant_container_marking_test.rs`:
+
+```
+cargo test -p merc_aterm --test miri_aterm -- --test-threads=1
+# thread 'test_miri_binary_writer_survives_gc' panicked at .../panicking.rs:233:5:
+# panic in a destructor during cleanup
+# thread caused non-unwinding panic. aborting.
+# process didn't exit successfully (signal: 6, SIGABRT)
+```
+
+Because `GLOBAL_TERM_POOL` is one process-wide `static`, this is worse than "these two tests are
+broken": the poisoned lock is shared by *every* thread in the process, so once either of these two
+panics, *every other test's* `ThreadTermPool::drop` (thread-local teardown, on whichever thread it
+happens to run) panics too and the whole binary aborts — including tests that have nothing to do
+with `Protected` containers. Confirmed directly: excluding just those two tests, the remaining 13
+(11 pre-existing plus my new boundary tests) pass cleanly and independently confirm this:
+
+```
+cargo test -p merc_aterm --test miri_aterm -- --test-threads=1 \
+  --skip test_miri_binary_writer_survives_gc --skip test_miri_global_protected_send_across_threads
+# running 13 tests ... test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out
+```
+
+`aterm_int_test.rs` (a separate test binary, no `Protected`/`ProtectedSend` container anywhere in
+it) is unaffected and passes in full: `cargo test -p merc_aterm --test aterm_int_test` → `4
+passed; 0 failed`.
 
 ### Mathematical `# Safety` contracts added (doc-comment only, no logic changes)
 
@@ -438,15 +480,13 @@ architecture-level fix (see finding #1's "Fix direction").
 
 Kani proofs are unaffected by this migration (none of the 5 harnesses touch `THREAD_TERM_POOL` or
 `RecursiveLock`; reconfirmed with a full `cargo kani` run after the migration, same 5/5 result as
-above). The Miri/plain-`cargo test` boundary tests added in the previous section are likewise
-unaffected (none of them combine a live `Protected`/`ProtectedSend` container with a
-`collect_garbage()` call), reconfirmed with:
-
-```
-cargo test -p merc_aterm --test miri_aterm --test aterm_int_test
-# running 15 tests ... test result: ok. 15 passed; 0 failed
-# running 4 tests ... test result: ok. 4 passed; 0 failed
-```
+above). The *new* Miri/plain-`cargo test` boundary tests I added are unaffected on their own
+(none of them combine a live `Protected`/`ProtectedSend` container with `collect_garbage()`), but
+two *pre-existing* tests that happen to live in the same file (`miri_aterm.rs`) are not —
+`test_miri_binary_writer_survives_gc` and `test_miri_global_protected_send_across_threads` both
+hit finding #1 directly and abort the process, taking the rest of that binary's run down with
+them. See the corrected evidence in the previous section (I initially reported this run as
+unaffected; that was wrong, and is corrected there with the actual re-run output).
 
 ## Checked and found correct
 
@@ -522,7 +562,7 @@ code was added by this review beyond doc comments.
 - `crates/aterm/src/storage/shared_term.rs` — `#[cfg(kani)] mod verification` (1 harness).
 - `crates/aterm/src/storage/symbol_pool.rs` — `offset_of!(SharedSymbol, name) == 0` static
   assertion in the existing `mod tests`.
-- `crates/aterm/tests/miri_aterm.rs` — 8 new boundary tests (listed above).
+- `crates/aterm/tests/miri_aterm.rs` — 7 new boundary tests (listed above).
 - `crates/aterm/tests/aterm_int_test.rs` — 2 new boundary tests (listed above).
 - `crates/aterm/tests/gc_reentrant_container_marking_test.rs` — new file, 1 `#[ignore]`d
   regression test for finding #1 (left failing/ignored in the tree, as it demonstrates a defect
@@ -535,19 +575,26 @@ How to run everything:
 # Kani (from crates/aterm):
 cd crates/aterm && cargo kani
 
-# Plain tests (fast, excludes the intentionally-`#[ignore]`d finding-#1 repro):
-cargo test -p merc_aterm --test miri_aterm --test aterm_int_test
+# Plain tests, unaffected by finding #1 (aterm_int_test.rs has no Protected/ProtectedSend use):
+cargo test -p merc_aterm --test aterm_int_test
 cargo test -p merc_aterm --lib probe_cast_to_shared_term_ptr_arity_argument_effect test_symbol_sharing test_shared_term_lookup
 
-# Miri, the same boundary tests:
-MIRIFLAGS="-Zmiri-disable-isolation --cfg chacha20_force_soft" \
-  cargo +nightly miri test -p merc_aterm --test miri_aterm --test aterm_int_test
+# miri_aterm.rs: two PRE-EXISTING tests in this file hit finding #1 and abort the whole binary
+# (test_miri_binary_writer_survives_gc, test_miri_global_protected_send_across_threads); skip them
+# to run the rest (11 pre-existing + 7 new boundary tests) cleanly:
+cargo test -p merc_aterm --test miri_aterm -- --test-threads=1 \
+  --skip test_miri_binary_writer_survives_gc --skip test_miri_global_protected_send_across_threads
 
-# Finding #1's isolated repro (aborts the process by design -- run on its own):
+# Miri, the same two subsets:
+MIRIFLAGS="-Zmiri-disable-isolation --cfg chacha20_force_soft" \
+  cargo +nightly miri test -p merc_aterm --test aterm_int_test
+
+# Finding #1's dedicated isolated repro (aborts the process by design -- run on its own):
 cargo test -p merc_aterm --test gc_reentrant_container_marking_test -- --ignored --test-threads=1 --nocapture
 
-# NOT currently green -- see finding #1:
+# NOT currently green -- see finding #1 (aborts):
 cargo test -p merc_aterm --lib
+cargo test -p merc_aterm --test miri_aterm   # (without --skip)
 ```
 
 No production-code *logic* was changed by this review: the only non-doc-comment,
