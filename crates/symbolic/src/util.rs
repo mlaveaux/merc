@@ -538,8 +538,10 @@ mod tests {
     use oxidd::Manager;
     use oxidd::ManagerRef;
     use oxidd::Subst;
+    use oxidd::VarNo;
     use oxidd::bdd::BDDFunction;
     use oxidd::util::AllocResult;
+    use rand::RngExt;
 
     use crate::BDD_CACHE_CAPACITY;
     use crate::BDD_NODE_CAPACITY;
@@ -649,6 +651,71 @@ mod tests {
             assert!(
                 expected == renamed,
                 "Renaming with reverse did not match expected substitution"
+            );
+        });
+    }
+
+    /// [test_random_bdd_renaming] and [test_random_bdd_renaming_reverse] only ever exercise the
+    /// fixed substitution `[(0, 1), (2, 3)]` (two entries, no gap between them): every random
+    /// iteration varies the BDD, never the substitution shape. [`variable_rename_edge`]'s cache key
+    /// is only sound (see its doc comment) because two different paths to the same node always
+    /// arrive with the same remaining substitution *suffix*; this varies the number of entries and
+    /// the gaps between them (both affect which suffix a node sees) to stress that invariant.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_bdd_renaming_varied_substitutions() {
+        random_test(100, |rng| {
+            let manager_ref = oxidd::bdd::new_manager(BDD_NODE_CAPACITY, BDD_CACHE_CAPACITY, 1);
+
+            let num_vars = 10;
+            let vars = manager_ref
+                .with_manager_exclusive(|manager| {
+                    manager
+                        .add_vars(num_vars)
+                        .map(|v| BDDFunction::var(manager, v))
+                        .collect::<Result<Vec<BDDFunction>, _>>()
+                })
+                .unwrap();
+
+            let function = random_bdd(&manager_ref, rng, &vars, 16).unwrap();
+
+            // Five disjoint (from, from+1) blocks spanning all 10 variables; a random non-empty
+            // subset, at random gaps from each other, is a valid substitution regardless of which
+            // blocks are picked.
+            let blocks: Vec<(VarNo, VarNo)> = (0..5).map(|k| (2 * k, 2 * k + 1)).collect();
+            let mut substitution: Vec<(VarNo, VarNo)> =
+                blocks.iter().copied().filter(|_| rng.random_bool(0.5)).collect();
+            if substitution.is_empty() {
+                substitution.push(blocks[rng.random_range(0..blocks.len())]);
+            }
+
+            let from: Vec<VarNo> = substitution.iter().map(|(f, _)| *f).collect();
+            let to_targets: Vec<VarNo> = substitution.iter().map(|(_, t)| *t).collect();
+            let to = compute_vars_bdd(&manager_ref, &to_targets).unwrap().0;
+            let oracle_substitution = Subst::new(&from, &to);
+
+            let expected = function.substitute(&oracle_substitution).unwrap();
+            let renamed = variable_rename(&manager_ref, &function, &substitution).unwrap();
+
+            assert!(
+                expected == renamed,
+                "substitution {substitution:?}: renaming did not match expected substitution"
+            );
+
+            // Mirror the same varied shapes through the reverse direction: (from, to) becomes
+            // (from+1, from), i.e. renaming the variable directly below back up to `from`.
+            let reverse_substitution: Vec<(VarNo, VarNo)> = substitution.iter().map(|&(f, t)| (t, f)).collect();
+            let reverse_from: Vec<VarNo> = reverse_substitution.iter().map(|(f, _)| *f).collect();
+            let reverse_to_targets: Vec<VarNo> = reverse_substitution.iter().map(|(_, t)| *t).collect();
+            let reverse_to = compute_vars_bdd(&manager_ref, &reverse_to_targets).unwrap().0;
+            let reverse_oracle = Subst::new(&reverse_from, &reverse_to);
+
+            let reverse_expected = function.substitute(&reverse_oracle).unwrap();
+            let reverse_renamed = variable_rename_reverse(&manager_ref, &function, &reverse_substitution).unwrap();
+
+            assert!(
+                reverse_expected == reverse_renamed,
+                "reverse substitution {reverse_substitution:?}: renaming did not match expected substitution"
             );
         });
     }

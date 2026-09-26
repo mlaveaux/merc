@@ -283,15 +283,94 @@ pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
 #[cfg(test)]
 mod tests {
     use merc_io::DumpFiles;
+    use merc_lts::LTS;
+    use merc_lts::LabelIndex;
+    use merc_lts::LabelledTransitionSystem;
+    use merc_lts::StateIndex;
+    use merc_lts::TransitionLabel;
     use merc_lts::random_lts;
     use merc_lts::write_aut;
     use merc_utilities::Timing;
     use merc_utilities::random_test;
     use rand::rngs::StdRng;
 
+    use merc_collections::BlockIndex;
+
+    use crate::BlockPartition;
+    use crate::BlockPartitionBuilder;
     use crate::Equivalence;
+    use crate::Partition;
     use crate::compare_lts;
+    use crate::quotient_lts_block;
     use crate::reduce_lts;
+
+    /// `quotient_lts_block::<_, true>` assumes every block has a genuine bottom state, which
+    /// holds when the partition comes from the crate's own `reduce_lts` (it always collapses
+    /// tau-SCCs first) but not in general -- the function is `pub` and takes a caller-supplied
+    /// `BlockPartition` with no such precondition documented. This builds a block with a
+    /// tau-cycle (1 -tau-> 2 -tau-> 1, reached via 0 -tau-> 1) and no bottom state; on current
+    /// code the bottom-state search's cycle check is a `debug_assert!`, so this panics in debug
+    /// builds (`#[ignore]`d below) and would silently pick a non-bottom representative in
+    /// release builds, dropping that block's `x`-transition from the quotient.
+    #[test]
+    #[ignore = "known bug: quotient_lts_block panics (debug) / silently drops transitions (release) on a block with no bottom state, see review/phase-3-algorithmic-core.md"]
+    fn test_quotient_lts_block_branching_uses_true_bottom_state() {
+        // Label 0 = tau, label 1 = "x".
+        // 0 -tau-> 1, 1 -tau-> 2, 2 -tau-> 1, 2 -x-> 3.
+        let transitions = [(0, 0, 1), (1, 0, 2), (2, 0, 1), (2, 1, 3)]
+            .map(|(from, label, to)| (StateIndex::new(from), LabelIndex::new(label), StateIndex::new(to)));
+
+        let lts = LabelledTransitionSystem::new(
+            StateIndex::new(0),
+            None,
+            || transitions.iter().cloned(),
+            vec![String::tau_label(), "x".to_string()],
+        );
+
+        // Hand-build a partition with block {0, 1, 2} and block {3}. This
+        // bypasses signature refinement entirely, so the "no true bottom
+        // state" case can be constructed directly rather than relying on it
+        // arising from an actual (and, per above, impossible) run of
+        // branching bisimulation reduction.
+        let mut partition = BlockPartition::new(4);
+        let mut builder = BlockPartitionBuilder::default();
+        let _ = partition.partition_marked_with(BlockIndex::new(0), &mut builder, |state, _| {
+            if state.value() == 3 {
+                BlockIndex::new(1)
+            } else {
+                BlockIndex::new(0)
+            }
+        });
+
+        let cyclic_block = partition.block_number(StateIndex::new(1));
+        assert_eq!(
+            partition.block_number(StateIndex::new(2)),
+            cyclic_block,
+            "test setup: states 1 and 2 should be in the same block"
+        );
+        assert_eq!(
+            partition.block_number(StateIndex::new(0)),
+            cyclic_block,
+            "test setup: state 0 should be in the same block"
+        );
+
+        let quotient = quotient_lts_block::<_, true>(&lts, &partition, false);
+
+        let x_label = LabelIndex::new(1);
+        let cyclic_block_state = StateIndex::new(*cyclic_block);
+        let has_x_transition = quotient
+            .outgoing_transitions(cyclic_block_state)
+            .any(|t| t.label == x_label);
+
+        assert!(
+            has_x_transition,
+            "quotient_lts_block dropped the x-transition that is only directly available from \
+             state 2; it picked a non-bottom state as the block's representative because the \
+             block's tau-subgraph contains a cycle (states 1 and 2), which the bottom-state \
+             search does not detect as \"no bottom state exists\" other than via a debug_assert \
+             that panics in debug builds and is compiled out in release builds"
+        );
+    }
 
     /// Generates a random LTS, reduces it under `equivalence`, and asserts
     /// that the original and reduced LTS are equivalent.

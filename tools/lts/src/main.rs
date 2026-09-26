@@ -557,11 +557,18 @@ fn handle_convert(args: &ConvertArgs, timing: &mut Timing) -> Result<(), MercErr
             }
         },
         GenericLts::AutMcrl2(lts) => match output_format {
-            LtsFormat::Aut | LtsFormat::AutMcrl2 => {
+            LtsFormat::Aut => {
                 if let Some(path) = &args.output {
                     write_aut(&mut File::create(path)?, &lts.relabel(|label| Ok(label.to_string()))?)?;
                 } else {
                     write_aut(&mut stdout(), &lts.relabel(|label| Ok(label.to_string()))?)?;
+                }
+            }
+            LtsFormat::AutMcrl2 => {
+                if let Some(path) = &args.output {
+                    write_mcrl2_aut(&mut File::create(path)?, &lts.relabel(|label| Ok(label.to_string()))?)?;
+                } else {
+                    write_mcrl2_aut(&mut stdout(), &lts.relabel(|label| Ok(label.to_string()))?)?;
                 }
             }
             LtsFormat::Bcg => {
@@ -576,11 +583,18 @@ fn handle_convert(args: &ConvertArgs, timing: &mut Timing) -> Result<(), MercErr
             }
         },
         GenericLts::Lts(lts, data_spec) => match output_format {
-            LtsFormat::Aut | LtsFormat::AutMcrl2 => {
+            LtsFormat::Aut => {
                 if let Some(path) = &args.output {
                     write_aut(&mut File::create(path)?, &lts.relabel(|label| Ok(label.to_string()))?)?;
                 } else {
                     write_aut(&mut stdout(), &lts.relabel(|label| Ok(label.to_string()))?)?;
+                }
+            }
+            LtsFormat::AutMcrl2 => {
+                if let Some(path) = &args.output {
+                    write_mcrl2_aut(&mut File::create(path)?, &lts.relabel(|label| Ok(label.to_string()))?)?;
+                } else {
+                    write_mcrl2_aut(&mut stdout(), &lts.relabel(|label| Ok(label.to_string()))?)?;
                 }
             }
             LtsFormat::Bcg => {

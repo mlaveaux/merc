@@ -49,8 +49,10 @@ fn test_multiple_nested_rules_build_automaton() {
     let mut sabre = SabreRewriter::new(&spec);
     let mut inner = InnermostRewriter::new(&spec);
 
+    // Normal form: f(g(h(k(a)))) -> h(k(a)) -> a -> b, applying all three
+    // nested rules plus the flat one in sequence.
     let input = term("f(g(h(k(a))))", &[]);
-    let expected = term("h(k(a))", &[]);
+    let expected = term("b", &[]);
     assert_eq!(sabre.rewrite(&input), expected);
     assert_eq!(inner.rewrite(&input), expected);
 }

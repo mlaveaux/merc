@@ -684,4 +684,71 @@ mod tests {
         };
         assert!(SymbolicLps::with_options(&storage, GridLps::new(&[2, 3, 4]), &options).is_err());
     }
+
+    /// [GridLps] has exactly one reachable deadlock: the corner where every position is at its
+    /// bound (every single-position summand and the diagonal summand are then guarded off). This
+    /// exercises [`TransitionGroup::learn_successors`] (the real [`SymbolicLpsGroup`] adapter, not
+    /// the hand-built groups [`crate::ldd::symbolic_explore`]'s own tests use) together with
+    /// [`ReachabilityOptions::detect_deadlocks`], which no other test in this module does.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Miri is too slow.
+    fn test_detect_deadlocks_finds_the_grid_corner() {
+        let bounds = [2usize, 3, 4];
+        // Every combination of coordinates below its bound is reachable; only the corner where
+        // every coordinate equals its bound has no outgoing transition.
+        let expected_states = bounds.iter().map(|bound| bound + 1).product::<usize>();
+
+        let strategies = [
+            ExplorationStrategy::BreadthFirst,
+            ExplorationStrategy::Chaining,
+            ExplorationStrategy::Fixpoint,
+            ExplorationStrategy::FixpointChaining,
+            ExplorationStrategy::Saturation,
+        ];
+
+        for grouping in [SummandGrouping::None, SummandGrouping::Used, SummandGrouping::Simple] {
+            for cached in [false, true] {
+                for strategy in strategies {
+                    let storage = oxidd::ldd::new_manager(LDD_NODE_CAPACITY, LDD_CACHE_CAPACITY, 1);
+                    let options = SymbolicLpsOptions {
+                        grouping: grouping.clone(),
+                        order: VariableOrder::None,
+                    };
+                    let mut symbolic = SymbolicLps::with_options(&storage, GridLps::new(&bounds), &options)
+                        .expect("the encoding is valid");
+
+                    let mut context = symbolic.create_context();
+                    let result = reachability_with_options(
+                        &storage,
+                        &mut symbolic,
+                        &mut context,
+                        &ReachabilityOptions {
+                            strategy,
+                            detect_deadlocks: true,
+                            cached,
+                        },
+                        &Timing::new(),
+                    )
+                    .expect("reachability succeeds");
+
+                    let num_states = ldd_len(&result.states, &mut LddLenCache::new())
+                        .exact()
+                        .expect("the grid is small") as usize;
+                    assert_eq!(
+                        num_states, expected_states,
+                        "grouping {grouping:?}, cached {cached}, strategy {strategy:?}: reachable states"
+                    );
+
+                    let deadlocks = result.deadlocks.expect("detect_deadlocks was requested");
+                    let num_deadlocks = ldd_len(&deadlocks, &mut LddLenCache::new())
+                        .exact()
+                        .expect("the grid is small") as usize;
+                    assert_eq!(
+                        num_deadlocks, 1,
+                        "grouping {grouping:?}, cached {cached}, strategy {strategy:?}: deadlock count"
+                    );
+                }
+            }
+        }
+    }
 }

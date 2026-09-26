@@ -1703,18 +1703,21 @@ mod tests {
         );
     }
 
+    /// A PBES with zero equations is rejected by mCRL2's own PBES parser
+    /// (confirmed: `Pbes::from_text` errors with "syntax error" on
+    /// `pbes\ninit val(true);` and variants), so `unified_parameters`'s
+    /// `equations.first().is_none()` branch, which returns an empty
+    /// parameter vector, is unreachable via [`Pbes::from_text`]. Documented
+    /// here so a future caller that constructs a `Pbes` programmatically
+    /// (bypassing the text parser) knows this path exists but is otherwise
+    /// untested.
     #[test]
-    fn probe_empty_pbes() {
+    fn empty_pbes_is_rejected_by_the_parser_before_reaching_build_sdg() {
         test_logger();
-        let pbes = Pbes::from_text("pbes init val(true);").unwrap();
-        let sdg = build_sdg(&pbes);
-        println!("empty pbes build_sdg result: {}", sdg.is_ok());
-        if let Ok(sdg) = sdg {
-            println!(
-                "num_parameters={} num_vertices={} num_edges={}",
-                sdg.num_parameters(),
-                sdg.num_vertices(),
-                sdg.num_edges()
+        for src in ["pbes\ninit val(true);", "pbes\n\ninit val(true);\n"] {
+            assert!(
+                Pbes::from_text(src).is_err(),
+                "a zero-equation PBES was expected to be a parse error: {src:?}"
             );
         }
     }

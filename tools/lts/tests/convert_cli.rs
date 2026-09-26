@@ -72,18 +72,19 @@ fn convert_aut_mcrl2_to_aut_mcrl2_preserves_tau_label() {
     let _ = std::fs::remove_file(&output);
 }
 
-/// Sanity check on the companion direction: plain `Aut` -> `Aut` must keep
-/// using `"i"`, i.e. this is not "always emit tau", just the AutMcrl2 case
-/// that is broken.
+/// Sanity check on the companion direction: converting an `AutMcrl2` source
+/// down to plain `Aut` output legitimately uses `"i"` -- this confirms the
+/// bug above is specifically about the *output* format being `AutMcrl2`, not
+/// that `write_aut`/`"i"` is always wrong.
 #[test]
-fn convert_aut_to_aut_preserves_i_label() {
-    let input = write_temp("in2.aut", "des (0,1,2)\n(0,\"i\",1)\n");
+fn convert_aut_mcrl2_to_aut_uses_i_label() {
+    let input = write_temp("in2.aut", "des (0,1,2)\n(0,\"tau\",1)\n");
     let output = write_temp("out2.aut", "");
 
     let (_, stderr, success) = run_lts(&[
         "convert",
         "--format",
-        "aut",
+        "aut-mcrl2",
         input.to_str().unwrap(),
         "--output-format",
         "aut",
@@ -92,7 +93,10 @@ fn convert_aut_to_aut_preserves_i_label() {
     assert!(success, "convert command failed: {stderr}");
 
     let contents = std::fs::read_to_string(&output).unwrap();
-    assert!(contents.contains("\"i\""), "Aut -> Aut must keep 'i', got:\n{contents}");
+    assert!(
+        contents.contains("\"i\""),
+        "AutMcrl2 -> Aut must use the plain Aldebaran 'i' label, got:\n{contents}"
+    );
 
     let _ = std::fs::remove_file(&input);
     let _ = std::fs::remove_file(&output);
