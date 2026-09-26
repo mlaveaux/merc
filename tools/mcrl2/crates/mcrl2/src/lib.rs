@@ -39,6 +39,7 @@ pub use mcrl2_sys::atermpp::ffi::_aterm;
 
 pub use control_flow::CfgEdge;
 pub use control_flow::CfgSummand;
+pub use control_flow::CfgTarget;
 pub use control_flow::ControlFlowGraph;
 
 pub use data::DataSpecification;

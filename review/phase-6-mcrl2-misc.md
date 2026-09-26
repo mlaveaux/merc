@@ -111,6 +111,56 @@ current consumers, which only match on `Some(v)`/`None` today and would need one
 `Unknown` as "no constraint" (same as their current `None` handling) to stay behaviourally
 unchanged.
 
+### Outcome: FIXED
+
+Applied exactly the suggested direction: `CfgEdge::target` is now `CfgTarget<V>`, a new public enum
+with `Unchanged`, `Constant(V)`, and `Unknown` variants (`control_flow.rs:57-75`), re-exported from
+`crates/mcrl2/src/lib.rs` alongside `CfgEdge`. `ControlFlowGraph::new`'s edge-construction loop
+(`control_flow.rs:121-126`) now matches `analysis.target.get(&j)`'s three states explicitly instead
+of collapsing the last two through `.and_then(Option::as_ref)`:
+
+```rust
+let target = match analysis.target.get(&j) {
+    None => CfgTarget::Unchanged,
+    Some(None) => CfgTarget::Unknown,
+    Some(Some(term)) => CfgTarget::Constant(intern_term(&mut intern, term)),
+};
+```
+
+The inclusion test (`source.is_some() || matches!(target, CfgTarget::Constant(_))`) is the exact
+same predicate as before (`target.is_some()` only matched the `Constant` case even previously), so
+which summand/parameter pairs get an edge at all is unchanged — only the `target` value inside an
+already-included edge is now correct. Updated `CfgEdge::target`'s and the struct-level doc comment
+to describe the three cases instead of documenting a `None` that meant two different things.
+
+Checked both real consumers for call sites touching `.target`: neither
+`crates/merc_lps/src/cfg_lps.rs` nor `crates/merc_pbes/src/cfg_srf.rs` reads `edge.target` at all
+(`grep -n "\.target\b" crates/merc_lps/src/cfg_lps.rs crates/merc_pbes/src/cfg_srf.rs` — no
+matches; both only read `edge.source` at the line numbers this review already cited), so neither
+needed a code change for the new representation — confirming the review's own blast-radius
+analysis that today's two consumers are unaffected by this type change.
+
+Regression test kept, now green instead of failing:
+
+```
+cd tools/mcrl2
+cargo test -p mcrl2 --test control_flow_edge_test
+```
+```
+running 1 test
+test unchanged_edge_is_distinguishable_from_non_constant_write_edge ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+```
+
+Full verification:
+- `cargo nextest run -p mcrl2 --no-fail-fast -- --include-ignored` (from `tools/mcrl2`): all tests
+  pass, no regressions.
+- `cargo test -p merc_lps --test cfg_lps_test` (from `tools/mcrl2`): all tests pass unchanged.
+- `cargo test -p merc_pbes --test cfg_srf_analysis_test` (from `tools/mcrl2`): all tests pass
+  unchanged.
+- `cargo clippy -p mcrl2 -p merc_lps -p merc_pbes --all-targets` (from `tools/mcrl2`): clean.
+- `cargo +nightly fmt --all -- --check` (repo root): clean.
+
 ## Checked and found correct
 
 - **The "first conjunct wins" behaviour in `as_parameter_equality`/`analyse_summand`**
