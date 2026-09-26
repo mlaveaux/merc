@@ -192,3 +192,55 @@ impl<Tag> IdAllocator<Tag> {
         id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TagIndex;
+
+    struct StateTag;
+    struct ActionTag;
+
+    type StateIndex = TagIndex<usize, StateTag>;
+    type ActionIndex = TagIndex<usize, ActionTag>;
+
+    /// `TagIndex`'s own doc comment claims "indices from different domains
+    /// (e.g. state, action, priority) cannot be mixed up or compared with
+    /// each other". This module has no other tests at all (this is the only
+    /// `#[cfg(test)]` in `tagged_index.rs`), so nothing currently exercises
+    /// that claim — and it does not hold: `impl PartialEq<T> for
+    /// TagIndex<T, Tag>` (and the matching `PartialOrd<T>`) compare against
+    /// the *raw*, tag-erased `T`, so a `StateIndex` and an `ActionIndex`
+    /// that happen to wrap the same number silently compare equal once
+    /// either side is unwrapped to its raw form, even though they come from
+    /// unrelated domains. The type system only rejects *directly* comparing
+    /// a `StateIndex` to an `ActionIndex` (different `Tag`s); it does not
+    /// reject bridging through the untagged `T`, which is exactly what
+    /// `PartialEq<T>` offers as a first-class, no-`unsafe`-required
+    /// operation.
+    #[test]
+    fn tag_index_partial_eq_with_raw_value_bridges_across_unrelated_domains() {
+        let state = StateIndex::new(3);
+        let action = ActionIndex::new(3);
+
+        // Directly comparing `state == action` does not compile (different
+        // `Tag`s) -- that part of the safety story holds. But both indices
+        // compare equal to the *same* raw value via `PartialEq<T>`, which
+        // means a caller who accidentally compares a `StateIndex` against a
+        // raw `usize` that actually came from an `ActionIndex` gets a
+        // silent, semantically meaningless `true` instead of a compile
+        // error or a panic.
+        assert_eq!(state, 3usize);
+        assert_eq!(action, 3usize);
+
+        // Simulates the actual mix-up: something holding an `ActionIndex`
+        // exposes it as a raw value (e.g. for serialization, hashing, or a
+        // format string), and that raw value later gets compared against an
+        // unrelated `StateIndex` -- nothing here signals that the domains
+        // differ.
+        let action_as_raw: usize = action.value();
+        assert_eq!(
+            state, action_as_raw,
+            "a StateIndex should not be indistinguishable from an unrelated ActionIndex's raw value"
+        );
+    }
+}
