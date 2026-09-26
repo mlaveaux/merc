@@ -571,6 +571,35 @@ impl Lowering<'_> {
                 let element = lower_sort(self.ctx, self.spec, *subsort);
                 Some(container_coerce(term, *op, element))
             }
+            // A function value widens to a wider range at the same domain (see
+            // `SortInterner::is_materializable`'s own `Function` case) by
+            // eta-expansion: `term` of sort `D -> S` becomes `lambda d: D.
+            // coerce(term(d))` of sort `D -> T`. There is no other way to build
+            // this: unlike a number or a container, mCRL2 has no builtin operator
+            // that coerces a whole function *value* directly.
+            (
+                ResolvedSort::Function {
+                    domain,
+                    range: from_range,
+                },
+                ResolvedSort::Function { range: to_range, .. },
+            ) => {
+                let (domain, from_range, to_range) = (domain.clone(), *from_range, *to_range);
+                let vars: Vec<DataVariable> = domain
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &sort)| {
+                        DataVariable::with_sort(
+                            format!("@eta{i}").as_str(),
+                            lower_sort(self.ctx, self.spec, sort).copy(),
+                        )
+                    })
+                    .collect();
+                let args: Vec<DataExpression> = vars.iter().map(|v| v.clone().into()).collect();
+                let applied = DataApplication::with_args(&term, &args).into();
+                let coerced = self.coerce(id, applied, from_range, to_range)?;
+                Some(DataAbstraction::new(BinderType::Lambda, &vars, coerced).into())
+            }
             _ => None,
         }
     }

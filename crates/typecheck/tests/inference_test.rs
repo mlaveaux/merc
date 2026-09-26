@@ -552,9 +552,12 @@ fn test_bag_comprehension_with_lambda_body() {
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_lambda_body_widens_a_finite_container_literal() {
     // A `{ .. }` literal body infers to the *finite* `FSet`/`FBag` sort; a
-    // lambda's declared `Set`/`Bag` range has no direct constraint to widen
-    // against unless the body itself is bound through a fresh, upcastable
-    // variable (see the `Lambda` case in `ConstraintGenerator::visit`).
+    // lambda's declared `Set`/`Bag` range has nothing narrower than the whole
+    // function sort to widen against, so this exercises `Sub`-widening a
+    // function sort covariantly in its range (see
+    // `Unifier::strict_related_sorts`'s `Function` case), materialized at
+    // lowering time by eta-expanding a wrapper around the lambda (see
+    // `Lowering::coerce`'s `(Function, Function)` case).
     check_ok("map f: Nat -> Set(Nat); eqn f = lambda x: Nat. { x, x };");
     check_ok("map f: Nat -> Bag(Nat); eqn f = lambda x: Nat. { x: 1 };");
 }
@@ -563,24 +566,32 @@ fn test_lambda_body_widens_a_finite_container_literal() {
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_lambda_body_widens_a_primitive() {
     // The body's own minimal sort (`Pos`, from `y + 1`) differs from the
-    // lambda's declared range (`Nat`); only the body needs widening, not the
-    // function sort as a whole -- a function *value* has no term-level
-    // coercion to a different function sort (see
-    // `Unifier::strict_related_sorts`'s `Function` case).
+    // lambda's declared range (`Nat`); the whole function sort widens
+    // covariantly in its range (same mechanism as the container-literal case
+    // above), lowering to an eta-expanded wrapper around the original lambda.
     check_ok("map inc: Nat -> Nat; eqn inc = lambda y: Nat. y + 1;");
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-fn test_function_sorted_list_element_widens_its_lambda_body() {
+fn test_function_sorted_list_element_widens() {
     // A `List`/`Bag` element position widens the same way a `map`'s declared
-    // sort does: each lambda in the list needs its own body (`x`, `x - 2`)
-    // widened from `Nat` to the declared element range `Int`, not the
-    // lambda's overall function sort.
+    // sort does: the first lambda's own sort `Nat -> Nat` widens to the
+    // declared element range `Nat -> Int` (the second lambda's body, `x - 2`,
+    // already infers to `Int` on its own and needs no widening).
     check_ok(
         "map v: Bag(List(Nat -> Int));\n\
          eqn v = { [(lambda x: Nat . x), (lambda x: Nat . (x - 2))]: 1 };",
     );
+}
+
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_named_function_reference_widens() {
+    // Unlike a lambda, a bare reference to another map has no body at all to
+    // widen -- only the general `Function`-covariant `Sub` (and its
+    // eta-expansion at lowering) can make this type check.
+    check_ok("map g: Nat -> Nat; h: Nat -> Int; var x: Nat; eqn g(x) = x; h = g;");
 }
 
 #[test]
