@@ -84,7 +84,12 @@ impl Viewer {
 
                     let index = index_per_target.entry(transition.to).or_insert(0);
 
-                    if has_backtransition {
+                    // Fan out parallel transitions to the same destination so their handles do not
+                    // overlap, regardless of whether a transition back the other way also exists:
+                    // that only matters for whether the *forward* handles need to make room for a
+                    // back-transition's handle too, not for whether the forward ones overlap each
+                    // other.
+                    if has_backtransition || num_parallel > 1 {
                         // Offset the parallel outgoing transitions towards that state to the right
                         // so the back- and forward-transitions do not overlap.
                         transition_view.handle_offset = Vec3::new(0.0, *index as f32 / num_parallel as f32, 0.0);
@@ -98,10 +103,16 @@ impl Viewer {
         Viewer { lts, view_states }
     }
 
-    /// Update the state of the viewer with the given graph layout
+    /// Update the state of the viewer with the given graph layout.
+    ///
+    /// `layout` is expected to belong to the same LTS as this viewer, but this does not panic if it
+    /// does not: it copies positions for the states the two agree on and leaves the rest untouched,
+    /// rather than indexing `layout` out of bounds. This is a defensive backstop, not the intended
+    /// way to use this method -- callers are still responsible for keeping the viewer/layout pair in
+    /// sync (see `ReloadState` in `ltsgraph/src/main.rs`, which swaps them atomically).
     pub fn update(&mut self, layout: &GraphLayout) {
-        for (index, layout_state) in self.view_states.iter_mut().enumerate() {
-            layout_state.position = layout.layout_states[index].position;
+        for (state_view, layout_state) in self.view_states.iter_mut().zip(layout.layout_states.iter()) {
+            state_view.position = layout_state.position;
         }
     }
 
