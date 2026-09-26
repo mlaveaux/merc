@@ -511,7 +511,7 @@ impl Lowering<'_> {
             DataExprKind::Set(members) => self.lower_set(sort, members),
             DataExprKind::Bag(members) => self.lower_bag(sort, members),
             DataExprKind::SetBagComp { variable, predicate } => self.lower_setbagcomp(sort, variable, predicate),
-            DataExprKind::Lambda { variables, body } => self.lower_lambda(variables, body),
+            DataExprKind::Lambda { variables, body } => self.lower_lambda(sort, variables, body),
             DataExprKind::Quantifier { op, variables, body } => self.lower_quantifier(op.clone(), variables, body),
             DataExprKind::Whr { expr, assignments } => self.lower_whr(expr, assignments),
             DataExprKind::List(_)
@@ -726,12 +726,28 @@ impl Lowering<'_> {
         Some(result)
     }
 
-    fn lower_lambda(&mut self, variables: &[merc_syntax::IdDecl], body: &DataExpr) -> Option<DataExpression> {
+    fn lower_lambda(
+        &mut self,
+        sort: ResolvedSortId,
+        variables: &[merc_syntax::IdDecl],
+        body: &DataExpr,
+    ) -> Option<DataExpression> {
         let vars: Vec<DataVariable> = variables
             .iter()
             .map(|v| DataVariable::with_sort(v.identifier.as_str(), lower_syntax_sort(&v.sort).copy()))
             .collect();
-        let body = self.lower(body)?;
+        let body_id = self.id_of(body);
+        let body_sort = self.sorts[*body_id];
+        let body_term = self.lower(body)?;
+        // The lambda's own range may be wider than the body's inferred sort
+        // (see the `Lambda` case in `ConstraintGenerator::visit`): the body
+        // is coerced up to it here, the one place a function value's range
+        // can still be widened at the term level.
+        let ResolvedSort::Function { range, .. } = self.ctx.sorts.get(sort) else {
+            unreachable!("a lambda always infers to a function sort")
+        };
+        let range = *range;
+        let body = self.coerce(body_id, body_term, body_sort, range)?;
         Some(DataAbstraction::new(BinderType::Lambda, &vars, body).into())
     }
 

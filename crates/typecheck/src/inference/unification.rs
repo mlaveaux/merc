@@ -410,6 +410,13 @@ impl Unifier {
                 Some(op) => vec![self.generic(op, subsort)],
                 None => Vec::new(),
             }),
+            // A function sort itself never widens: there is no way to lower a
+            // materialized coercion between two function *values* of
+            // different sort (unlike a number or a container, `coerce` has no
+            // wrapper to build here). Widening a lambda's range instead
+            // happens one level down, at its *body*, which is a plain value
+            // and so coercible the normal way -- see the `Lambda` case in
+            // `ConstraintGenerator::visit` and `Lowering::lower_lambda`.
             InferSort::Function { .. } => Some(Vec::new()),
         }
     }

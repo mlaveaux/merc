@@ -1193,11 +1193,26 @@ impl<'a> ConstraintGenerator<'a> {
             }
             DataExprKind::Lambda { variables, body } => {
                 // The result is a function from the bound variables' declared
-                // sorts to the body's sort.
+                // sorts to the body's sort. The body is bound through a fresh
+                // variable (rather than used directly) so it may be upcast,
+                // the same as an `Application`'s arguments above -- a
+                // function *sort* cannot itself widen (there is no term-level
+                // coercion between two function values, see
+                // `Unifier::strict_related_sorts`'s `Function` case), so any
+                // widening a use site needs (a `{ .. }` literal's `FSet`/
+                // `FBag` upcasting to `Set`/`Bag`, a `Nat` body upcasting to
+                // `Int`, ...) has to happen one level down, at the body
+                // itself, where `Lowering::lower_lambda` inserts the matching
+                // coercion once the range is resolved.
                 let function_sort = self.with_binder_scope(variables, |this, sorts| {
                     let body_sort = this.visit(body)?;
+                    let range = this.unifier.fresh_var();
+                    this.constraints.push(Constraint::Sub(SubConstraint {
+                        lhs: body_sort,
+                        rhs: range,
+                    }));
                     let parameters = sorts.iter().map(|&sort| this.unifier.resolved_node(sort)).collect();
-                    Ok(this.unifier.function(parameters, body_sort))
+                    Ok(this.unifier.function(parameters, range))
                 })?;
                 self.bind_fresh(node, function_sort);
             }
