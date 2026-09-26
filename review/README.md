@@ -18,10 +18,10 @@ below.
 | 1 | Foundation/unsafe: `aterm`, `sharedmutex`, `unsafety`, `sabre`, `sabre_compiling` | done — see phase-1-foundation-unsafe-{aterm,sharedmutex-unsafety,sabre}.md |
 | 1b | mcrl2 FFI boundary (`tools/mcrl2/crates/mcrl2`) — miri boundary tests + written contracts only, kani doesn't model-check across the C++ FFI boundary | done — see phase-1b-mcrl2-ffi-{atermpp,wrappers}.md |
 | 2 | `typecheck` / `syntax` core (highest churn + lowest health) | done — see phase-2-typecheck-{inference,signature}.md, phase-2-syntax.md |
-| 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | in progress (4 parallel review-adversary agents: symbolic, reduction, vpg/unification/automaton, untested tool binaries + graph_symmetry) |
-| 4 | Tool binaries & GUI, three-workspace boundary check | partly covered by Phase 3's tool-binary agent |
+| 3 | Remaining algorithmic crates (`symbolic`, `reduction`, `refinement`, `lts`, `vpg`, `explore`, `data`, `io`, `number`) | partly done — see [phase-3-algorithmic-core.md](phase-3-algorithmic-core.md) (`symbolic`, `reduction`, `sabre` automaton, `lts`, `graph_symmetry`); `vpg`/typecheck-unification/sabre-automaton agent cut off by a session rate limit before reporting, not covered |
+| 4 | Tool binaries & GUI, three-workspace boundary check | partly covered by Phase 3's tool-binary work (`tools/lts`) |
 | 5 | Cross-cutting: import cycles, doc audit, coverage gaps | not started |
-| — | Comment cleanup: trim the extensive `# Safety` comments added during Phase 1/1b to concise ones, verifying each claim first | in progress (4 parallel agents: sharedmutex+unsafety, aterm, sabre+sabre_compiling, mcrl2 atermpp) |
+| — | Comment cleanup: trim the extensive `# Safety` comments added during Phase 1/1b to concise ones, verifying each claim first | done — see [comment-cleanup.md](comment-cleanup.md) |
 
 ## Findings so far
 
@@ -32,11 +32,15 @@ below.
 | High | Unbounded recursion → stack overflow (SIGABRT) on deep input, 3 independent instances | `crates/typecheck` (`modal/check.rs`, `process/check.rs`, structurally identical pattern also in `pres/check.rs`, untested) | confirmed, not yet fixed |
 | High | `func_update` sort-inference gap: inference-only function sorts get no ground rewrite equations, permanently stuck term | `crates/typecheck/src/lowering/instantiate.rs` | confirmed, not yet fixed |
 | High | Real SIGSEGV: release-mode `debug_assert_eq!` compiled out, arity mismatch reads OOB across the FFI | `tools/mcrl2/crates/mcrl2/src/atermpp` | confirmed (structurally + agent's real repro), not yet fixed |
+| High | `quotient_lts_block` (branching) mishandles a block with no bottom state: `debug_assert` panics in debug, silently drops transitions in release | `crates/reduction` | confirmed (regression test, `#[ignore]`d), not fixed |
+| Medium | `merc-lts convert` silently rewrote `"tau"` to `"i"` on AutMcrl2 output regardless of requested output format | `tools/lts` | **FIXED** |
 | Medium | `MultiAction::eq` is not multiset equality, breaks `Hash`/`Eq` contract | `crates/syntax` | confirmed, not yet fixed |
 | Medium | `DataApplication::sort()` silently returns the wrong term (dead code, zero callers) | `tools/mcrl2/crates/mcrl2` | confirmed, deferred (no user impact today) |
+| Medium/Plausible | Data race: `Debug for GlobalTermPool` reads protection sets with no coordination against a concurrent `write_exclusive` | `tools/mcrl2/crates/mcrl2/src/atermpp` | confirmed real and reproducible (existing TSan-targeted test `read_races_with_concurrent_term_creation`), not fixed |
 | Low/Plausible | `SharedSymbol` relied on undefined `#[repr(Rust)]` field order | `crates/aterm` | **FIXED** (`#[repr(C)]` added) |
 | Low | Dead `arity` parameter, discarded and recomputed elsewhere | `crates/aterm` | confirmed, cosmetic |
-| Plausible | Data race: `Debug for GlobalTermPool` reads protection sets with no coordination against a concurrent `write_exclusive` | `tools/mcrl2/crates/mcrl2/src/atermpp` | confirmed by source tracing, unreachable in practice (no current callers), not fixed |
+| Low/Plausible | Two `# Safety` comments cite a false auto-trait justification (`FreeList<Entry<T>>`/`BlockList<T,N>` are never auto-`Send`) for otherwise-plausible manual `Send`/`Sync` impls | `crates/unsafety` | confirmed false citation, outer impls not shown unsound, not fixed |
+| Low/Plausible | `StablePointer::ptr()` (safe fn) can read the pointee via `Erasable::unerase` for header-reading `T` (e.g. `SharedTerm`), contradicting its own doc's "never touches the pointee" claim | `crates/unsafety` | confirmed, not fixed |
 
 Both crates reviewed as sound with no defects: `crates/sabre`, `crates/sabre_compiling`.
 
