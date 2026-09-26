@@ -22,6 +22,7 @@ use merc_syntax::make_process_specification;
 use merc_syntax::random_data_specification;
 use merc_syntax::random_lps;
 use merc_syntax::random_pbes;
+use merc_syntax::random_pbes_with_data_specification;
 use merc_syntax::random_pres;
 use merc_utilities::random_test;
 
@@ -282,6 +283,20 @@ fn random_pbes_print_parse_fixpoint() {
         let use_quantifiers = rng.random_bool(0.5);
         let use_integers = rng.random_bool(0.5);
         let pbes = random_pbes(rng, 3, 4, 4, use_quantifiers, use_integers);
+        let printed = format!("{pbes}");
+        let reparsed = UntypedPbes::parse(&printed)
+            .unwrap_or_else(|e| panic!("failed to reparse generated PBES:\n{printed}\nerror: {e}"));
+        assert_eq!(printed, format!("{reparsed}"), "PBES print/parse not a fixpoint");
+    });
+}
+
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn random_pbes_with_data_specification_print_parse_fixpoint() {
+    random_test(100, |rng| {
+        let use_quantifiers = rng.random_bool(0.5);
+        let use_integers = rng.random_bool(0.5);
+        let pbes = random_pbes_with_data_specification(rng, 4, 2, 3, 4, 4, use_quantifiers, use_integers);
         let printed = format!("{pbes}");
         let reparsed = UntypedPbes::parse(&printed)
             .unwrap_or_else(|e| panic!("failed to reparse generated PBES:\n{printed}\nerror: {e}"));

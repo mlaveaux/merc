@@ -22,7 +22,10 @@ fn id(identifier: String) -> DataExpr {
 
 /// Resolves a `Reference`/`Resolved` sort name to its declared expression, if any.
 fn resolve<'a>(sort_decls: &'a [SortDecl], name: &str) -> Option<&'a SortExpression> {
-    sort_decls.iter().find(|d| d.identifier == name).and_then(|d| d.expr.as_ref())
+    sort_decls
+        .iter()
+        .find(|d| d.identifier == name)
+        .and_then(|d| d.expr.as_ref())
 }
 
 /// Finds a variable name starting with `prefix` that does not collide with `freevars`.
@@ -69,7 +72,12 @@ pub fn random_value_expression<R: Rng>(
                 .filter(|v| matches!(&v.sort.node, SortExpressionKind::Simple(Sort::Pos)))
                 .collect();
             if !positives.is_empty() && rng.random_bool(0.5) {
-                id(positives.choose(rng).expect("positives is non-empty").identifier.node.clone())
+                id(positives
+                    .choose(rng)
+                    .expect("positives is non-empty")
+                    .identifier
+                    .node
+                    .clone())
             } else {
                 DataExprKind::Number(["1", "2", "3"].choose(rng).expect("non-empty").to_string()).into()
             }
@@ -89,20 +97,26 @@ pub fn random_value_expression<R: Rng>(
             arguments: vec![random_integer_data_expression(rng, freevars)],
         }
         .into(),
-        SortExpressionKind::Reference(name) | SortExpressionKind::Resolved(name, _) => match resolve(sort_decls, name) {
-            Some(inner) => random_value_expression(rng, sort_decls, inner, freevars, depth),
-            None => freevars
-                .iter()
-                .find(|v| &v.sort == sort)
-                .map(|v| id(v.identifier.node.clone()))
-                .unwrap_or_else(|| panic!("no way to construct a value of uninterpreted sort {sort}")),
-        },
+        SortExpressionKind::Reference(name) | SortExpressionKind::Resolved(name, _) => {
+            match resolve(sort_decls, name) {
+                Some(inner) => random_value_expression(rng, sort_decls, inner, freevars, depth),
+                None => freevars
+                    .iter()
+                    .find(|v| &v.sort == sort)
+                    .map(|v| id(v.identifier.node.clone()))
+                    .unwrap_or_else(|| panic!("no way to construct a value of uninterpreted sort {sort}")),
+            }
+        }
         SortExpressionKind::Struct { inner } => {
-            let ctor = inner.choose(rng).expect("a generated struct sort always has at least one constructor");
+            let ctor = inner
+                .choose(rng)
+                .expect("a generated struct sort always has at least one constructor");
             let args: Vec<DataExpr> = ctor
                 .args
                 .iter()
-                .map(|(_, field_sort)| random_value_expression(rng, sort_decls, field_sort, freevars, depth.saturating_sub(1)))
+                .map(|(_, field_sort)| {
+                    random_value_expression(rng, sort_decls, field_sort, freevars, depth.saturating_sub(1))
+                })
                 .collect();
             if args.is_empty() {
                 id(ctor.name.node.clone())

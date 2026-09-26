@@ -38,6 +38,7 @@ pub use random_data_specification::random_data_specification;
 pub use random_lps::make_process_specification;
 pub use random_lps::random_lps;
 pub use random_pbes::random_pbes;
+pub use random_pbes::random_pbes_with_data_specification;
 pub use random_pres::random_pres;
 pub use random_value_expression::random_value_expression;
 pub use span_offset::OffsetSpans;
