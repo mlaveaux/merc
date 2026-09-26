@@ -389,28 +389,57 @@ impl Unifier {
         let id = self.shallow_normalize(id);
         match self.arena[id].clone() {
             InferSort::Var(_) => None,
-            InferSort::Resolved(resolved) => Some(match interner.get(resolved).clone() {
-                ResolvedSort::Primitive(sort) => related_numbers(sort, direction)
-                    .into_iter()
-                    .map(|sort| {
-                        let resolved = interner.primitive(sort);
-                        self.resolved_node(resolved)
-                    })
-                    .collect(),
-                ResolvedSort::Container { op, subsort } => match related_container(op, direction) {
+            InferSort::Resolved(resolved) => match interner.get(resolved).clone() {
+                ResolvedSort::Primitive(sort) => Some(
+                    related_numbers(sort, direction)
+                        .into_iter()
+                        .map(|sort| {
+                            let resolved = interner.primitive(sort);
+                            self.resolved_node(resolved)
+                        })
+                        .collect(),
+                ),
+                ResolvedSort::Container { op, subsort } => Some(match related_container(op, direction) {
                     Some(op) => {
                         let resolved = interner.generic(op, subsort);
                         vec![self.resolved_node(resolved)]
                     }
                     None => Vec::new(),
-                },
-                _ => Vec::new(),
-            }),
+                }),
+                // A function value coerces to a wider range at the same domain by
+                // eta-expansion (see `SortInterner::is_materializable`'s own
+                // `Function` case and `Lowering::coerce`'s matching wrapper), so the
+                // range widens/narrows exactly like any other position; the domain
+                // is left fixed here (unlike `partial_cmp`'s fully general
+                // contravariant comparison) since that is the shape `coerce` builds.
+                ResolvedSort::Function { domain, range } => {
+                    let range_node = self.resolved_node(range);
+                    let related_ranges = self
+                        .strict_related_sorts(interner, range_node, direction)
+                        .expect("a fully resolved range is always enumerable");
+                    let domain_nodes: Vec<InferSortId> = domain.iter().map(|&d| self.resolved_node(d)).collect();
+                    Some(
+                        related_ranges
+                            .into_iter()
+                            .map(|related_range| self.function(domain_nodes.clone(), related_range))
+                            .collect(),
+                    )
+                }
+                _ => Some(Vec::new()),
+            },
             InferSort::Generic { op, subsort } => Some(match related_container(op, direction) {
                 Some(op) => vec![self.generic(op, subsort)],
                 None => Vec::new(),
             }),
-            InferSort::Function { .. } => Some(Vec::new()),
+            InferSort::Function { domain, range } => {
+                let related_ranges = self.strict_related_sorts(interner, range, direction)?;
+                Some(
+                    related_ranges
+                        .into_iter()
+                        .map(|related_range| self.function(domain.clone(), related_range))
+                        .collect(),
+                )
+            }
         }
     }
 

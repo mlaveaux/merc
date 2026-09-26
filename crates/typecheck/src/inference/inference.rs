@@ -1193,7 +1193,17 @@ impl<'a> ConstraintGenerator<'a> {
             }
             DataExprKind::Lambda { variables, body } => {
                 // The result is a function from the bound variables' declared
-                // sorts to the body's sort.
+                // sorts to the body's sort, used directly with no widening
+                // indirection of its own: unlike an `Application`'s
+                // arguments above, a lambda's range doesn't need one,
+                // because a use site needing it wider (a `{ .. }` literal's
+                // `FSet`/`FBag` upcasting to `Set`/`Bag`, a `Nat` body
+                // upcasting to `Int`, a named function reference upcasting
+                // its own range, ...) is already covered uniformly by
+                // `Unifier::strict_related_sorts`'s `Function` case, which
+                // widens a whole function sort covariantly in its range and
+                // relies on `Lowering::coerce`'s matching `(Function,
+                // Function)` case (an eta-expansion) to materialize it.
                 let function_sort = self.with_binder_scope(variables, |this, sorts| {
                     let body_sort = this.visit(body)?;
                     let parameters = sorts.iter().map(|&sort| this.unifier.resolved_node(sort)).collect();

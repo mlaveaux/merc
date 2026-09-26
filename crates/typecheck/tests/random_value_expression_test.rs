@@ -11,9 +11,6 @@ use merc_utilities::random_test;
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-#[ignore = "known bug: Lambda-body widening is unfixed (2 attempted fixes reverted for concrete \
-            regressions), so any generated Function-sorted value whose body needs widening \
-            fails; see review/typecheck-lambda-and-join-widening-bugs.md"]
 fn random_value_expression_type_checks_for_every_generated_sort() {
     random_test(200, |rng| {
         let spec = random_data_specification(rng, 6, 3);

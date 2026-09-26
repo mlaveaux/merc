@@ -23,7 +23,6 @@ use crate::SortExpressionKind;
 use crate::UntypedPbes;
 use crate::random_boolean_data_expression;
 use crate::random_data_specification;
-use crate::random_integer_data_expression;
 use crate::random_value_expression;
 
 const PRED_INTS: &[&str] = &["m", "n"];
@@ -164,20 +163,17 @@ fn random_leaf<R: Rng>(rng: &mut R, freevars: &[IdDecl], config: &PbesGenConfig,
     }
 }
 
-/// Generates a value for a predicate-variable parameter of the given sort: the existing
-/// Bool/integer generators (which pick among comparisons/arithmetic over already-typed free
-/// variables) for those sorts, [`random_value_expression`] for anything richer.
+/// Generates a value for a predicate-variable parameter of the given sort. Delegates to
+/// [`random_value_expression`] uniformly: unlike calling `random_integer_data_expression`
+/// directly, it keeps a `Pos`/`Nat` target well-sorted (that generator's `Subtract` can produce
+/// `0` or go negative, neither of which is a valid `Pos`/`Nat` value on its own).
 fn random_param_value<R: Rng>(
     rng: &mut R,
     sort: &SortExpression,
     freevars: &[IdDecl],
     sort_decls: &[SortDecl],
 ) -> DataExpr {
-    match &sort.node {
-        SortExpressionKind::Simple(Sort::Bool) => random_boolean_data_expression(rng, freevars),
-        SortExpressionKind::Simple(Sort::Pos | Sort::Nat | Sort::Int) => random_integer_data_expression(rng, freevars),
-        _ => random_value_expression(rng, sort_decls, sort, freevars, 2),
-    }
+    random_value_expression(rng, sort_decls, sort, freevars, 2)
 }
 
 /// Generates a random PBES expression with the given parameters.

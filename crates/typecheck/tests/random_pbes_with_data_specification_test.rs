@@ -12,9 +12,6 @@ use merc_utilities::random_test;
 
 #[test]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
-#[ignore = "known bug: Lambda-body widening is unfixed, so a Function-sorted parameter whose \
-            lambda body needs widening (e.g. a Bag literal) fails; see \
-            review/typecheck-lambda-and-join-widening-bugs.md"]
 fn random_pbes_with_data_specification_type_checks() {
     random_test(200, |rng| {
         let use_quantifiers = rng.random_bool(0.5);
