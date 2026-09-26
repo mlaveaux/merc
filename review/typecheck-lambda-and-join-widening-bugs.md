@@ -101,17 +101,24 @@ produce `0` or a `Subtract`, neither of which is a valid `Pos` value, and a
 where `m: Nat` naturally has sort `Int`, not `Nat`) -- the exact same hazard
 `random_value_expression`'s own `Pos`/`Nat` cases already guard against.
 Fixed by having `random_param_value` delegate to `random_value_expression`
-uniformly instead of special-casing the three numeric sorts.
+uniformly instead of special-casing the three numeric sorts. The same latent
+issue existed in `crates/syntax/src/random_lps.rs`'s process-variable
+parameter values (there was no fuzz test exercising it before this session,
+only a print/parse round-trip); fixed the same way.
 
 ## Practical impact
 
 `crates/syntax/src/random_value_expression.rs` (a general random-value
-generator for an arbitrary declared sort) and `random_pbes_with_data_specification`
-now both generate `Function`-sorted values (lambdas) freely and type-check
-cleanly; their fuzz tests (`random_value_expression_test.rs`,
-`random_pbes_with_data_specification_test.rs`) run unconditionally (no
-`#[ignore]`). Permanent regression coverage for finding 1 and its
-container/list-nesting variants lives in `crates/typecheck/tests/inference_test.rs`
+generator for an arbitrary declared sort), `random_pbes_with_data_specification`,
+`random_pres_with_data_specification`, and
+`make_process_specification_with_data_specification` all generate
+`Function`-sorted values (lambdas) freely and type-check cleanly; their fuzz
+tests (`random_value_expression_test.rs`,
+`random_pbes_with_data_specification_test.rs`,
+`random_pres_with_data_specification_test.rs`,
+`random_process_specification_test.rs`) run unconditionally (no `#[ignore]`).
+Permanent regression coverage for finding 1 and its container/list-nesting
+variants lives in `crates/typecheck/tests/inference_test.rs`
 (`test_lambda_body_widens_a_finite_container_literal`,
 `test_lambda_body_widens_a_primitive`,
 `test_function_sorted_list_element_widens_its_lambda_body`).

@@ -8,6 +8,7 @@ use crate::ActDecl;
 use crate::ActionName;
 use crate::Assignment;
 use crate::CommExpr;
+use crate::DataExpr;
 use crate::DataExprBinaryOp;
 use crate::DataExprKind;
 use crate::IdDecl;
@@ -18,11 +19,13 @@ use crate::ProcessExpr;
 use crate::ProcessExprKind;
 use crate::Rename;
 use crate::Sort;
+use crate::SortDecl;
 use crate::SortExpressionKind;
 use crate::UntypedDataSpecification;
 use crate::UntypedProcessSpecification;
 use crate::random_boolean_data_expression;
-use crate::random_integer_data_expression;
+use crate::random_data_specification;
+use crate::random_value_expression;
 use crate::respan;
 
 /// Generates a random linear process specification as an AST.
@@ -151,16 +154,17 @@ fn id_decl(name: &str, sort: Sort) -> IdDecl {
     )
 }
 
-fn is_bool(decl: &IdDecl) -> bool {
-    matches!(&decl.sort.node, SortExpressionKind::Simple(Sort::Bool))
-}
-
 struct ProcVar {
     name: String,
     params: Vec<IdDecl>,
 }
 
-fn random_proc_var<R: Rng>(rng: &mut R, index: usize, use_integers: bool) -> ProcVar {
+/// Generates a process variable's parameter list: 0-2 classic `Bool`/`Nat` parameters (as
+/// [`make_process_specification`] always has), plus, when `sort_decls` is non-empty, one
+/// additional parameter typed with a random declared sort -- exercising the type checker on
+/// struct/container/function parameter sorts that plain [`make_process_specification`] never
+/// generates.
+fn random_proc_var<R: Rng>(rng: &mut R, index: usize, use_integers: bool, sort_decls: &[SortDecl]) -> ProcVar {
     let size = rng.random_range(0..=2usize);
     let mut pool: Vec<IdDecl> = vec![id_decl("b", Sort::Bool), id_decl("c", Sort::Bool)];
     if use_integers {
@@ -175,23 +179,40 @@ fn random_proc_var<R: Rng>(rng: &mut R, index: usize, use_integers: bool) -> Pro
         let idx = rng.random_range(0..pool.len());
         params.push(pool.remove(idx));
     }
+
+    if let Some(decl) = sort_decls.choose(rng) {
+        let sort_ref = SortExpressionKind::Reference(decl.identifier.clone()).into();
+        params.push(IdDecl::new(format!("rich{index}"), sort_ref, Span::default()));
+    }
+
     ProcVar {
         name: PROC_NAMES[index].to_string(),
         params,
     }
 }
 
-fn random_process_instance<R: Rng>(rng: &mut R, pv: &ProcVar, freevars: &[IdDecl]) -> ProcessExpr {
+/// Generates a value for a process-variable parameter of the given declared sort. Delegates to
+/// [`random_value_expression`] uniformly: unlike calling `random_integer_data_expression` directly
+/// for a `Nat` parameter, it keeps the value well-sorted (that generator's `Subtract` can go
+/// negative, which is not a valid `Nat` value on its own).
+fn random_param_value<R: Rng>(rng: &mut R, param: &IdDecl, freevars: &[IdDecl], sort_decls: &[SortDecl]) -> DataExpr {
+    random_value_expression(rng, sort_decls, &param.sort, freevars, 2)
+}
+
+fn random_process_instance<R: Rng>(
+    rng: &mut R,
+    pv: &ProcVar,
+    freevars: &[IdDecl],
+    sort_decls: &[SortDecl],
+) -> ProcessExpr {
     let assignments = pv
         .params
         .iter()
         .map(|p| {
-            let expr = if is_bool(p) {
-                random_boolean_data_expression(rng, freevars)
-            } else {
-                random_integer_data_expression(rng, freevars)
-            };
-            Assignment::new(p.identifier.node.clone(), expr)
+            Assignment::new(
+                p.identifier.node.clone(),
+                random_param_value(rng, p, freevars, sort_decls),
+            )
         })
         .collect();
     ProcessExprKind::Id(respan(Span::default(), pv.name.clone()), assignments).into()
@@ -202,6 +223,7 @@ fn random_leaf<R: Rng>(
     freevars: &[IdDecl],
     actions: &[&str],
     proc_vars: &[ProcVar],
+    sort_decls: &[SortDecl],
     is_guarded: bool,
 ) -> ProcessExpr {
     // Build a weighted table: Action has high weight, Delta/Tau low, ProcessInstance medium.
@@ -227,7 +249,7 @@ fn random_leaf<R: Rng>(
         .into(),
         3 => {
             let pv = proc_vars.choose(rng).expect("proc_vars is non-empty");
-            random_process_instance(rng, pv, freevars)
+            random_process_instance(rng, pv, freevars, sort_decls)
         }
         _ => unreachable!(),
     }
@@ -239,17 +261,18 @@ fn random_process_expr<R: Rng>(
     freevars: &[IdDecl],
     actions: &[&str],
     proc_vars: &[ProcVar],
+    sort_decls: &[SortDecl],
     is_guarded: bool,
 ) -> ProcessExpr {
     if depth == 0 {
-        return random_leaf(rng, freevars, actions, proc_vars, is_guarded);
+        return random_leaf(rng, freevars, actions, proc_vars, sort_decls, is_guarded);
     }
 
     // op: 0=leaf, 1=sum, 2=if-then, 3=if-then-else, 4=choice, 5=seq
     // seq is over-represented to bias toward action-guarded continuations.
     let op_table: &[usize] = &[0, 0, 1, 2, 3, 4, 4, 5, 5, 5];
     match *op_table.choose(rng).expect("op_table is a non-empty constant") {
-        0 => random_leaf(rng, freevars, actions, proc_vars, is_guarded),
+        0 => random_leaf(rng, freevars, actions, proc_vars, sort_decls, is_guarded),
         1 => {
             // Sum: bind a fresh variable chosen from SUM_VARS to avoid capture.
             let var_name = SUM_VARS
@@ -257,13 +280,14 @@ fn random_process_expr<R: Rng>(
                 .find(|&&n| !freevars.iter().any(|v| v.identifier.node == n))
                 .copied();
             match var_name {
-                None => random_leaf(rng, freevars, actions, proc_vars, is_guarded),
+                None => random_leaf(rng, freevars, actions, proc_vars, sort_decls, is_guarded),
                 Some(name) => {
                     let sort = if rng.random_bool(0.5) { Sort::Bool } else { Sort::Nat };
                     let var = id_decl(name, sort);
                     let mut new_vars = freevars.to_vec();
                     new_vars.push(var.clone());
-                    let body = random_process_expr(rng, depth - 1, &new_vars, actions, proc_vars, is_guarded);
+                    let body =
+                        random_process_expr(rng, depth - 1, &new_vars, actions, proc_vars, sort_decls, is_guarded);
                     ProcessExprKind::Sum {
                         variables: vec![var],
                         operand: Box::new(body),
@@ -275,7 +299,7 @@ fn random_process_expr<R: Rng>(
         2 => {
             // IfThen: condition -> body
             let cond = random_boolean_data_expression(rng, freevars);
-            let body = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, is_guarded);
+            let body = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, is_guarded);
             ProcessExprKind::Condition {
                 condition: cond,
                 then: Box::new(body),
@@ -286,8 +310,8 @@ fn random_process_expr<R: Rng>(
         3 => {
             // IfThenElse: condition -> x <> y
             let cond = random_boolean_data_expression(rng, freevars);
-            let then = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, is_guarded);
-            let else_ = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, is_guarded);
+            let then = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, is_guarded);
+            let else_ = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, is_guarded);
             ProcessExprKind::Condition {
                 condition: cond,
                 then: Box::new(then),
@@ -297,8 +321,8 @@ fn random_process_expr<R: Rng>(
         }
         4 => {
             // Choice: lhs + rhs (each branch must independently satisfy guardedness)
-            let lhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, is_guarded);
-            let rhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, is_guarded);
+            let lhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, is_guarded);
+            let rhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, is_guarded);
             ProcessExprKind::Binary {
                 op: ProcExprBinaryOp::Choice,
                 lhs: Box::new(lhs),
@@ -311,7 +335,7 @@ fn random_process_expr<R: Rng>(
             // The explicit action satisfies the guard, so the rhs may reference proc instances.
             let action = (*actions.choose(rng).expect("actions is non-empty")).to_string();
             let lhs = ProcessExprKind::Action(respan(Span::default(), action), Vec::new()).into();
-            let rhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, false);
+            let rhs = random_process_expr(rng, depth - 1, freevars, actions, proc_vars, sort_decls, false);
             ProcessExprKind::Binary {
                 op: ProcExprBinaryOp::Sequence,
                 lhs: Box::new(lhs),
@@ -446,9 +470,42 @@ pub fn make_process_specification<R: Rng>(
     depth: usize,
     use_integers: bool,
 ) -> UntypedProcessSpecification {
-    let count = equation_count.min(PROC_NAMES.len());
-    let proc_vars: Vec<ProcVar> = (0..count).map(|i| random_proc_var(rng, i, use_integers)).collect();
+    let proc_vars: Vec<ProcVar> = (0..equation_count.min(PROC_NAMES.len()))
+        .map(|i| random_proc_var(rng, i, use_integers, &[]))
+        .collect();
+    make_process_specification_from_proc_vars(rng, proc_vars, depth, &[])
+}
 
+/// As [`make_process_specification`], but process variables additionally carry one parameter typed
+/// with a sort from a freshly generated [`crate::random_data_specification`] (a struct, container,
+/// or function sort), exercising the type checker on richer parameter sorts than plain
+/// [`make_process_specification`] ever produces. `sort_count`/`max_sort_depth` control the
+/// generated data specification, exactly as in `random_data_specification`.
+pub fn make_process_specification_with_data_specification<R: Rng>(
+    rng: &mut R,
+    sort_count: usize,
+    max_sort_depth: usize,
+    equation_count: usize,
+    depth: usize,
+    use_integers: bool,
+) -> UntypedProcessSpecification {
+    let data_specification = random_data_specification(rng, sort_count, max_sort_depth);
+    let count = equation_count.min(PROC_NAMES.len());
+    let proc_vars: Vec<ProcVar> = (0..count)
+        .map(|i| random_proc_var(rng, i, use_integers, &data_specification.sort_declarations))
+        .collect();
+    let mut spec =
+        make_process_specification_from_proc_vars(rng, proc_vars, depth, &data_specification.sort_declarations);
+    spec.data_specification = data_specification;
+    spec
+}
+
+fn make_process_specification_from_proc_vars<R: Rng>(
+    rng: &mut R,
+    proc_vars: Vec<ProcVar>,
+    depth: usize,
+    sort_decls: &[SortDecl],
+) -> UntypedProcessSpecification {
     let action_declarations = ACTIONS
         .iter()
         .map(|&name| ActDecl {
@@ -461,7 +518,7 @@ pub fn make_process_specification<R: Rng>(
     let process_declarations: Vec<ProcDecl> = proc_vars
         .iter()
         .map(|pv| {
-            let body = random_process_expr(rng, depth, &pv.params, ACTIONS, &proc_vars, true);
+            let body = random_process_expr(rng, depth, &pv.params, ACTIONS, &proc_vars, sort_decls, true);
             ProcDecl {
                 identifier: respan(Span::default(), pv.name.clone()),
                 params: pv.params.clone(),
@@ -477,14 +534,7 @@ pub fn make_process_specification<R: Rng>(
             let assignments = pv
                 .params
                 .iter()
-                .map(|p| {
-                    let expr = if is_bool(p) {
-                        DataExprKind::Bool(rng.random_bool(0.5)).into()
-                    } else {
-                        DataExprKind::Number(rng.random_range(0..=2u32).to_string()).into()
-                    };
-                    Assignment::new(p.identifier.node.clone(), expr)
-                })
+                .map(|p| Assignment::new(p.identifier.node.clone(), random_param_value(rng, p, &[], sort_decls)))
                 .collect();
             ProcessExprKind::Id(respan(Span::default(), pv.name.clone()), assignments).into()
         })

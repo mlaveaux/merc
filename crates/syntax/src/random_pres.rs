@@ -7,7 +7,6 @@ use merc_utilities::Span;
 use crate::Bound;
 use crate::Condition;
 use crate::DataExpr;
-use crate::DataExprKind;
 use crate::Eq;
 use crate::FixedPointOperator;
 use crate::IdDecl;
@@ -18,9 +17,13 @@ use crate::PresExprKind;
 use crate::PropVarDecl;
 use crate::PropVarInst;
 use crate::Sort;
+use crate::SortDecl;
+use crate::SortExpression;
 use crate::SortExpressionKind;
 use crate::UntypedPres;
+use crate::random_data_specification;
 use crate::random_integer_data_expression;
+use crate::random_value_expression;
 
 const PRED_INTS: &[&str] = &["m", "n"];
 const QUANT_INTS: &[&str] = &["t", "u", "v", "w"];
@@ -36,6 +39,10 @@ struct PresGenConfig<'a> {
     /// Probability that a leaf is a predicate variable instantiation rather than a `val(...)`
     /// atom.
     propvar_probability: f64,
+
+    /// The declared sorts of a random data specification a predicate variable's rich (non-`Int`)
+    /// parameters, if any, are drawn from -- empty for plain [`random_pres`].
+    sort_decls: &'a [SortDecl],
 }
 
 /// Generates a random PRES, akin to [`crate::random_pbes`]. Unlike a PBES, every `PresExpr`
@@ -54,8 +61,49 @@ pub fn random_pres<R: Rng>(
     propvar_count: usize,
     use_bounds: bool,
 ) -> UntypedPres {
-    let pred_vars: Vec<PredVar> = (0..equation_count).map(|i| make_pred_var(rng, i)).collect();
+    let pred_vars: Vec<PredVar> = (0..equation_count).map(|i| make_pred_var(rng, i, &[])).collect();
+    random_pres_from_pred_vars(rng, pred_vars, atom_count, propvar_count, use_bounds, &[])
+}
 
+/// Generates a random PRES whose predicate variables additionally carry one parameter typed with
+/// a sort from a freshly generated [`crate::random_data_specification`] (a struct, container, or
+/// function sort), exercising the type checker on richer parameter sorts than plain
+/// [`random_pres`] ever produces. `sort_count`/`max_sort_depth` control the generated data
+/// specification, exactly as in `random_data_specification`.
+#[allow(clippy::too_many_arguments)] // each parameter tunes an independent generator knob
+pub fn random_pres_with_data_specification<R: Rng>(
+    rng: &mut R,
+    sort_count: usize,
+    max_sort_depth: usize,
+    equation_count: usize,
+    atom_count: usize,
+    propvar_count: usize,
+    use_bounds: bool,
+) -> UntypedPres {
+    let data_specification = random_data_specification(rng, sort_count, max_sort_depth);
+    let pred_vars: Vec<PredVar> = (0..equation_count)
+        .map(|i| make_pred_var(rng, i, &data_specification.sort_declarations))
+        .collect();
+    let mut pres = random_pres_from_pred_vars(
+        rng,
+        pred_vars,
+        atom_count,
+        propvar_count,
+        use_bounds,
+        &data_specification.sort_declarations,
+    );
+    pres.data_specification = data_specification;
+    pres
+}
+
+fn random_pres_from_pred_vars<R: Rng>(
+    rng: &mut R,
+    pred_vars: Vec<PredVar>,
+    atom_count: usize,
+    propvar_count: usize,
+    use_bounds: bool,
+    sort_decls: &[SortDecl],
+) -> UntypedPres {
     let total = (atom_count + propvar_count).max(1);
     let propvar_prob = propvar_count as f64 / total as f64;
     let depth = total.ilog2() as usize + 1;
@@ -64,6 +112,7 @@ pub fn random_pres<R: Rng>(
         predicate_vars: &pred_vars,
         use_bounds,
         propvar_probability: propvar_prob,
+        sort_decls,
     };
 
     let mut equations = Vec::new();
@@ -87,7 +136,7 @@ pub fn random_pres<R: Rng>(
     let init_args: Vec<DataExpr> = first
         .params
         .iter()
-        .map(|_| DataExprKind::Number("0".to_string()).into())
+        .map(|(_, sort)| random_param_value(rng, sort, &[], sort_decls))
         .collect();
     let init = PropVarInst::new(first.name.clone(), init_args);
 
@@ -105,11 +154,27 @@ fn random_leaf<R: Rng>(rng: &mut R, freevars: &[IdDecl], config: &PresGenConfig)
         let args = pv
             .params
             .iter()
-            .map(|_| random_integer_data_expression(rng, freevars))
+            .map(|(_, sort)| random_param_value(rng, sort, freevars, config.sort_decls))
             .collect();
         PresExprKind::PropVarInst(PropVarInst::new(pv.name.clone(), args)).into()
     } else {
         PresExprKind::DataValExpr(random_integer_data_expression(rng, freevars)).into()
+    }
+}
+
+/// Generates a value for a predicate-variable parameter of the given sort: the plain integer
+/// generator for `Int` (every classic [`random_pres`] parameter), [`random_value_expression`] for
+/// anything richer -- the same split [`crate::random_pbes`]'s own `random_param_value` uses to
+/// avoid `random_value_expression`'s general-purpose recursion for the common case.
+fn random_param_value<R: Rng>(
+    rng: &mut R,
+    sort: &SortExpression,
+    freevars: &[IdDecl],
+    sort_decls: &[SortDecl],
+) -> DataExpr {
+    match &sort.node {
+        SortExpressionKind::Simple(Sort::Int) => random_integer_data_expression(rng, freevars),
+        _ => random_value_expression(rng, sort_decls, sort, freevars, 2),
     }
 }
 
@@ -232,7 +297,7 @@ fn as_expr_decl(name: &str) -> IdDecl {
 
 struct PredVar {
     name: String,
-    params: Vec<String>,
+    params: Vec<(String, SortExpression)>,
 }
 
 impl PredVar {
@@ -240,17 +305,24 @@ impl PredVar {
         let params = self
             .params
             .iter()
-            .map(|p| IdDecl::new(p.clone(), SortExpressionKind::Simple(Sort::Int).into(), Span::default()))
+            .map(|(name, sort)| IdDecl::new(name.clone(), sort.clone(), Span::default()))
             .collect();
         PropVarDecl::new(self.name.clone(), params)
     }
 
     fn expr_freevars(&self) -> Vec<IdDecl> {
-        self.params.iter().map(|p| as_expr_decl(p)).collect()
+        self.params
+            .iter()
+            .map(|(name, sort)| IdDecl::new(name.clone(), sort.clone(), Span::default()))
+            .collect()
     }
 }
 
-fn make_pred_var<R: Rng>(rng: &mut R, index: usize) -> PredVar {
+/// Generates a predicate variable's parameter list: 0-2 classic `Int` parameters (as
+/// [`random_pres`] always has), plus, when `sort_decls` is non-empty, one additional parameter
+/// typed with a random declared sort -- exercising the type checker on struct/container/function
+/// parameter sorts that plain [`random_pres`] never generates.
+fn make_pred_var<R: Rng>(rng: &mut R, index: usize, sort_decls: &[SortDecl]) -> PredVar {
     let size = rng.random_range(0..=2usize);
     let mut pool: Vec<&str> = PRED_INTS.to_vec();
     let mut params = Vec::new();
@@ -259,8 +331,15 @@ fn make_pred_var<R: Rng>(rng: &mut R, index: usize) -> PredVar {
             break;
         }
         let idx = rng.random_range(0..pool.len());
-        params.push(pool.remove(idx).to_string());
+        let name = pool.remove(idx).to_string();
+        params.push((name, SortExpressionKind::Simple(Sort::Int).into()));
     }
+
+    if let Some(decl) = sort_decls.choose(rng) {
+        let sort_ref = SortExpressionKind::Reference(decl.identifier.clone()).into();
+        params.push((format!("rich{index}"), sort_ref));
+    }
+
     PredVar {
         name: format!("X{index}"),
         params,
