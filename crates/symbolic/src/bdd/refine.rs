@@ -102,14 +102,21 @@ pub fn refine_bisimulation<L: TransitionLabel>(
         .collect::<Vec<_>>();
 
     // We interleave the p, q, p', and q' variables that all represent states (and next states).
+    // The action-label variables must also be listed (even though `set_var_order` does not need
+    // to reorder them relative to each other): `set_var_order` places any variable *not*
+    // mentioned in `order` wherever minimizes adjacent level swaps, which can (and does) insert
+    // an unlisted action variable between two of the p/q/p'/q' variables above, breaking the
+    // "target level exactly one below source" invariant `variable_rename` requires for the
+    // p_to_q/q_to_p_prime/p_prime_to_q_prime substitutions built below.
     manager_ref.with_manager_exclusive(|manager| {
-        let order: Vec<_> = lts
+        let mut order: Vec<_> = lts
             .state_variables()
             .iter()
             .zip(q_variables.iter())
             .zip(lts.next_state_variables().iter().zip(q_prime_variables.iter()))
             .flat_map(|((s, q), (s_prime, q_prime))| [*s, *q, *s_prime, *q_prime])
             .collect();
+        order.extend(lts.action_variables().iter().copied());
 
         oxidd_reorder::set_var_order(manager, &order)
     });
@@ -284,21 +291,19 @@ mod tests {
     fn set_var_order_without_action_vars_breaks_p_q_adjacency() {
         let manager_ref = oxidd::bdd::new_manager(1024, 1024, 1);
 
-        let (s, s_prime, a) = manager_ref
-            .with_manager_exclusive(|manager| {
-                let mut vars = manager
-                    .add_named_vars(["s".to_string(), "s_prime".to_string(), "a".to_string()])
-                    .expect("fresh manager, no duplicate names");
-                (vars.next().unwrap(), vars.next().unwrap(), vars.next().unwrap())
-            });
+        let (s, s_prime, a) = manager_ref.with_manager_exclusive(|manager| {
+            let mut vars = manager
+                .add_named_vars(["s".to_string(), "s_prime".to_string(), "a".to_string()])
+                .expect("fresh manager, no duplicate names");
+            (vars.next().unwrap(), vars.next().unwrap(), vars.next().unwrap())
+        });
 
-        let (q, q_prime) = manager_ref
-            .with_manager_exclusive(|manager| {
-                let mut vars = manager
-                    .add_named_vars(["q".to_string(), "q_prime".to_string()])
-                    .expect("fresh manager, no duplicate names");
-                (vars.next().unwrap(), vars.next().unwrap())
-            });
+        let (q, q_prime) = manager_ref.with_manager_exclusive(|manager| {
+            let mut vars = manager
+                .add_named_vars(["q".to_string(), "q_prime".to_string()])
+                .expect("fresh manager, no duplicate names");
+            (vars.next().unwrap(), vars.next().unwrap())
+        });
 
         // Exactly the `order` construction in `refine_bisimulation`
         // (crates/symbolic/src/bdd/refine.rs:106-112), specialized to one
@@ -307,8 +312,13 @@ mod tests {
         manager_ref.with_manager_exclusive(|manager| oxidd_reorder::set_var_order(manager, &order));
 
         let level_of = |var| manager_ref.with_manager_shared(|manager| manager.var_to_level(var));
-        let (ls, lq, ls_prime, lq_prime, la) =
-            (level_of(s), level_of(q), level_of(s_prime), level_of(q_prime), level_of(a));
+        let (ls, lq, ls_prime, lq_prime, la) = (
+            level_of(s),
+            level_of(q),
+            level_of(s_prime),
+            level_of(q_prime),
+            level_of(a),
+        );
 
         // `variable_rename` (crates/symbolic/src/util.rs) requires each of
         // these three pairs to be *exactly* one level apart, since
@@ -358,8 +368,13 @@ mod tests {
         manager_ref.with_manager_exclusive(|manager| oxidd_reorder::set_var_order(manager, &order));
 
         let level_of = |var| manager_ref.with_manager_shared(|manager| manager.var_to_level(var));
-        let (ls, lq, ls_prime, lq_prime, la) =
-            (level_of(s), level_of(q), level_of(s_prime), level_of(q_prime), level_of(a));
+        let (ls, lq, ls_prime, lq_prime, la) = (
+            level_of(s),
+            level_of(q),
+            level_of(s_prime),
+            level_of(q_prime),
+            level_of(a),
+        );
 
         assert_eq!(lq, ls + 1, "q should be directly below s");
         assert_eq!(ls_prime, lq + 1, "s' should be directly below q");
