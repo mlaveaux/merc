@@ -12,6 +12,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 merc_aterm.workspace = true
 merc_data.workspace = true

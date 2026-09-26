@@ -185,7 +185,16 @@ where
 
         // for every impl -[e]-> impl' do
         for impl_transition in merged_lts.outgoing_transitions(impl_state) {
-            let spec_prime = if weak_transition && merged_lts.is_hidden_label(impl_transition.label) {
+            // Whether this is an impl-side tau step that is unobservable under
+            // weak semantics. Such steps must not be recorded as literal edges
+            // in the counter-example tree: `CounterExample::WeakTrace` and its
+            // relatives document taus as implicit (`<tau*.a0.tau*...>true`),
+            // not as explicit trace entries. Strong trace refinement
+            // (`weak_transition == false`) legitimately treats tau as an
+            // ordinary, observable action, so it is not elided there.
+            let is_unobservable_tau = weak_transition && merged_lts.is_hidden_label(impl_transition.label);
+
+            let spec_prime = if is_unobservable_tau {
                 // spec' := spec if e == tau
                 spec.clone()
             } else {
@@ -229,6 +238,15 @@ where
             );
             if spec_prime.is_empty() {
                 // if spec' = {} then
+                //
+                // An unobservable tau step never leaves `spec_prime` empty: it
+                // is set to `spec.clone()` above, and `spec` is always
+                // non-empty here (the only way a pair with an empty spec
+                // reaches `working` is via this same check returning early).
+                debug_assert!(
+                    !is_unobservable_tau,
+                    "an unobservable tau step must not yield an empty spec'"
+                );
                 failing_trace(impl_state, &spec);
                 let new_edge = counter_example.add_edge(impl_transition.label, ce);
                 return (false, Some(new_edge), None);
@@ -237,10 +255,20 @@ where
             if antichain.insert(impl_transition.to, spec_prime.clone()) {
                 // if antichain_insert(impl,spec') then
                 trace!("Added ({:?}, {:?}) to working", impl_transition.to, spec_prime);
-                let new_edge = counter_example.add_edge(impl_transition.label, ce);
+
+                // Only record a literal edge in the counter-example tree for
+                // observable steps. An unobservable tau step keeps the same
+                // parent `ce`, so it does not appear in the reconstructed
+                // trace, matching taus being implicit in the counter-example
+                // contract (see `is_unobservable_tau` above).
+                let next_ce = if is_unobservable_tau {
+                    ce
+                } else {
+                    counter_example.add_edge(impl_transition.label, ce)
+                };
                 match strategy {
-                    ExplorationStrategy::BFS => working.push_back((impl_transition.to, spec_prime, new_edge)),
-                    ExplorationStrategy::DFS => working.push_front((impl_transition.to, spec_prime, new_edge)),
+                    ExplorationStrategy::BFS => working.push_back((impl_transition.to, spec_prime, next_ce)),
+                    ExplorationStrategy::DFS => working.push_front((impl_transition.to, spec_prime, next_ce)),
                 }
             }
         }
