@@ -36,6 +36,7 @@ use merc_syntax::UntypedDataSpecification;
 use crate::BUILTIN_SCHEME_TEMPLATE;
 use crate::BUILTIN_SCHEME_TEMPLATE_TEXT;
 use crate::EquationTyping;
+use crate::ExprId;
 use crate::NameTarget;
 use crate::NumberEncoding;
 use crate::ResolvedSort;
@@ -519,14 +520,38 @@ pub(crate) fn extend_system_with_inferred_sorts(
         |_, ()| {},
     );
 
-    // Every container sort that shows up as the inferred sort of some
-    // expression node in a well-typed equation, not already covered above.
+    // Every container *or function* sort that shows up as the inferred sort
+    // of some expression node in a well-typed equation, not already covered
+    // above -- a function sort is included here too (not just containers)
+    // because a lambda's own result sort is never spelled out by any
+    // `map`/`cons` declaration or function-sort binder, yet function-update
+    // syntax (`expr[key -> value]`) accepts any function-sorted `expr`, not
+    // just a named mapping (`system_check.rs`'s `FunctionUpdate` arm recurses
+    // into an arbitrary sub-expression with no such restriction). `standard_sort`
+    // (the generator below) already handles both container and function
+    // sorts uniformly, and `container_seen` already contains any function
+    // sort reachable from a declared signature (from the
+    // `ContainersAndFunctions` collection above), so this only adds the ones
+    // that never appear in any declaration at all.
+    //
+    // A node present in `typing.names` is excluded: it is an `Id`/`Resolved`
+    // reference, so its own sort is either a declared `map`/`cons`/`var`
+    // overload (`NameTarget::Op`/`Variable`, already reachable from a
+    // declaration and hence already covered above) or a builtin comparison's
+    // per-use-site operator type (`NameTarget::Builtin`, e.g. `==`'s own
+    // `(S # S) -> Bool`) -- the latter is never itself a function *value*
+    // that function-update syntax could apply to, only the callee position of
+    // an `Application`, so including it would generate a batch of
+    // `@func_update` machinery nothing in the specification can ever produce
+    // a stuck term without (and can name an arity `function_update_arities`
+    // never pre-checked, panicking during instantiation).
     let mut container_worklist = Vec::new();
     for typing in ctx.equation_typing.values().filter_map(|typing| typing.as_ref().ok()) {
-        for &id in &typing.sorts {
-            if matches!(ctx.sorts.get(id), ResolvedSort::Container { .. })
-                && let Some(sort) = resolved_sort_to_syntax(ctx, spec, id)
-            {
+        for (index, &id) in typing.sorts.iter().enumerate() {
+            let node = ExprId::new(index);
+            let wanted = matches!(ctx.sorts.get(id), ResolvedSort::Container { .. })
+                || (matches!(ctx.sorts.get(id), ResolvedSort::Function { .. }) && !typing.names.contains_key(&node));
+            if wanted && let Some(sort) = resolved_sort_to_syntax(ctx, spec, id) {
                 container_worklist.push(sort);
             }
         }
