@@ -25,7 +25,32 @@ available), so it is reported as PLAUSIBLE, backed by cross-compiled/
 type-checked evidence and independent confirmation that other real-world
 Rust/C++ projects hit and fixed the identical pattern.
 
-## Finding 1 — `init_console` clobbers a caller's redirected stdout/stderr — PLAUSIBLE, Medium
+## Finding 1 — `init_console` clobbers a caller's redirected stdout/stderr — PLAUSIBLE, Medium (fix applied, awaiting Windows CI confirmation)
+
+**Status update (implementor pass).** A fix is applied at
+`crates/tools/src/console.rs`: `init_console` now also checks
+`GetStdHandle(STD_OUTPUT_HANDLE)`/`GetStdHandle(STD_ERROR_HANDLE)` and skips
+`AttachConsole`/`AllocConsole` whenever either already holds a real (non-null,
+non-`INVALID_HANDLE_VALUE`) handle, per the "direction of a fix" below. The
+decision itself was pulled out into a small platform-independent function,
+`should_attach_or_allocate_console(has_console_window, stdout_valid,
+stderr_valid) -> bool`, so it has native unit tests
+(`crates/tools/src/console.rs`, `mod tests`) covering all the relevant
+boolean combinations, including the reviewer's exact failure scenario
+(`has_console_window = false`, `stdout_valid = true` ⇒ must not attach), and
+those pass in this sandbox. The fix also compiles clean, lint-clean, and
+format-clean for the real Windows target
+(`cargo check -p merc_tools --tests --target x86_64-pc-windows-gnu`,
+`cargo clippy -p merc_tools --all-targets --target x86_64-pc-windows-gnu`,
+`cargo +nightly fmt -p merc_tools -- --check`), and a manual trace of the
+existing `crates/tools/tests/console_windows.rs` regression test against the
+new code confirms it takes the "leave stdio alone" branch. This status is
+kept at **PLAUSIBLE** rather than raised to FIXED because none of that
+exercises the real Win32 APIs (`GetStdHandle`, `SetStdHandle`,
+`AttachConsole`) at runtime — this sandbox still has no Windows runtime or
+Wine — so `console_windows.rs` itself has still never actually been run.
+Confirming FIXED requires a real Windows run of
+`cargo test -p merc_tools --test console_windows`.
 
 `crates/tools/src/console.rs:29-64` (`init_console`)
 
