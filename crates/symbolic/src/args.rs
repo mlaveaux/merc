@@ -38,6 +38,59 @@ pub const LDD_CACHE_CAPACITY: usize = 1 << 22;
 #[cfg(feature = "clap")]
 const DEFAULT_OXIDD_CAPACITY_GIB: u32 = 1;
 
+/// Bytes per inner-node table entry for the LDD manager (`oxidd::ldd::new_manager`'s
+/// `inner_node_capacity`), used to convert a user-requested number of gigabytes into the raw
+/// entry count the manager actually allocates.
+///
+/// Derived from oxidd's (`oxidd-manager-index`) node layout for an LDD node,
+/// `NodeWithLevel<ET = (), V = u32, ARITY = 2>`: `rc: AtomicU32` (4 bytes) +
+/// `level: AtomicLevelNo` (`AtomicU32`, 4 bytes) + `children: UnsafeCell<[Edge; 2]>` (`Edge` is a
+/// `#[repr(transparent)]` `u32`, so 2 * 4 = 8 bytes) + `value: u32` (LDD's node value type, 4
+/// bytes) = 20 bytes, with no padding since every field is 4-byte aligned. Confirmed empirically:
+/// requesting `--oxidd-capacity 1` (the default) makes the manager's out-of-memory abort report an
+/// allocation of exactly `20 * (1 << 30)` = 21474836480 bytes before this fix.
+#[cfg(feature = "clap")]
+const LDD_NODE_ENTRY_BYTES: usize = 20;
+
+/// Bytes per apply-cache entry for the LDD manager (`oxidd::ldd::new_manager`'s
+/// `apply_cache_capacity`).
+///
+/// Derived from oxidd's (`oxidd-cache`) direct-mapped cache entry layout,
+/// `Entry<M, LDDOp, ENTRY_CAP = 5>` (LDD's `cache_entry_capacity` is 5): a 1-byte mutex + two
+/// 1-byte occupancy counters + a 1-byte `LDDOp` (`#[repr(u8)]`) pack into 4 bytes, followed by
+/// `5 * size_of::<Datum<Edge>>()` = `5 * 4` = 20 bytes of operand/value storage, for 24 bytes
+/// total. Confirmed empirically: requesting the default cache capacity makes the manager's
+/// out-of-memory abort report an allocation of exactly `24 * (1 << 30)` = 25769803776 bytes before
+/// this fix.
+#[cfg(feature = "clap")]
+const LDD_CACHE_ENTRY_BYTES: usize = 24;
+
+/// Bytes per inner-node table entry for the BDD manager (`oxidd::bdd::new_manager`'s
+/// `inner_node_capacity`).
+///
+/// Same layout as [`LDD_NODE_ENTRY_BYTES`], but a BDD node's value type is `()` (BDD nodes carry
+/// no extra value, unlike LDD's `u32`), so there is no 4-byte `value` field: 4 + 4 + 8 + 0 = 16
+/// bytes.
+#[cfg(feature = "clap")]
+const BDD_NODE_ENTRY_BYTES: usize = 16;
+
+/// Bytes per apply-cache entry for the BDD manager (`oxidd::bdd::new_manager`'s
+/// `apply_cache_capacity`).
+///
+/// Same layout as [`LDD_CACHE_ENTRY_BYTES`], but BDD's `cache_entry_capacity` is 4, not 5:
+/// 4 + 4 * 4 = 20 bytes.
+#[cfg(feature = "clap")]
+const BDD_CACHE_ENTRY_BYTES: usize = 20;
+
+/// Converts a number of gigabytes (as `1 << 30` bytes) into the number of fixed-size entries of
+/// `bytes_per_entry` bytes that fit in that many bytes, so that a manager sized with the result
+/// actually allocates approximately `gib` gigabytes of memory for that table, rather than `gib *
+/// (1 << 30)` raw entries.
+#[cfg(feature = "clap")]
+fn gib_to_entries(gib: u32, bytes_per_entry: usize) -> usize {
+    (((gib as u64) << 30) / bytes_per_entry as u64) as usize
+}
+
 /// Command-line arguments for initialising an Oxidd decision diagram manager, shared by every tool
 /// (`merc-sym`, `merc-lps`, `merc-pbes`) that builds a BDD or LDD manager from CLI input.
 #[cfg(feature = "clap")]
@@ -61,23 +114,34 @@ pub struct OxiddArgs {
 impl OxiddArgs {
     /// Initializes an Oxidd BDD manager based on these arguments.
     pub fn init_bdd_manager(&self) -> oxidd::bdd::BDDManagerRef {
-        oxidd::bdd::new_manager(self.node_capacity(), self.cache_capacity(), self.workers)
+        oxidd::bdd::new_manager(
+            self.node_capacity(BDD_NODE_ENTRY_BYTES),
+            self.cache_capacity(BDD_CACHE_ENTRY_BYTES),
+            self.workers,
+        )
     }
 
     /// Initializes an Oxidd LDD manager based on these arguments.
     pub fn init_ldd_manager(&self) -> oxidd::ldd::LDDManagerRef {
-        oxidd::ldd::new_manager(self.node_capacity(), self.cache_capacity(), self.workers)
+        oxidd::ldd::new_manager(
+            self.node_capacity(LDD_NODE_ENTRY_BYTES),
+            self.cache_capacity(LDD_CACHE_ENTRY_BYTES),
+            self.workers,
+        )
     }
 
-    /// The configured inner-node capacity, converted from gigabytes to a node count.
-    fn node_capacity(&self) -> usize {
-        (self.capacity_gib as usize) << 30
+    /// The configured inner-node capacity, converted from gigabytes to a node count using the
+    /// given manager's per-entry byte size.
+    fn node_capacity(&self, bytes_per_entry: usize) -> usize {
+        gib_to_entries(self.capacity_gib, bytes_per_entry)
     }
 
-    /// The configured apply cache capacity, converted from gigabytes, defaulting to the node capacity.
-    fn cache_capacity(&self) -> usize {
-        self.cache_capacity_gib
-            .map_or_else(|| self.node_capacity(), |gib| (gib as usize) << 30)
+    /// The configured apply cache capacity, converted from gigabytes using the given manager's
+    /// per-entry byte size, defaulting to the same number of gigabytes as `--oxidd-capacity` when
+    /// `--oxidd-cache-capacity` is omitted.
+    fn cache_capacity(&self, bytes_per_entry: usize) -> usize {
+        let gib = self.cache_capacity_gib.unwrap_or(self.capacity_gib);
+        gib_to_entries(gib, bytes_per_entry)
     }
 }
 

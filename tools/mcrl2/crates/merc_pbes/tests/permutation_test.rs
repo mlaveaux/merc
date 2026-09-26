@@ -126,3 +126,37 @@ fn test_random_mapping_notation() {
         );
     })
 }
+
+/// `from_cycle_notation` must not choke on a singleton cycle such as `(5)`,
+/// which is ordinary permutation-cycle notation for "5 is a fixed point" and
+/// is exactly the kind of string a user passes on the `merc-pbes` CLI's
+/// `--generators` flag (see `parse_generators` in `tools/mcrl2/pbes/src/main.rs`,
+/// which calls `Permutation::from_cycle_notation` directly on unvalidated
+/// user input). `from_cycle_notation` builds a `(5, 5)` identity pair for a
+/// singleton cycle and passes it straight to `Permutation::from_mapping`,
+/// whose `debug_assert!` requires the mapping to contain *no* identity
+/// pairs -- so in a debug build this panics instead of returning either an
+/// identity-free `Permutation` or a parse error.
+#[test]
+fn from_cycle_notation_accepts_singleton_cycle_without_panicking() {
+    let permutation = Permutation::from_cycle_notation("(5)").expect("singleton cycle should parse");
+    assert!(
+        permutation.is_identity(),
+        "a singleton cycle names a fixed point and must produce the identity permutation"
+    );
+}
+
+/// Same defect as `from_cycle_notation_accepts_singleton_cycle_without_panicking`, reached
+/// through the other public string parser: `"[5->5]"` is a syntactically valid (if trivial)
+/// mapping-notation permutation naming a fixed point, and `--generators` accepts either
+/// notation (see `parse_generators` in `tools/mcrl2/pbes/src/main.rs`). `is_valid_permutation`
+/// only checks bijectivity, so it does not reject the identity pair either, and the same
+/// `debug_assert!` in `Permutation::from_mapping` panics.
+#[test]
+fn from_mapping_notation_accepts_identity_pair_without_panicking() {
+    let permutation = Permutation::from_mapping_notation("[5->5]").expect("identity pair should parse");
+    assert!(
+        permutation.is_identity(),
+        "a [5->5] pair names a fixed point and must produce the identity permutation"
+    );
+}

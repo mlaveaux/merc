@@ -14,6 +14,20 @@ env_logger.workspace = true
 log.workspace = true
 which.workspace = true
 
-# Only used by the Windows console helpers in `console.rs`.
+# Only used by the Windows console helpers in `console.rs`. `processenv`/`winbase` give
+# `GetStdHandle`/`STD_OUTPUT_HANDLE`/`STD_ERROR_HANDLE`, and `handleapi` gives
+# `INVALID_HANDLE_VALUE`, all needed to check whether stdio is already redirected before
+# attaching or allocating a console (see `init_console`).
 [target.'cfg(windows)'.dependencies]
-winapi.workspace = true
+winapi = { workspace = true, features = [
+    "processenv",
+    "winbase",
+    "handleapi",
+    "winnt",
+    "minwindef",
+] }
+
+# Extra winapi modules (SetStdHandle) needed only by the `console_windows` regression test
+# in `tests/`, not by any production code in this crate.
+[target.'cfg(windows)'.dev-dependencies]
+winapi = { workspace = true, features = ["processenv", "winbase"] }

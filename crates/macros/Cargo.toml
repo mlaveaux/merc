@@ -9,6 +9,9 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[lints]
+workspace = true
+
 [lib]
 proc-macro = true
 
@@ -16,3 +19,9 @@ proc-macro = true
 proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
+
+# Only used by the `tests/kani_transmute.rs` Kani harness, which exercises the
+# real `#[merc_derive_terms]` output against a mock term type: it needs
+# `delegate!` in scope exactly like every real consumer of this macro does.
+[dev-dependencies]
+delegate.workspace = true

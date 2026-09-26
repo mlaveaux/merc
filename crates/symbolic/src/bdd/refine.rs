@@ -241,69 +241,207 @@ pub fn refine_bisimulation<L: TransitionLabel>(
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use merc_lts::LTS;
-//     use merc_lts::LtsBuilderMem;
-//     use merc_reduction::Equivalence;
-//     use merc_reduction::compare_lts;
-//     use merc_reduction::reduce_lts;
-//     use merc_utilities::Timing;
+#[cfg(test)]
+mod tests {
+    use merc_lts::LTS;
+    use merc_lts::LtsBuilderMem;
+    use merc_reduction::Equivalence;
+    use merc_reduction::compare_lts;
+    use merc_reduction::reduce_lts;
+    use merc_utilities::Timing;
 
-//     use merc_utilities::random_test;
+    use merc_utilities::random_test;
 
-//     use crate::SymbolicLtsBdd;
-//     use crate::bdd::refine_bisimulation;
-//     use crate::convert_symbolic_lts;
-//     use crate::convert_symbolic_lts_bdd;
-//     use crate::quotient_symbolic;
-//     use crate::random_symbolic_lts;
+    use oxidd::Manager;
+    use oxidd::ManagerRef;
 
-//     #[test]
-//     #[ignore = "refine_bisimulation aborts in oxidd_reorder::set_var_order; see function docs"]
-//     #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
-//     fn test_random_refine_bisimulation() {
-//         random_test(100, |rng| {
-//             let ldd_manager = oxidd::ldd::new_manager(2048, 1024, 1);
+    use crate::SymbolicLtsBdd;
+    use crate::bdd::refine_bisimulation;
+    use crate::convert_symbolic_lts;
+    use crate::convert_symbolic_lts_bdd;
+    use crate::quotient_symbolic;
+    use crate::random_symbolic_lts;
 
-//             let lts = random_symbolic_lts(rng, &ldd_manager, 10, 5).unwrap();
+    /// Isolates the root cause at the `oxidd_reorder` level, independent of
+    /// `SymbolicLtsBdd`/`random_symbolic_lts`: build a 5-variable manager
+    /// with the same variable layout `SymbolicLtsBdd::from_symbolic_lts`
+    /// produces for one state variable and one action-label bit (`s`, `s'`,
+    /// `a`, in that creation order), add `q`/`q'` afterwards (as
+    /// `refine_bisimulation` does), then call `set_var_order` exactly the
+    /// way `refine.rs` does: with an `order` that lists only `s, q, s', q'`
+    /// and omits `a`.
+    ///
+    /// `oxidd_reorder::set_var_order`'s own docs say unmentioned variables
+    /// are "placed in a position such that the least number of adjacent
+    /// level swaps need to be performed" — which is exactly what leaves `a`
+    /// between `s` and `q` here, since in the *original* order `a` sits
+    /// between the state/next-state block and the (not-yet-created) `q`
+    /// block. That breaks the adjacency `variable_rename` requires for the
+    /// `p -> q`, `q -> p'`, `p' -> q'` substitutions built later in
+    /// `refine_bisimulation`.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn set_var_order_without_action_vars_breaks_p_q_adjacency() {
+        let manager_ref = oxidd::bdd::new_manager(1024, 1024, 1);
 
-//             let manager_ref = oxidd::bdd::new_manager(2028, 2028, 1);
-//             let lts_bdd = SymbolicLtsBdd::from_symbolic_lts(&ldd_manager, &manager_ref, &lts).unwrap();
+        let (s, s_prime, a) = manager_ref
+            .with_manager_exclusive(|manager| {
+                let mut vars = manager
+                    .add_named_vars(["s".to_string(), "s_prime".to_string(), "a".to_string()])
+                    .expect("fresh manager, no duplicate names");
+                (vars.next().unwrap(), vars.next().unwrap(), vars.next().unwrap())
+            });
 
-//             let mut builder = LtsBuilderMem::new(Vec::new(), Vec::new());
-//             let explicit_lts = convert_symbolic_lts(&ldd_manager, &mut builder, &lts).unwrap();
-//             let explicit_lts_reduced =
-//                 reduce_lts(explicit_lts.clone(), Equivalence::StrongBisim, false, &Timing::new());
+        let (q, q_prime) = manager_ref
+            .with_manager_exclusive(|manager| {
+                let mut vars = manager
+                    .add_named_vars(["q".to_string(), "q_prime".to_string()])
+                    .expect("fresh manager, no duplicate names");
+                (vars.next().unwrap(), vars.next().unwrap())
+            });
 
-//             // refine_bisimulation returns B(p, b) together with the block variables b,
-//             // which is exactly the (partition, block_vars) pair quotient_symbolic expects.
-//             let (partition, block_vars) = refine_bisimulation(&manager_ref, &lts_bdd).unwrap();
+        // Exactly the `order` construction in `refine_bisimulation`
+        // (crates/symbolic/src/bdd/refine.rs:106-112), specialized to one
+        // state variable: interleave p, q, p', q' and say nothing about `a`.
+        let order = vec![s, q, s_prime, q_prime];
+        manager_ref.with_manager_exclusive(|manager| oxidd_reorder::set_var_order(manager, &order));
 
-//             let quotient_lts = quotient_symbolic(&manager_ref, &lts_bdd, &partition, &block_vars).unwrap();
+        let level_of = |var| manager_ref.with_manager_shared(|manager| manager.var_to_level(var));
+        let (ls, lq, ls_prime, lq_prime, la) =
+            (level_of(s), level_of(q), level_of(s_prime), level_of(q_prime), level_of(a));
 
-//             let mut builder = LtsBuilderMem::new(Vec::new(), Vec::new());
-//             let symbolic_lts_reduced = convert_symbolic_lts_bdd(&manager_ref, &mut builder, &quotient_lts).unwrap();
+        // `variable_rename` (crates/symbolic/src/util.rs) requires each of
+        // these three pairs to be *exactly* one level apart, since
+        // `refine_bisimulation` builds `p_to_q`/`q_to_p_prime`/
+        // `p_prime_to_q_prime` substitutions from them. This is the same
+        // invariant whose violation panics with "Variable renaming must be
+        // to the level directly below" in
+        // `refine_bisimulation_panics_on_lts_with_action_variables` above.
+        assert_eq!(
+            lq,
+            ls + 1,
+            "q should be directly below s, but the unlisted action variable a landed at level {la} \
+             (s={ls}, q={lq}, s'={ls_prime}, q'={lq_prime})"
+        );
+        assert_eq!(ls_prime, lq + 1, "s' should be directly below q");
+        assert_eq!(lq_prime, ls_prime + 1, "q' should be directly below s'");
+    }
 
-//             assert_eq!(
-//                 explicit_lts_reduced.num_of_states(),
-//                 symbolic_lts_reduced.num_of_states()
-//             );
-//             assert_eq!(
-//                 explicit_lts_reduced.num_of_transitions(),
-//                 symbolic_lts_reduced.num_of_transitions()
-//             );
+    /// Same setup as [`set_var_order_without_action_vars_breaks_p_q_adjacency`],
+    /// but confirms the fix direction: appending the action variable(s) to
+    /// `order` (instead of omitting them) keeps `set_var_order` from
+    /// inserting them into the p/q/p'/q' interleaving, since the order is
+    /// then total (mentions every variable in the manager) and `a` is
+    /// explicitly placed after `q'`.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn set_var_order_with_action_vars_appended_preserves_p_q_adjacency() {
+        let manager_ref = oxidd::bdd::new_manager(1024, 1024, 1);
 
-//             assert!(
-//                 compare_lts(
-//                     Equivalence::StrongBisim,
-//                     explicit_lts_reduced,
-//                     symbolic_lts_reduced,
-//                     false,
-//                     &Timing::new()
-//                 ),
-//                 "The refine_bisimulation quotient should be bisimilar to the explicit reduction"
-//             );
-//         });
-//     }
-// }
+        let (s, s_prime, a) = manager_ref.with_manager_exclusive(|manager| {
+            let mut vars = manager
+                .add_named_vars(["s".to_string(), "s_prime".to_string(), "a".to_string()])
+                .expect("fresh manager, no duplicate names");
+            (vars.next().unwrap(), vars.next().unwrap(), vars.next().unwrap())
+        });
+
+        let (q, q_prime) = manager_ref.with_manager_exclusive(|manager| {
+            let mut vars = manager
+                .add_named_vars(["q".to_string(), "q_prime".to_string()])
+                .expect("fresh manager, no duplicate names");
+            (vars.next().unwrap(), vars.next().unwrap())
+        });
+
+        // The proposed fix: append the action variable(s) after q' instead of
+        // leaving them out of `order` entirely.
+        let order = vec![s, q, s_prime, q_prime, a];
+        manager_ref.with_manager_exclusive(|manager| oxidd_reorder::set_var_order(manager, &order));
+
+        let level_of = |var| manager_ref.with_manager_shared(|manager| manager.var_to_level(var));
+        let (ls, lq, ls_prime, lq_prime, la) =
+            (level_of(s), level_of(q), level_of(s_prime), level_of(q_prime), level_of(a));
+
+        assert_eq!(lq, ls + 1, "q should be directly below s");
+        assert_eq!(ls_prime, lq + 1, "s' should be directly below q");
+        assert_eq!(lq_prime, ls_prime + 1, "q' should be directly below s'");
+        assert_eq!(la, lq_prime + 1, "a should sort after q', as requested");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn refine_bisimulation_panics_on_lts_with_action_variables() {
+        // Minimal, deterministic repro of the `set_var_order` panic (see the
+        // module docs / review/phase-4-tools-cli.md): any LTS whose action
+        // labels need at least one bit panics inside `refine_bisimulation`
+        // before it can return a result.
+        let mut rng = rand::rng();
+        let ldd_manager = oxidd::ldd::new_manager(2048, 1024, 1);
+
+        // 1 state variable, 2 action labels (i.e. `action_label_bits >= 1`).
+        let lts = random_symbolic_lts(&mut rng, &ldd_manager, 1, 2).unwrap();
+
+        let manager_ref = oxidd::bdd::new_manager(2028, 2028, 1);
+        let lts_bdd = SymbolicLtsBdd::from_symbolic_lts(&ldd_manager, &manager_ref, &lts).unwrap();
+
+        assert!(
+            !lts_bdd.action_variables().is_empty(),
+            "the repro requires at least one action-label bit in the manager"
+        );
+
+        // This currently panics with "assertion `left == right` failed: the
+        // level number does not match" inside oxidd_reorder::set_var_order,
+        // called from refine.rs's `set_var_order` line. Once fixed, this
+        // should return Ok(..) instead.
+        let _ = refine_bisimulation(&manager_ref, &lts_bdd).unwrap();
+    }
+
+    #[test]
+    #[ignore = "refine_bisimulation aborts in oxidd_reorder::set_var_order; see function docs"]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_refine_bisimulation() {
+        random_test(100, |rng| {
+            let ldd_manager = oxidd::ldd::new_manager(2048, 1024, 1);
+
+            let lts = random_symbolic_lts(rng, &ldd_manager, 10, 5).unwrap();
+
+            let manager_ref = oxidd::bdd::new_manager(2028, 2028, 1);
+            let lts_bdd = SymbolicLtsBdd::from_symbolic_lts(&ldd_manager, &manager_ref, &lts).unwrap();
+
+            let mut builder = LtsBuilderMem::new(Vec::new(), Vec::new());
+            let explicit_lts = convert_symbolic_lts(&ldd_manager, &mut builder, &lts).unwrap();
+            let explicit_lts_reduced =
+                reduce_lts(explicit_lts.clone(), Equivalence::StrongBisim, false, &Timing::new());
+
+            // refine_bisimulation returns B(p, b) together with the block variables b,
+            // which is exactly the (partition, block_vars) pair quotient_symbolic expects.
+            let (partition, block_vars) = refine_bisimulation(&manager_ref, &lts_bdd).unwrap();
+
+            let quotient_lts = quotient_symbolic(&manager_ref, &lts_bdd, &partition, &block_vars).unwrap();
+
+            let mut builder = LtsBuilderMem::new(Vec::new(), Vec::new());
+            let symbolic_lts_reduced = convert_symbolic_lts_bdd(&manager_ref, &mut builder, &quotient_lts).unwrap();
+
+            assert_eq!(
+                explicit_lts_reduced.num_of_states(),
+                symbolic_lts_reduced.num_of_states()
+            );
+            assert_eq!(
+                explicit_lts_reduced.num_of_transitions(),
+                symbolic_lts_reduced.num_of_transitions()
+            );
+
+            assert!(
+                compare_lts(
+                    Equivalence::StrongBisim,
+                    explicit_lts_reduced,
+                    symbolic_lts_reduced,
+                    false,
+                    false,
+                    &Timing::new()
+                )
+                .0,
+                "The refine_bisimulation quotient should be bisimilar to the explicit reduction"
+            );
+        });
+    }
+}

@@ -112,14 +112,24 @@ impl SkiaRenderer {
         let mut arrow_builder = tiny_skia::PathBuilder::new();
 
         for state_index in self.lts.iter_states() {
-            let state_view = &viewer.state_view()[state_index];
+            // `viewer` is expected to belong to this renderer's own `self.lts`, but this does not
+            // panic if it momentarily does not (e.g. `viewer` was just swapped for a differently
+            // sized LTS and this renderer has not been rebuilt via `reload` yet): skip states and
+            // transitions the viewer does not have rather than indexing out of bounds.
+            let Some(state_view) = viewer.state_view().get(state_index.value()) else {
+                continue;
+            };
 
             // For now we only draw 2D graphs properly
             debug_assert!(state_view.position.z.abs() < 0.01);
 
             for (transition_index, transition) in self.lts.outgoing_transitions(state_index).enumerate() {
-                let to_state_view = &viewer.state_view()[transition.to];
-                let transition_view = &state_view.outgoing[transition_index];
+                let Some(to_state_view) = viewer.state_view().get(transition.to.value()) else {
+                    continue;
+                };
+                let Some(transition_view) = state_view.outgoing.get(transition_index) else {
+                    continue;
+                };
 
                 let label_position = if transition.to != state_index {
                     // Draw the transition

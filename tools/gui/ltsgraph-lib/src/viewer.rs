@@ -84,7 +84,12 @@ impl Viewer {
 
                     let index = index_per_target.entry(transition.to).or_insert(0);
 
-                    if has_backtransition {
+                    // Fan out parallel transitions to the same destination so their handles do not
+                    // overlap, regardless of whether a transition back the other way also exists:
+                    // that only matters for whether the *forward* handles need to make room for a
+                    // back-transition's handle too, not for whether the forward ones overlap each
+                    // other.
+                    if has_backtransition || num_parallel > 1 {
                         // Offset the parallel outgoing transitions towards that state to the right
                         // so the back- and forward-transitions do not overlap.
                         transition_view.handle_offset = Vec3::new(0.0, *index as f32 / num_parallel as f32, 0.0);
@@ -98,10 +103,16 @@ impl Viewer {
         Viewer { lts, view_states }
     }
 
-    /// Update the state of the viewer with the given graph layout
+    /// Update the state of the viewer with the given graph layout.
+    ///
+    /// `layout` is expected to belong to the same LTS as this viewer, but this does not panic if it
+    /// does not: it copies positions for the states the two agree on and leaves the rest untouched,
+    /// rather than indexing `layout` out of bounds. This is a defensive backstop, not the intended
+    /// way to use this method -- callers are still responsible for keeping the viewer/layout pair in
+    /// sync (see `ReloadState` in `ltsgraph/src/main.rs`, which swaps them atomically).
     pub fn update(&mut self, layout: &GraphLayout) {
-        for (index, layout_state) in self.view_states.iter_mut().enumerate() {
-            layout_state.position = layout.layout_states[index].position;
+        for (state_view, layout_state) in self.view_states.iter_mut().zip(layout.layout_states.iter()) {
+            state_view.position = layout_state.position;
         }
     }
 
@@ -123,10 +134,12 @@ impl Viewer {
 
 #[cfg(test)]
 mod tests {
+    use std::panic::AssertUnwindSafe;
     use std::sync::Arc;
 
     use merc_lts::read_aut;
 
+    use crate::graph_layout::GraphLayout;
     use crate::viewer::Viewer;
 
     #[test]
@@ -147,5 +160,61 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn parallel_transitions_without_back_transition_get_distinct_handle_offsets() {
+        // Two parallel transitions from state 0 to state 1 (via different labels), and no
+        // transition from 1 back to 0. `num_parallel` is computed unconditionally as "the number
+        // of parallel transitions from this state to the same destination" and the surrounding
+        // comment says the per-target running index exists to "fan out multiple edges that share
+        // the same source and target so their handles do not overlap" -- but the fan-out offset is
+        // only ever assigned inside the `has_backtransition` branch, so parallel transitions with
+        // no back-transition are left at the default zero offset and are rendered on top of each
+        // other.
+        let aut = "des (0,2,2)\n(0,\"a\",1)\n(0,\"b\",1)\n";
+        let lts = Arc::new(read_aut(aut.as_bytes()).unwrap());
+
+        let viewer = Viewer::new(lts);
+        let outgoing = &viewer.state_view()[0].outgoing;
+        assert_eq!(outgoing.len(), 2);
+
+        assert_ne!(
+            outgoing[0].handle_offset, outgoing[1].handle_offset,
+            "two parallel transitions from state 0 to state 1 were given the same handle offset \
+             ({:?}), so they will be drawn exactly on top of each other",
+            outgoing[0].handle_offset
+        );
+    }
+
+    #[test]
+    fn update_does_not_panic_when_layout_lts_is_smaller_than_viewer_lts() {
+        // `tools/gui/ltsgraph/src/main.rs` reloads an LTS by replacing `state.viewer` and
+        // `state.graph_layout` (backed by the same new LTS) through two independent `Mutex`es, one
+        // right after the other, while a separate thread runs `viewer.update(&graph_layout)`
+        // whenever it can take both locks. That thread can observe `state.viewer` already updated
+        // to the new LTS while `state.graph_layout` still holds the previous one's layout.
+        //
+        // This test reproduces the resulting mismatch directly: a `Viewer` for a bigger LTS is
+        // updated from a `GraphLayout` belonging to a smaller, unrelated LTS -- exactly what
+        // `Viewer::update` can be handed during that window when the newly loaded LTS has *more*
+        // states than the one it replaced.
+        let small = "des (0,1,2)\n(0,\"a\",1)\n";
+        let small_lts = Arc::new(read_aut(small.as_bytes()).unwrap());
+
+        let big = "des (0,4,4)\n(0,\"a\",1)\n(1,\"a\",2)\n(2,\"a\",3)\n(3,\"a\",0)\n";
+        let big_lts = Arc::new(read_aut(big.as_bytes()).unwrap());
+
+        let mut viewer = Viewer::new(big_lts);
+        let stale_layout = GraphLayout::new(small_lts);
+
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| viewer.update(&stale_layout)));
+
+        assert!(
+            result.is_ok(),
+            "Viewer::update panicked (index out of bounds) when handed a GraphLayout backed by an \
+             LTS smaller than the viewer's own LTS -- this is exactly the transient state \
+             ltsgraph's layout thread can observe while reloading to a bigger model"
+        );
     }
 }
