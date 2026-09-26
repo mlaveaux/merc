@@ -78,13 +78,27 @@ pub struct Cli {
     timings: bool,
 }
 
+/// The graph layout, viewer state and cached LTS for the LTS currently being displayed.
+///
+/// These three must always be replaced together when a new LTS is loaded: the render thread reads
+/// `viewer` together with the renderer it rebuilds from `lts`/`reload_lts`, and the layout thread
+/// reads `graph_layout` together with `viewer`. Keeping all four fields behind a single `Mutex`
+/// (rather than one `Mutex` per field, as `graph_layout`/`viewer`/`lts` used to be) guarantees that
+/// a reader never observes a `Viewer` paired with a `GraphLayout` or renderer-cached LTS taken from
+/// a different load, which would let it index one with the other's (differently-sized) indices and
+/// panic.
+struct ReloadState {
+    graph_layout: Option<GraphLayout>,
+    viewer: Option<Viewer>,
+    lts: Option<Arc<LabelledTransitionSystem<String>>>,
+    /// Set when `lts` has changed and the render thread's cached renderer still needs rebuilding.
+    reload_lts: bool,
+}
+
 /// Contains all the GUI related state information, both the graph layout and the viewer state.
 struct State {
-    graph_layout: Mutex<Option<GraphLayout>>,
-    viewer: Mutex<Option<Viewer>>,
+    reload: Mutex<ReloadState>,
     canvas: Arc<Mutex<SharedPixelBuffer<Rgba8Pixel>>>,
-    lts: Mutex<Option<Arc<LabelledTransitionSystem<String>>>>,
-    reload_lts: AtomicBool,
     /// Whether the layout simulation is enabled, so layout-parameter changes only restart it while running.
     simulation_enabled: AtomicBool,
 }
@@ -166,11 +180,13 @@ async fn run() -> Result<(), MercError> {
     // Stores the shared state of the GUI components.
     let settings = Arc::new(Mutex::new(GuiSettings::new()));
     let state = Arc::new(State {
-        graph_layout: Mutex::new(None),
-        viewer: Mutex::new(None),
+        reload: Mutex::new(ReloadState {
+            graph_layout: None,
+            viewer: None,
+            lts: None,
+            reload_lts: false,
+        }),
         canvas: Arc::new(Mutex::new(SharedPixelBuffer::new(1, 1))),
-        reload_lts: AtomicBool::new(false),
-        lts: Mutex::new(None),
         simulation_enabled: AtomicBool::new(true),
     });
 
@@ -223,15 +239,19 @@ async fn run() -> Result<(), MercError> {
             move |renderer| {
                 let render_settings = settings.lock().unwrap().to_render_settings();
 
-                if state.reload_lts.load(Ordering::Relaxed) {
+                // Held for the rest of this iteration so the renderer rebuild (from `lts`) and the
+                // subsequent render (using `viewer`) always see a pair from the same load.
+                let mut reload_state = state.reload.lock().unwrap();
+
+                if reload_state.reload_lts {
                     info!("Creating the renderer");
-                    if let Some(lts) = state.lts.lock().unwrap().as_ref() {
+                    if let Some(lts) = reload_state.lts.as_ref() {
                         renderer.reload(lts.clone(), &render_settings)?;
                     }
-                    state.reload_lts.store(false, Ordering::Relaxed);
+                    reload_state.reload_lts = false;
                 }
 
-                if let Some(viewer) = state.viewer.lock().unwrap().as_mut() {
+                if let Some(viewer) = reload_state.viewer.as_mut() {
                     let start = Instant::now();
                     renderer.render(viewer, &render_settings, &state.canvas)?;
                     debug!(
@@ -282,7 +302,15 @@ async fn run() -> Result<(), MercError> {
             move |_| {
                 let mut is_stable = true;
 
-                if let Some(layout) = state.graph_layout.lock().unwrap().as_mut() {
+                // Held across both the layout step and the viewer copy below so the layout thread
+                // never copies a `GraphLayout` into a `Viewer` from a different (already-reloaded,
+                // differently-sized) load, or vice versa.
+                let mut reload_state = state.reload.lock().unwrap();
+                let ReloadState {
+                    graph_layout, viewer, ..
+                } = &mut *reload_state;
+
+                if let Some(layout) = graph_layout.as_mut() {
                     // Read the settings and free the lock since otherwise the callback above blocks.
                     let settings = settings.lock().unwrap().clone();
 
@@ -296,7 +324,7 @@ async fn run() -> Result<(), MercError> {
                     debug!("Layout step took {} ms", duration.as_millis());
 
                     // Copy layout into the view.
-                    if let Some(viewer) = state.viewer.lock().unwrap().as_mut() {
+                    if let Some(viewer) = viewer.as_mut() {
                         viewer.update(layout);
                     }
 
@@ -349,12 +377,17 @@ async fn run() -> Result<(), MercError> {
                     // Update view to the initial layout.
                     viewer.update(&layout);
 
-                    state.viewer.lock().unwrap().replace(viewer);
-                    state.graph_layout.lock().unwrap().replace(layout);
-
-                    // Indicate that the LTS has been loaded such that the rendering thread can be updated.
-                    state.lts.lock().unwrap().replace(lts);
-                    state.reload_lts.store(true, Ordering::Relaxed);
+                    // Replace the viewer, layout and cached LTS as a single atomic update: taking
+                    // the lock once, rather than once per field, is what prevents a background
+                    // thread from ever observing a partially-updated combination of the three (see
+                    // `ReloadState`'s documentation).
+                    {
+                        let mut reload_state = state.reload.lock().unwrap();
+                        reload_state.viewer = Some(viewer);
+                        reload_state.graph_layout = Some(layout);
+                        reload_state.lts = Some(lts);
+                        reload_state.reload_lts = true;
+                    }
 
                     // Enable the layout and rendering threads.
                     layout_handle.resume();
@@ -464,7 +497,7 @@ async fn run() -> Result<(), MercError> {
 
         app.on_focus_view(move || {
             if let Some(app) = app_weak.upgrade()
-                && let Some(viewer) = state.viewer.lock().unwrap().as_ref()
+                && let Some(viewer) = state.reload.lock().unwrap().viewer.as_ref()
             {
                 debug!("Centering view on graph.");
 

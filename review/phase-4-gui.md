@@ -38,7 +38,7 @@ in the rendered graph.
 
 ## Findings
 
-### 1. Non-atomic LTS reload lets background threads observe a `Viewer`/renderer mismatched in size with the `GraphLayout`/renderer's own LTS — CONFIRMED (two independent repros)
+### 1. Non-atomic LTS reload lets background threads observe a `Viewer`/renderer mismatched in size with the `GraphLayout`/renderer's own LTS — FIXED (two independent repros)
 
 - **Location**: `tools/gui/ltsgraph/src/main.rs:346-361` (`load_lts`, the
   `state.viewer` / `state.graph_layout` / `state.lts` replacement sequence,
@@ -101,13 +101,49 @@ in the rendered graph.
   with respect to `state.viewer`/`state.graph_layout`/`state.lts`, no thread
   can observe a `Viewer` and a `GraphLayout`/cached-LTS-in-`Renderer` of
   different sizes together, and both `catch_unwind`s return `Ok`.
-- **Direction of a fix**: replace the three independent `Mutex` fields with
-  one `Mutex<ReloadState>` (or an `ArcSwap` of an atomically-swapped bundle)
-  so a reload is visible to readers as a single atomic transition, or have
-  `Renderer::reload` and the viewer/layout swap happen under one combined
-  lock before `reload_lts` is observed.
+- **Fix**: replaced the three independent `Mutex` fields (`graph_layout`,
+  `viewer`, `lts`/`reload_lts`) with a single `Mutex<ReloadState>` bundling
+  all four (`tools/gui/ltsgraph/src/main.rs`), matching the first of the two
+  directions above. `load_lts` now takes that one lock once and replaces
+  `viewer`, `graph_layout`, `lts` and `reload_lts` together, so no reader can
+  ever observe a partially-updated combination. The render thread holds the
+  same lock for the renderer-rebuild-then-render sequence, and the layout
+  thread holds it for the layout-step-then-viewer-copy sequence (splitting
+  the struct's `graph_layout`/`viewer` fields by disjoint borrow so both are
+  still reachable under the one lock). As a second, independent layer of
+  defense (since the two regression tests below construct the mismatched
+  `Viewer`/`GraphLayout`/renderer pairs directly, without going through
+  `main.rs` at all), `Viewer::update` (`ltsgraph-lib/src/viewer.rs`) now
+  `zip`s the two state vectors instead of indexing `layout` by `self`'s
+  length, and `SkiaRenderer::render`/`FemtovgRenderer::render`
+  (`renderer_skia.rs`/`renderer_femtovg.rs`) now use `.get(...)` and `skip`
+  (via `let ... else { continue }`) instead of indexing `viewer.state_view()`
+  and `state_view.outgoing` directly, so a size mismatch between the
+  renderer's own cached LTS and the `Viewer` it is handed is a no-op for the
+  states/transitions that do not line up, rather than a panic.
+- **Verification**: both previously-failing tests now pass, together with
+  the rest of the crate's test suite (`cd tools/gui && cargo test -p
+  merc_ltsgraph_lib`):
+  ```
+  running 7 tests
+  test graph_layout::tests::test_graph_layout ... ok
+  test renderer_femtovg::tests::test_femtovg_renderer ... ok
+  test viewer::tests::parallel_transitions_without_back_transition_get_distinct_handle_offsets ... ok
+  test viewer::tests::test_handle_offsets_are_finite_with_back_transitions ... ok
+  test viewer::tests::update_does_not_panic_when_layout_lts_is_smaller_than_viewer_lts ... ok
+  test text_cache::tests::test_textcache ... ok
+  test renderer_skia::tests::test_skia_renderer ... ok
+  test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
-### 2. Parallel transitions between the same two states overlap unless a back-transition also exists — CONFIRMED
+  Running tests/renderer_stale_lts_after_reload.rs
+  test render_does_not_panic_when_viewer_lts_is_smaller_than_renderer_lts ... ok
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+  ```
+  `cargo +nightly fmt -p merc_ltsgraph_lib -p merc-ltsgraph -- --check` and
+  `cargo clippy -p merc_ltsgraph_lib --all-targets` are clean (no diffs, no
+  warnings).
+
+### 2. Parallel transitions between the same two states overlap unless a back-transition also exists — FIXED
 
 - **Location**: `tools/gui/ltsgraph-lib/src/viewer.rs:72-94` (`Viewer::new`,
   the non-self-loop branch).
@@ -133,11 +169,20 @@ in the rendered graph.
 - **Why the test would pass once fixed**: once the fan-out offset is applied
   whenever `num_parallel > 1` (not only when `has_backtransition`), the two
   transitions get distinct offsets and the assertion holds.
-- **Direction of a fix**: move the `transition_view.handle_offset = ...`
-  assignment out of the `if has_backtransition` guard (or add an `||
-  num_parallel > 1` condition), keeping the two conditions'
-  distinct offset shapes (radial fan vs. left/right split) if that
-  distinction is intentional for the visualization.
+- **Fix**: changed the guard in `Viewer::new` (`ltsgraph-lib/src/viewer.rs`)
+  from `if has_backtransition` to `if has_backtransition || num_parallel >
+  1`, so the fan-out offset is applied whenever there is more than one
+  parallel transition to the same destination, regardless of whether a
+  back-transition exists. The offset formula itself (and its behaviour when
+  `num_parallel == 1`, i.e. the common single-edge case, where the offset
+  stays `Vec3::ZERO` as before) is unchanged.
+- **Verification**: `cd tools/gui && cargo test -p merc_ltsgraph_lib --lib
+  viewer::` (part of the full run above):
+  ```
+  test viewer::tests::parallel_transitions_without_back_transition_get_distinct_handle_offsets ... ok
+  test viewer::tests::test_handle_offsets_are_finite_with_back_transitions ... ok
+  test viewer::tests::update_does_not_panic_when_layout_lts_is_smaller_than_viewer_lts ... ok
+  ```
 
 ## Checked and found correct
 
@@ -198,5 +243,6 @@ in the rendered graph.
   - `update_does_not_panic_when_layout_lts_is_smaller_than_viewer_lts`
   Run: `cd tools/gui && cargo test -p merc_ltsgraph_lib --lib viewer::`.
 
-All three fail on the current tree (see evidence above) and are left in the
-tree as regression tests for the implementor pass.
+All three failed on the tree as found (see evidence above) and now pass after
+the fixes in Findings 1 and 2; they are left in the tree as permanent
+regression tests.
