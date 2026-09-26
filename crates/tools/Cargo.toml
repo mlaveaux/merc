@@ -17,3 +17,8 @@ which.workspace = true
 # Only used by the Windows console helpers in `console.rs`.
 [target.'cfg(windows)'.dependencies]
 winapi.workspace = true
+
+# Extra winapi modules (GetStdHandle/SetStdHandle, STD_OUTPUT_HANDLE) needed only by the
+# `console_windows` regression test in `tests/`, not by any production code in this crate.
+[target.'cfg(windows)'.dev-dependencies]
+winapi = { workspace = true, features = ["processenv", "winbase"] }
