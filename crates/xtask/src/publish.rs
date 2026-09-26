@@ -20,7 +20,6 @@ pub(crate) fn publish_crates() -> Result<(), Box<dyn Error>> {
         "merc_refinement",
         "merc_syntax",
         "merc_sabre",
-        "merc_ldd",
         "merc_symbolic",
         "merc_vpg",
     ];
