@@ -1536,29 +1536,43 @@ impl Solver<'_> {
             return self.solve_join_seq(&join.sources, join.target, 0, index);
         }
 
+        // Try the sources' own least-upper-bound first (the common case, and
+        // the same answer the two-`Sub` encoding settles on when nothing else
+        // constrains `target`). This choice is not always enough: a
+        // constraint on `target` appearing *later* in the list -- e.g. an
+        // enclosing `Bag`/`Set` literal that needs `target` itself widened
+        // past every source's own join (every source is `FBag(Nat)`, but
+        // `target` must end up `Bag(Nat)`) -- has no say in this LUB, so a
+        // failure here does not mean no valid typing exists; roll back and
+        // fall through to the per-source widening search below, which can
+        // also try a supersort of the LUB.
+        let snapshot = self.unifier.snapshot();
         let lub_node = self.unifier.resolved_node(lub);
-        if !self.unifier.unify(self.sorts, join.target, lub_node) {
-            return false;
+        if self.unifier.unify(self.sorts, join.target, lub_node) {
+            // One widening-distance measure component per source (0 for an
+            // exact branch, the number of widening steps otherwise), matching
+            // the `solve_sub` convention so the ranking is identical to the
+            // two-`Sub` form. Every source here is materializable into `lub`
+            // (just checked), so its interior distance is always 0 and only
+            // the head component ever contributes.
+            for &source in &resolved {
+                let (head, _interior) = self
+                    .sorts
+                    .widening_distance(source, lub)
+                    .expect("materializable into lub, hence comparable");
+                self.measure.push(head);
+            }
+            let found = self.solve(index + 1);
+            for _ in &resolved {
+                self.measure.pop();
+            }
+            if found {
+                return true;
+            }
         }
+        self.unifier.rollback_to(snapshot);
 
-        // One widening-distance measure component per source (0 for an exact
-        // branch, the number of widening steps otherwise), matching the
-        // `solve_sub` convention so the ranking is identical to the two-`Sub`
-        // form. Every source here is materializable into `lub` (just
-        // checked), so its interior distance is always 0 and only the head
-        // component ever contributes.
-        for &source in &resolved {
-            let (head, _interior) = self
-                .sorts
-                .widening_distance(source, lub)
-                .expect("materializable into lub, hence comparable");
-            self.measure.push(head);
-        }
-        let found = self.solve(index + 1);
-        for _ in &resolved {
-            self.measure.pop();
-        }
-        found
+        self.solve_join_seq(&join.sources, join.target, 0, index)
     }
 
     /// The fallback of [Self::solve_join] for underdetermined or non-joinable

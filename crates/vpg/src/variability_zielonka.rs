@@ -389,7 +389,7 @@ impl<'a> VariabilityZielonkaSolver<'a> {
 
         // omega_prime[not_x] restricted to (gamma \ C)
         let C_restricted = minus(
-            &if !self.alternative_solving {
+            &if self.alternative_solving {
                 self.true_bdd.clone()
             } else {
                 self.game.configuration().clone()
@@ -706,6 +706,53 @@ mod tests {
 
             debug_assert_eq!(solution[0], solution_expected[0]);
             debug_assert_eq!(solution[1], solution_expected[1]);
+        })
+    }
+
+    /// `zielonka_family_optimised`'s `C_restricted` (the "universe minus C" set
+    /// used only to decide whether to take the cheap branch) picks its universe
+    /// with the condition inverted relative to every other `alternative_solving`
+    /// check in this file (`C1_restricted` just below it, the initial `V`, and
+    /// the attractor's `minus_edge` call all use `if self.alternative_solving {
+    /// true_bdd } else { configuration }`; `C_restricted` uses `if
+    /// !self.alternative_solving { true_bdd } else { configuration }`).
+    ///
+    /// With `alternative_solving = false` this is masked: `omega1_not_x` is
+    /// always a subset of `true_bdd`, so the (wrongly chosen) universe still
+    /// contains it and the algebra collapses to the same value either way -
+    /// hence the existing `..._optimised_left` test above never observes it.
+    ///
+    /// With `alternative_solving = true`, `omega1_not_x` ranges over the full
+    /// `true_bdd` domain (solving deliberately ignores `game.configuration()`
+    /// until the final intersection), so it is generally *not* a subset of the
+    /// wrongly-chosen `game.configuration()` universe, and the branch decision
+    /// differs from the `Family` variant's un-optimised recursion on the same
+    /// input. This test asserts the postcondition the library promises: both
+    /// variants of `solve_variability_zielonka` must return the same partition
+    /// for the same game and `alternative_solving` flag.
+    #[merc_test]
+    #[cfg_attr(miri, ignore)] // Oxidd does not work with miri
+    fn test_random_variability_parity_game_solve_optimised_left_alternative_solving_agrees_with_family() {
+        random_test(50, |rng| {
+            let files = DumpFiles::new("test_random_variability_parity_game_solve_optimised_left_alternative_solving");
+
+            let manager_ref = oxidd::bdd::new_manager(BDD_NODE_CAPACITY, BDD_CACHE_CAPACITY, 1);
+            let vpg = random_variability_parity_game(&manager_ref, rng, true, 20, 3, 3, 3).unwrap();
+
+            files.dump("input.vpg", |w| write_vpg(w, &vpg)).unwrap();
+
+            let solution =
+                solve_variability_zielonka(&manager_ref, &vpg, VpgSolver::FamilyOptimisedLeft, true).unwrap();
+            let solution_expected = solve_variability_zielonka(&manager_ref, &vpg, VpgSolver::Family, true).unwrap();
+
+            assert_eq!(
+                solution[0], solution_expected[0],
+                "FamilyOptimisedLeft (alternative_solving=true) disagrees with Family on the Even winning region"
+            );
+            assert_eq!(
+                solution[1], solution_expected[1],
+                "FamilyOptimisedLeft (alternative_solving=true) disagrees with Family on the Odd winning region"
+            );
         })
     }
 }
