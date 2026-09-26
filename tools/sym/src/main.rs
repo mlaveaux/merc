@@ -468,32 +468,34 @@ fn handle_convert(cli: &Cli, args: &ConvertArgs, _timing: &Timing) -> Result<(),
         return Err("Currently only the .sym format is supported for conversion".into());
     }
 
+    let output = args
+        .output
+        .as_ref()
+        .ok_or("An output path must be specified with --output; `convert` has nothing to write otherwise.")?;
+
     let mut file = File::open(&args.filename)?;
     let lts = read_symbolic_lts(&storage, &mut file)?;
 
-    if let Some(output) = &args.output {
-        let output_format =
-            guess_lts_format_from_extension(output, args.output_format).ok_or("Cannot determine output LTS format")?;
+    let output_format =
+        guess_lts_format_from_extension(output, args.output_format).ok_or("Cannot determine output LTS format")?;
 
-        match output_format {
-            LtsFormat::Lts => {
-                return Err("Writing LTS format is not yet supported".into());
-            }
-            LtsFormat::Aut => {
-                let mut output = File::create(output)?;
-                let mut stream = AutStream::new(&mut output)?;
-                convert_symbolic_lts(&storage, &mut stream, &lts)?;
-            }
-            LtsFormat::AutMcrl2 => {
-                let mut output = File::create(output)?;
-                let mut stream = AutStream::new_mcrl2(&mut output)?;
-                convert_symbolic_lts(&storage, &mut stream, &lts)?;
-            }
-            LtsFormat::Bcg => {
-                let explicit_lts =
-                    convert_symbolic_lts(&storage, &mut LtsBuilderMem::new(Vec::new(), Vec::new()), &lts)?;
-                write_bcg(&explicit_lts, output)?;
-            }
+    match output_format {
+        LtsFormat::Lts => {
+            return Err("Writing LTS format is not yet supported".into());
+        }
+        LtsFormat::Aut => {
+            let mut output = File::create(output)?;
+            let mut stream = AutStream::new(&mut output)?;
+            convert_symbolic_lts(&storage, &mut stream, &lts)?;
+        }
+        LtsFormat::AutMcrl2 => {
+            let mut output = File::create(output)?;
+            let mut stream = AutStream::new_mcrl2(&mut output)?;
+            convert_symbolic_lts(&storage, &mut stream, &lts)?;
+        }
+        LtsFormat::Bcg => {
+            let explicit_lts = convert_symbolic_lts(&storage, &mut LtsBuilderMem::new(Vec::new(), Vec::new()), &lts)?;
+            write_bcg(&explicit_lts, output)?;
         }
     }
 
@@ -502,6 +504,11 @@ fn handle_convert(cli: &Cli, args: &ConvertArgs, _timing: &Timing) -> Result<(),
 
 /// Applies reductions to a symbolic LTS.
 fn handle_reduce(cli: &Cli, args: &ReduceArgs, timing: &Timing) -> Result<(), MercError> {
+    let output = args
+        .output
+        .as_ref()
+        .ok_or("An output path must be specified with --output; `reduce` has nothing to write otherwise.")?;
+
     let format =
         guess_format_from_extension(&args.filename, args.format).ok_or("Cannot determine input symbolic LTS format")?;
     if format != SymFormat::Sym {
@@ -539,51 +546,54 @@ fn handle_reduce(cli: &Cli, args: &ReduceArgs, timing: &Timing) -> Result<(), Me
                     Ok(Some(quotient))
                 }
                 Equivalence::StrongBisim => {
-                    let _ = refine_bisimulation(&manager_ref, &lts_bdd)?;
-                    Ok(None)
+                    let (partition, block_vars) = refine_bisimulation(&manager_ref, &lts_bdd)?;
+
+                    let quotient = timing.measure("quotient", || {
+                        quotient_symbolic(&manager_ref, &lts_bdd, &partition, &block_vars)
+                    })?;
+                    Ok(Some(quotient))
                 }
             }
         },
     )?;
 
-    if let Some(output) = &args.output {
-        let quotient_lts =
-            quotient_lts.ok_or("Writing the quotient is not yet supported for the selected equivalence")?;
+    // Every `Equivalence` variant now produces a quotient (see the `match` above), so this can no
+    // longer be `None` in practice; kept as a clear error rather than an `unwrap` in case a future
+    // equivalence is added without wiring up its quotient.
+    let quotient_lts = quotient_lts.ok_or("Writing the quotient is not yet supported for the selected equivalence")?;
 
-        if guess_format_from_extension(output, None) == Some(SymFormat::Sym) {
-            let quotient_ldd =
-                timing.measure("convert_ldd", || quotient_lts.to_symbolic_lts(&storage, &manager_ref))?;
+    if guess_format_from_extension(output, None) == Some(SymFormat::Sym) {
+        let quotient_ldd = timing.measure("convert_ldd", || quotient_lts.to_symbolic_lts(&storage, &manager_ref))?;
 
-            let mut output_file = File::create(output)?;
-            write_symbolic_lts(&storage, &mut output_file, &quotient_ldd)?;
-            return Ok(());
+        let mut output_file = File::create(output)?;
+        write_symbolic_lts(&storage, &mut output_file, &quotient_ldd)?;
+        return Ok(());
+    }
+
+    let output_format =
+        guess_lts_format_from_extension(output, args.output_format).ok_or("Cannot determine output LTS format")?;
+
+    match output_format {
+        LtsFormat::Lts => {
+            return Err("Writing LTS format is not yet supported".into());
         }
-
-        let output_format =
-            guess_lts_format_from_extension(output, args.output_format).ok_or("Cannot determine output LTS format")?;
-
-        match output_format {
-            LtsFormat::Lts => {
-                return Err("Writing LTS format is not yet supported".into());
-            }
-            LtsFormat::Aut => {
-                let mut output = File::create(output)?;
-                let mut stream = AutStream::new(&mut output)?;
-                convert_symbolic_lts_bdd(&manager_ref, &mut stream, &quotient_lts)?;
-            }
-            LtsFormat::AutMcrl2 => {
-                let mut output = File::create(output)?;
-                let mut stream = AutStream::new_mcrl2(&mut output)?;
-                convert_symbolic_lts_bdd(&manager_ref, &mut stream, &quotient_lts)?;
-            }
-            LtsFormat::Bcg => {
-                let explicit_lts = convert_symbolic_lts_bdd(
-                    &manager_ref,
-                    &mut LtsBuilderMem::new(Vec::new(), Vec::new()),
-                    &quotient_lts,
-                )?;
-                write_bcg(&explicit_lts, output)?;
-            }
+        LtsFormat::Aut => {
+            let mut output = File::create(output)?;
+            let mut stream = AutStream::new(&mut output)?;
+            convert_symbolic_lts_bdd(&manager_ref, &mut stream, &quotient_lts)?;
+        }
+        LtsFormat::AutMcrl2 => {
+            let mut output = File::create(output)?;
+            let mut stream = AutStream::new_mcrl2(&mut output)?;
+            convert_symbolic_lts_bdd(&manager_ref, &mut stream, &quotient_lts)?;
+        }
+        LtsFormat::Bcg => {
+            let explicit_lts = convert_symbolic_lts_bdd(
+                &manager_ref,
+                &mut LtsBuilderMem::new(Vec::new(), Vec::new()),
+                &quotient_lts,
+            )?;
+            write_bcg(&explicit_lts, output)?;
         }
     }
 
