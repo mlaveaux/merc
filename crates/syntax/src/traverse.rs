@@ -37,35 +37,86 @@ pub type Recursion<T, E> = ControlFlow<Result<T, E>, ()>;
 
 /// A syntax tree node whose children are of its own type, traversed top-down.
 ///
-/// The traversal is defined once per node type by [Traverse::visit_children] and
-/// [Traverse::apply_children], which perform a single recursive step and nothing else; deciding
-/// what to do with a node is entirely up to the callback, which pattern matches on it. Everything
-/// else — early exit, errors, context threading, substitution — is provided here and is therefore
-/// identical for every node type.
+/// The traversal is defined once per node type by [Traverse::push_children] and
+/// [Traverse::push_children_mut], which enqueue a node's direct children and nothing else;
+/// deciding what to do with a node is entirely up to the callback, which pattern matches on it.
+/// Everything else — early exit, errors, context threading, substitution, and the descent itself —
+/// is provided here and is therefore identical for every node type.
+///
+/// [Traverse::visit_subtree]/[Traverse::apply_subtree] (and everything built on them: `visit`,
+/// `try_visit`, `visit_with`, `visit_children`, `apply`, `apply_mut`, `apply_with`,
+/// `apply_children`) walk with an explicit, heap-allocated stack rather than native recursion, so
+/// a tree's depth is bounded only by available memory, not the call stack — see `stack_depth_probe`
+/// in this module's tests for a 100,000-deep regression case per node type.
+/// [Traverse::transform_children] (and `try_transform`/`transform`) do **not** share this: a
+/// bottom-up rewrite needs a node's children fully processed *before* touching the node itself,
+/// which — for an owned, `Box`/`Vec`-based tree like this one, as opposed to an arena addressed by
+/// index — means holding a live mutable borrow of the already-processed children at the same time
+/// as the borrow needed to reach the parent again, which the borrow checker rejects (there is no
+/// such conflict top-down: once a node has been visited/replaced, its old borrow is dropped before
+/// its children are ever reached). Making that iterative too needs a genuinely different
+/// representation (an arena, or owned nodes moved in and out of a worklist behind a placeholder),
+/// not just this same worklist trick; it remains recursive, and is a known, separate gap in
+/// covering the review finding: `crates/typecheck`'s `.transform`/`.try_transform` call sites
+/// (`ir/desugar.rs`, `ir/lower.rs`, `resolution/name_resolution.rs`) are not stack-safe for a
+/// pathologically deep tree.
 ///
 /// The traversal never crosses into a *different* node type: a state formula traversal does not
 /// descend into the regular formula of a modality, nor into data expressions. Nest the traversals
 /// explicitly when that is wanted, so that each callback keeps a single node type.
 pub trait Traverse: Sized {
-    /// Descends into each direct child of this node, in the order in which they are written.
+    /// Appends each direct child of this node to `stack`, paired with `context`, in the order in
+    /// which they are written. Always returns `ControlFlow::Continue(())`; the return type only
+    /// exists so the macro-generated body can share the same `recurse(child)?;`-per-child shape as
+    /// every other method here (there is nothing to break out of or fail with while just pushing).
     ///
-    /// This is the only part of the traversal that knows the shape of the node, and the only part
-    /// that recurses, which is where an explicit worklist would replace the call stack.
-    fn visit_children<C, T, E, F>(&self, context: C, function: &mut F) -> Recursion<T, E>
-    where
-        C: Copy,
-        F: FnMut(&Self, C) -> Visit<Infallible, C, T, E>;
+    /// This is the only part of the traversal that knows the shape of the node; [Self::drive] and
+    /// [Self::visit_subtree] drain the resulting stack generically, so this never recurses itself.
+    fn push_children<'a, C: Copy>(
+        &'a self,
+        context: C,
+        stack: &mut Vec<(&'a Self, C)>,
+    ) -> Recursion<Infallible, Infallible>;
 
-    /// See [Traverse::visit_children]; this variant lets the callback replace nodes in place.
-    fn apply_children<C, T, E, F>(&mut self, context: C, function: &mut F) -> Recursion<T, E>
-    where
-        C: Copy,
-        F: FnMut(&Self, C) -> Visit<Self, C, T, E>;
+    /// See [Traverse::push_children]; this variant lets the callback replace nodes in place.
+    fn push_children_mut<'a, C: Copy>(
+        &'a mut self,
+        context: C,
+        stack: &mut Vec<(&'a mut Self, C)>,
+    ) -> Recursion<Infallible, Infallible>;
 
     /// See [Traverse::apply_children]; this variant rewrites each child bottom-up.
     fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
         F: FnMut(&mut Self) -> Result<(), E>;
+
+    /// Drains an explicit stack of pending `(node, context)` pairs depth-first, in the order they
+    /// would be visited by native pre-order recursion — the shared core of [Self::visit_subtree]
+    /// and [Self::apply_subtree], parameterized only by how a single node is handled.
+    fn drive<C, T, E>(
+        mut stack: Vec<(&mut Self, C)>,
+        mut step: impl FnMut(&mut Self, C) -> Visit<Infallible, C, T, E>,
+    ) -> Recursion<T, E>
+    where
+        C: Copy,
+    {
+        while let Some((node, context)) = stack.pop() {
+            let context = match step(node, context) {
+                Err(error) => return ControlFlow::Break(Err(error)),
+                Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
+                Ok(ControlFlow::Continue(Step::Prune)) => continue,
+                // `Step::Replace` is uninhabited for a read-only walk, which is how it rules
+                // substitution out without a second callback type; a mutating walk replaces the
+                // node itself inside `step` and never calls back in here for it.
+                Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
+                Ok(ControlFlow::Continue(Step::Into(context))) => context,
+            };
+            let start = stack.len();
+            let _ = node.push_children_mut(context, &mut stack);
+            stack[start..].reverse();
+        }
+        ControlFlow::Continue(())
+    }
 
     /// Visits this node and then, unless the callback breaks or prunes, its children.
     fn visit_subtree<C, T, E, F>(&self, context: C, function: &mut F) -> Recursion<T, E>
@@ -73,17 +124,20 @@ pub trait Traverse: Sized {
         C: Copy,
         F: FnMut(&Self, C) -> Visit<Infallible, C, T, E>,
     {
-        let context = match function(self, context) {
-            Err(error) => return ControlFlow::Break(Err(error)),
-            Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
-            Ok(ControlFlow::Continue(Step::Prune)) => return ControlFlow::Continue(()),
-            // `Step::Replace` is uninhabited here, which is how a read-only traversal rules
-            // substitution out without a second callback type.
-            Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
-            Ok(ControlFlow::Continue(Step::Into(context))) => context,
-        };
-
-        self.visit_children(context, function)
+        let mut stack: Vec<(&Self, C)> = vec![(self, context)];
+        while let Some((node, context)) = stack.pop() {
+            let context = match function(node, context) {
+                Err(error) => return ControlFlow::Break(Err(error)),
+                Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
+                Ok(ControlFlow::Continue(Step::Prune)) => continue,
+                Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
+                Ok(ControlFlow::Continue(Step::Into(context))) => context,
+            };
+            let start = stack.len();
+            let _ = node.push_children(context, &mut stack);
+            stack[start..].reverse();
+        }
+        ControlFlow::Continue(())
     }
 
     /// See [Traverse::visit_subtree]; a replaced node is not descended into.
@@ -92,18 +146,62 @@ pub trait Traverse: Sized {
         C: Copy,
         F: FnMut(&Self, C) -> Visit<Self, C, T, E>,
     {
-        let context = match function(self, context) {
-            Err(error) => return ControlFlow::Break(Err(error)),
-            Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
-            Ok(ControlFlow::Continue(Step::Prune)) => return ControlFlow::Continue(()),
+        let stack = vec![(self, context)];
+        Self::drive(stack, |node, context| match function(node, context) {
+            Err(error) => Err(error),
+            Ok(ControlFlow::Break(value)) => Ok(ControlFlow::Break(value)),
+            Ok(ControlFlow::Continue(Step::Prune)) => Ok(ControlFlow::Continue(Step::Prune)),
+            Ok(ControlFlow::Continue(Step::Into(context))) => Ok(ControlFlow::Continue(Step::Into(context))),
             Ok(ControlFlow::Continue(Step::Replace(replacement))) => {
-                *self = replacement;
-                return ControlFlow::Continue(());
+                *node = replacement;
+                Ok(ControlFlow::Continue(Step::Prune))
             }
-            Ok(ControlFlow::Continue(Step::Into(context))) => context,
-        };
+        })
+    }
 
-        self.apply_children(context, function)
+    /// Visits the subtree rooted at each direct child of this node (not this node itself).
+    fn visit_children<C, T, E, F>(&self, context: C, function: &mut F) -> Recursion<T, E>
+    where
+        C: Copy,
+        F: FnMut(&Self, C) -> Visit<Infallible, C, T, E>,
+    {
+        let mut stack = Vec::new();
+        let _ = self.push_children(context, &mut stack);
+        stack.reverse();
+        while let Some((node, context)) = stack.pop() {
+            let context = match function(node, context) {
+                Err(error) => return ControlFlow::Break(Err(error)),
+                Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
+                Ok(ControlFlow::Continue(Step::Prune)) => continue,
+                Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
+                Ok(ControlFlow::Continue(Step::Into(context))) => context,
+            };
+            let start = stack.len();
+            let _ = node.push_children(context, &mut stack);
+            stack[start..].reverse();
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// See [Traverse::visit_children]; this variant lets the callback replace nodes in place.
+    fn apply_children<C, T, E, F>(&mut self, context: C, function: &mut F) -> Recursion<T, E>
+    where
+        C: Copy,
+        F: FnMut(&Self, C) -> Visit<Self, C, T, E>,
+    {
+        let mut stack = Vec::new();
+        let _ = self.push_children_mut(context, &mut stack);
+        stack.reverse();
+        Self::drive(stack, |node, context| match function(node, context) {
+            Err(error) => Err(error),
+            Ok(ControlFlow::Break(value)) => Ok(ControlFlow::Break(value)),
+            Ok(ControlFlow::Continue(Step::Prune)) => Ok(ControlFlow::Continue(Step::Prune)),
+            Ok(ControlFlow::Continue(Step::Into(context))) => Ok(ControlFlow::Continue(Step::Into(context))),
+            Ok(ControlFlow::Continue(Step::Replace(replacement))) => {
+                *node = replacement;
+                Ok(ControlFlow::Continue(Step::Prune))
+            }
+        })
     }
 
     /// Visits this node and its subtree top-down, threading `context` from a node to its children.
@@ -253,12 +351,15 @@ macro_rules! define_traversal {
         mut_only: { $($mut_child:tt)* },
     ) => {
         impl Traverse for $Node {
-            fn visit_children<C, T, E, F>(&self, context: C, function: &mut F) -> Recursion<T, E>
-            where
-                C: Copy,
-                F: FnMut(&Self, C) -> Visit<Infallible, C, T, E>,
-            {
-                let mut $recurse = |child: &$Node| child.visit_subtree(context, function);
+            fn push_children<'a, C: Copy>(
+                &'a self,
+                context: C,
+                stack: &mut Vec<(&'a Self, C)>,
+            ) -> Recursion<Infallible, Infallible> {
+                let mut $recurse = |child: &'a $Node| -> Recursion<Infallible, Infallible> {
+                    stack.push((child, context));
+                    ControlFlow::Continue(())
+                };
 
                 match &self.node {
                     $($child)*
@@ -268,12 +369,15 @@ macro_rules! define_traversal {
                 ControlFlow::Continue(())
             }
 
-            fn apply_children<C, T, E, F>(&mut self, context: C, function: &mut F) -> Recursion<T, E>
-            where
-                C: Copy,
-                F: FnMut(&Self, C) -> Visit<Self, C, T, E>,
-            {
-                let mut $recurse = |child: &mut $Node| child.apply_subtree(context, function);
+            fn push_children_mut<'a, C: Copy>(
+                &'a mut self,
+                context: C,
+                stack: &mut Vec<(&'a mut Self, C)>,
+            ) -> Recursion<Infallible, Infallible> {
+                let mut $recurse = |child: &'a mut $Node| -> Recursion<Infallible, Infallible> {
+                    stack.push((child, context));
+                    ControlFlow::Continue(())
+                };
 
                 match &mut self.node {
                     $($child)*
@@ -891,5 +995,67 @@ mod tests {
 
         assert!(matches!(outcome, ControlFlow::Continue(())));
         assert_eq!(children, ["[a]X", "(nu Z0 . Z0)"]);
+    }
+}
+
+#[cfg(test)]
+mod stack_depth_probe {
+    //! Proves the claim in [Traverse]'s own doc comment: `visit_subtree`/`apply_subtree` (and
+    //! everything built on them) walk with an explicit heap stack, not native recursion, so their
+    //! depth is bounded by available memory rather than the call stack. The tree here is built
+    //! directly, bypassing the parser (which has its own, unrelated recursion limit), at a depth
+    //! an order of magnitude past what any native-recursive walk over this codebase's own ASTs
+    //! survives (see e.g. `merc_typecheck::modal::check::stack_depth_probe`, which SIGABRTs at a
+    //! tenth of this depth for exactly that reason).
+    use merc_utilities::Span;
+
+    use super::*;
+    use crate::StateFrmUnaryOp;
+
+    fn deep_negation(depth: usize) -> StateFrm {
+        let mut formula = StateFrmKind::True.spanned(Span::default());
+        for _ in 0..depth {
+            formula = StateFrmKind::Unary {
+                op: StateFrmUnaryOp::Negation,
+                expr: Box::new(formula),
+            }
+            .spanned(Span::default());
+        }
+        formula
+    }
+
+    #[test]
+    fn visit_a_million_deep_negation_does_not_overflow_the_stack() {
+        let formula = deep_negation(1_000_000);
+
+        let mut count = 0usize;
+        formula.visit::<Infallible, _>(|_| {
+            count += 1;
+            ControlFlow::Continue(())
+        });
+        assert_eq!(count, 1_000_001); // the million `Unary` nodes, plus the `True` at the bottom.
+
+        // Dropping a million-deep `Box` chain recurses through the default drop glue one `Box` at
+        // a time and overflows the stack on its own, completely independent of (and not fixed by)
+        // the traversal above -- a known, separate gap (see
+        // `review/stack-overflow-recursion.md`). Leak it so *this* test only exercises what it
+        // means to.
+        std::mem::forget(formula);
+    }
+
+    #[test]
+    fn apply_mut_a_million_deep_negation_does_not_overflow_the_stack() {
+        let mut formula = deep_negation(1_000_000);
+
+        let mut count = 0usize;
+        let result: Result<(), Infallible> = formula.apply_mut(|_| {
+            count += 1;
+            Ok(None)
+        });
+        assert!(result.is_ok());
+        assert_eq!(count, 1_000_001);
+
+        // See the comment in the `visit` test above: recursive `Drop` is a separate, un-fixed gap.
+        std::mem::forget(formula);
     }
 }
