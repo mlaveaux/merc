@@ -20,7 +20,7 @@ both of its public string parsers on ordinary, spec-valid input, causing a panic
 reachable directly from the `merc-pbes` CLI's user-supplied `--generators` flag.
 
 ## Finding 1 — `Permutation::from_cycle_notation`/`from_mapping_notation` panic (debug) / silently
-break their own invariant (release) on ordinary fixed-point notation — CONFIRMED
+break their own invariant (release) on ordinary fixed-point notation — FIXED
 
 `tools/mcrl2/crates/merc_pbes/src/permutation.rs:120-133` (`from_cycle_notation`) and `:41-88`
 (`from_mapping_notation`), both funnelling into `from_mapping`'s invariant check at `:18-38`:
@@ -118,6 +118,50 @@ Direction of a fix: `from_cycle_notation` should skip a cycle of length 1 the sa
 skips an empty cycle (`if cycle_content.trim().is_empty() { continue; }`); `from_mapping_notation`
 and the manual pair-parsing loop should likewise drop (or reject with a clear error) any `from == to`
 pair before validating/constructing the mapping.
+
+### Outcome: FIXED
+
+Applied exactly the fix direction above, matching the file's existing "skip, don't error" convention
+for the structurally analogous empty-cycle case:
+
+- `from_cycle_notation` (`tools/mcrl2/crates/merc_pbes/src/permutation.rs`): after parsing
+  `cycle_elements`, added `if cycle_elements.len() == 1 { continue; }` before building the
+  `(from, to)` pairs for that cycle, so a singleton cycle is skipped exactly like an empty one.
+- `from_mapping_notation` (same file): after parsing `from`/`to` for a token, added
+  `if from == to { continue; }` before the duplicate-domain check and the `pairs.push`, so an
+  explicit identity pair is dropped rather than reaching `Permutation::from_mapping`.
+
+Neither parser's error-handling style is disturbed: both already silently skip degenerate input
+(the empty-cycle case) rather than surfacing a `MercError` for it, so dropping the identity/fixed
+point silently is consistent with that existing convention rather than introducing a new one.
+
+Verified by running the reviewer's two regression tests unmodified — both now pass instead of
+panicking:
+
+```
+$ cd tools/mcrl2
+$ cargo test -p merc_pbes --test permutation_test from_cycle_notation_accepts_singleton_cycle_without_panicking
+running 1 test
+test from_cycle_notation_accepts_singleton_cycle_without_panicking ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+$ cargo test -p merc_pbes --test permutation_test from_mapping_notation_accepts_identity_pair_without_panicking
+running 1 test
+test from_mapping_notation_accepts_identity_pair_without_panicking ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+```
+
+Full `merc_pbes` suite, no regressions:
+
+```
+$ cargo nextest run -p merc_pbes --no-fail-fast -- --include-ignored
+     Summary [  67.871s] 137 tests run: 137 passed, 0 skipped
+```
+
+`cargo +nightly fmt --all -- --check` in `tools/mcrl2` shows no diff for `permutation.rs` (the only
+file changed by this fix); the four diffs it reports elsewhere are pre-existing formatting drift in
+unrelated root-workspace crates (`crates/sabre`, `crates/symbolic`, `crates/unsafety`, pulled in as
+path dependencies) untouched by this change.
 
 ## Checked and found correct
 

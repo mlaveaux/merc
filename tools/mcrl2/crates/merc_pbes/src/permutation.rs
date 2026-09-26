@@ -70,6 +70,12 @@ impl Permutation {
                 .parse()
                 .map_err(|_| MercError::from(format!("Invalid number: {}", to_str)))?;
 
+            // Skip identity pairs: they name a fixed point and would otherwise
+            // produce an identity pair, which `Permutation::from_mapping` rejects.
+            if from == to {
+                continue;
+            }
+
             if pairs.iter().any(|(f, _)| *f == from) {
                 return Err(MercError::from(format!(
                     "Invalid permutation: multiple mappings for {}",
@@ -115,6 +121,12 @@ impl Permutation {
                 .collect();
 
             let cycle_elements = cycle_elements?;
+
+            // Skip singleton cycles: they name a fixed point and would otherwise
+            // produce an identity pair, which `Permutation::from_mapping` rejects.
+            if cycle_elements.len() == 1 {
+                continue;
+            }
 
             // Create mappings for the current cycle (each element maps to the next)
             let len = cycle_elements.len();
