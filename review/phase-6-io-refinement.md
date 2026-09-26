@@ -97,12 +97,54 @@ of `CounterExample`'s documented contract that any other consumer of the raw
   defect is confirmed at the `CounterExample` API boundary, and is a latent
   risk for the next caller that trusts the doc comment rather than
   independently re-deriving that it must filter tau itself.
-- **Status**: CONFIRMED via failing test; not fixed. Direction of fix: filter
-  hidden labels out of the trace either when `CounterExample::WeakTrace`/
-  `Divergence`/`StableFailures`/`ImpossibleFutures` are constructed in
-  `refinement.rs`, or once, centrally, in `reconstruct_trace` for a caller
-  that requests the visible trace — `CounterExample::Trace` must keep the
-  unfiltered version.
+- **Status**: FIXED. The fix is at the source, in `is_refinement_generic`
+  itself (`crates/refinement/src/failures_refinement.rs`): an impl-side
+  transition is now recorded as a literal edge in the counter-example tree
+  only when it is *not* an unobservable tau step under weak semantics
+  (`is_unobservable_tau = weak_transition && merged_lts.is_hidden_label(...)`).
+  For such a tau step, exploration still proceeds (the new `(impl', spec)`
+  pair is still pushed to `working` and still tracked by the antichain), but
+  no new counter-example tree node is created — the pair reuses the current
+  node `ce` as its parent, so the tau step contributes nothing to the
+  reconstructed trace. `CounterExample::Trace` (`weak_transition == false`)
+  is untouched: strong trace refinement still records tau as an ordinary,
+  literal action, per the original design. This also fixes the divergence
+  path (`InnerCe::Diverges` failures reached via a preceding tau step) since
+  it goes through the same tree-construction code, and the impossible-futures
+  path (`crates/refinement/src/impossible_futures.rs`), which calls the same
+  `is_refinement_generic` with `weak_transition = true` for both the outer
+  and the inner (`is_weak_trace_refinement_ce`) checks.
+  - **Regression test**: `cargo test -p merc_refinement --test
+    counterexample_content -- --nocapture` now passes:
+    `weak_trace_counterexample_reports_the_visible_trace_not_raw_impl_steps ... ok`
+    (previously failed with `["τ", "a"]`, now returns `["a"]`).
+  - **No regressions**: `cargo nextest run -p merc_refinement --no-fail-fast --
+    --include-ignored` — 13/13 tests pass, including
+    `refines_is_reflexive_on_random_ltss` and
+    `refines_verdict_is_independent_of_preprocess_and_strategy` (the
+    reflexivity/preprocess-strategy-independence property tests added by this
+    phase) and all five `test_mcrl2_ltscompare_*` variants.
+  - **Consumer unaffected/simplified**: `crates/syntax::generate_refinement_formula`
+    needed no change. Its `weaktrace_formula` helper's defensive
+    `.filter(|l| !l.is_tau_label())` (`crates/syntax/src/counterexample_formula.rs:193`)
+    is now provably redundant for every trace it will ever see from
+    `merc_refinement` (those traces can no longer contain a tau label at all),
+    but it is left in place as harmless defense-in-depth rather than removed.
+    `cargo test -p merc_syntax --lib --bins --test example_test --test
+    grammar_test --test roundtrip_test` passes (21+41 tests). The pre-existing
+    `multi_action_test` failures (`multi_action_eq_distinguishes_*`) are the
+    already-tracked, unrelated `MultiAction::eq` defect from
+    `review/phase-2-syntax.md` and are untouched by this change (verified they
+    fail identically before this fix, since this fix does not touch
+    `crates/syntax` at all — confirmed via `git diff --stat`, which shows only
+    `crates/refinement/src/failures_refinement.rs` changed).
+  - **Lint/format**: `cargo clippy -p merc_refinement -p merc_syntax
+    --all-targets` shows no new warnings (the two pre-existing warnings in
+    `crates/syntax/src/random_value_expression.rs` and
+    `crates/syntax/src/traverse.rs` are unrelated and unchanged by this fix);
+    `cargo +nightly fmt --all -- --check` shows no diff for
+    `failures_refinement.rs` (unrelated pre-existing formatting diffs remain
+    in other, untouched files elsewhere in the workspace).
 
 ## Checked and found correct
 
