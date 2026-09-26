@@ -13,13 +13,14 @@ than forced into a single CONFIRMED/PLAUSIBLE mold throughout.
 ## Verdict
 
 Two real, previously-unflagged defects, both outside the six phases' stated
-scope: `cargo doc` **currently fails outright** under CI's exact `-D
-warnings` gate (`crates/sabre` is missing the workspace's `unexpected_cfgs`
-lint override, so its own `#[cfg(kani)]` breaks doc generation), and the
-carried-over `refine_bisimulation` panic is now fully root-caused and
-demonstrated with three new tests, including one that isolates the bug to a
+scope: `cargo doc` **used to fail outright** under CI's exact `-D
+warnings` gate (`crates/sabre` was missing the workspace's `unexpected_cfgs`
+lint override, so its own `#[cfg(kani)]` broke doc generation — now FIXED),
+and the carried-over `refine_bisimulation` panic is now fully root-caused,
+demonstrated with three new tests (including one that isolates the bug to a
 single `oxidd_reorder::set_var_order` call independent of any merc-specific
-machinery. Import cycles are real but small and, on inspection, either
+machinery), and FIXED in production code. Import cycles are real but small
+and, on inspection, either
 by-design bidirectional data/driver coupling (4 identical instances in
 `typecheck`) or test-only artifacts, not spaghetti. The most consequential
 coverage-gap finding isn't really about tests: two crates named in Phase 3's
@@ -179,13 +180,32 @@ warnings under the same `-D warnings` flags (confirmed by running the full
 `cargo doc --no-deps --document-private-items` and grepping for `^warning`/
 `^error` — the only two lines are the one shown above).
 
-- **Status**: CONFIRMED (exit code 101, reproduced directly, matches CI's
-  exact command).
-- **Fix direction** (not applied — Cargo.toml is production configuration):
-  add `[lints]\nworkspace = true` to `crates/sabre/Cargo.toml` (matching
-  `crates/aterm`/`crates/unsafety`), or the narrower
-  `[lints.rust]\nunexpected_cfgs = { level = "allow", check-cfg = ['cfg(kani)'] }`
-  matching `crates/sharedmutex`'s pattern.
+- **Status**: FIXED. Added `[lints]\nworkspace = true` to
+  `crates/sabre/Cargo.toml` (matching `crates/aterm`/`crates/unsafety`, right
+  after `rust-version.workspace = true`) so it inherits the workspace's
+  `unexpected_cfgs = { level = "allow", check-cfg = ['cfg(loom)', 'cfg(kani)'] }`
+  (`Cargo.toml:61`) instead of falling back to rustc's default `warn`. This is
+  a config-only, zero-behavior-change fix.
+- **Verification**:
+  ```
+  $ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items -p merc_sabre
+  ...
+   Documenting merc_sabre v3.0.0 (.../crates/sabre)
+      Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.45s
+     Generated .../target/doc/merc_sabre/index.html
+  $ echo $?
+  0
+  ```
+  `cargo check -p merc_sabre --all-targets` and
+  `cargo clippy -p merc_sabre --all-targets` both succeed with zero warnings
+  attributable to `merc_sabre` itself (the only warnings printed are
+  pre-existing ones in `merc_syntax`/`merc_typecheck`, unrelated dependencies
+  built along the way — confirmed by grepping the clippy output for
+  `sabre`/`refine.rs`, which returns nothing). The full root-workspace
+  `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items`
+  was not re-run in full here (slow, and `-p merc_sabre` isolates the one
+  crate this fix touches); `-p merc_sabre` succeeding with exit 0 where it
+  previously failed with exit 101 is the direct evidence for this fix.
 
 ### tools/gui workspace: clean
 
@@ -496,19 +516,85 @@ panic sites depending on manager size/complexity**.
   least compiles and documents the still-open state accurately, without
   changing what it tests).
 
-**Status**: CONFIRMED and fully root-caused, with a verified fix direction
-(append `lts.action_variables()` to the `order` vector in
-`refine.rs:106-112`, e.g. after `q_prime`) demonstrated to work at the
-`oxidd_reorder` level in isolation. **Not fixed in `refine.rs` itself** —
-that is a production-code change to `crates/symbolic`, outside this review
-role's charter (test code only). Whoever picks this up should: (1) apply the
-one-line `order` fix, (2) re-run
-`set_var_order_without_action_vars_breaks_p_q_adjacency` /
-`refine_bisimulation_panics_on_lts_with_action_variables` to confirm they
-now pass, (3) un-ignore `test_random_refine_bisimulation` and check whether
-`quotient_symbolic` also needs updating for the new variable layout (it
-wasn't exercised by any of the tests here, since `refine_bisimulation`
-itself never returns before this fix).
+**Status**: FIXED. Applied the verified fix direction: `refine.rs`'s `order`
+construction now appends `lts.action_variables()` after the interleaved
+p/q/p'/q' variables, right before the `oxidd_reorder::set_var_order` call
+(`refine.rs:104-122`):
+
+```rust
+manager_ref.with_manager_exclusive(|manager| {
+    let mut order: Vec<_> = lts
+        .state_variables()
+        .iter()
+        .zip(q_variables.iter())
+        .zip(lts.next_state_variables().iter().zip(q_prime_variables.iter()))
+        .flat_map(|((s, q), (s_prime, q_prime))| [*s, *q, *s_prime, *q_prime])
+        .collect();
+    order.extend(lts.action_variables().iter().copied());
+
+    oxidd_reorder::set_var_order(manager, &order)
+});
+```
+
+**Verification**:
+
+```
+$ cargo nextest run -p merc_symbolic --lib -E 'test(bdd::refine::tests)' --run-ignored all
+     Summary [   0.229s] 4 tests run: 2 passed, 2 failed, 71 skipped
+        FAIL (3/4) merc_symbolic bdd::refine::tests::test_random_refine_bisimulation
+        FAIL (4/4) merc_symbolic bdd::refine::tests::set_var_order_without_action_vars_breaks_p_q_adjacency
+```
+
+- `refine_bisimulation_panics_on_lts_with_action_variables` — **now PASSES**
+  (previously panicked with "Variable renaming must be to the level directly
+  below"). This is the direct end-to-end confirmation: the real
+  `refine_bisimulation` function, called with an LTS that has action
+  variables, no longer panics.
+- `set_var_order_with_action_vars_appended_preserves_p_q_adjacency` —
+  continues to pass (unchanged; it already demonstrated the fix direction
+  works at the `oxidd_reorder` level before this phase).
+- `set_var_order_without_action_vars_breaks_p_q_adjacency` — **still fails,
+  by design, not a regression**: this test never calls `refine_bisimulation`
+  or any of `refine.rs`'s production code. It manually builds an `order` that
+  *omits* the action variable (reproducing the old, buggy construction
+  in isolation) specifically to characterize `oxidd_reorder`'s own documented
+  placement behavior for unmentioned variables. Fixing `refine.rs` cannot
+  make this assertion pass, because the assertion is about what happens when
+  you *don't* apply the fix. It remains valuable as a permanent, minimal
+  characterization of the underlying library behavior that caused the bug,
+  independent of merc's own code. (Confirmed by reading the test: it builds
+  its own manager and its own `order` vector — `crates/symbolic/src/bdd/refine.rs`
+  lines 306-ish, no call to `refine_bisimulation` anywhere in the function
+  body.)
+- `test_random_refine_bisimulation` — still fails, but for an unrelated
+  reason: run explicitly, it no longer hits the `variable_rename`/`set_var_order`
+  panic, but instead fails with `OutOfMemory` inside `refine_bisimulation`
+  (`crates/symbolic/src/bdd/refine.rs:31`, propagated via `?` from a
+  `BDDFunction` op). Root cause: the test's BDD manager is sized
+  `oxidd::bdd::new_manager(2028, 2028, 1)` — a capacity that was already this
+  small in the original, commented-out version of this test (confirmed via
+  `git show f7bcec78 -- crates/symbolic/src/bdd/refine.rs`, which shows the
+  pre-phase-5 commented-out test used the identical `2028, 2028` capacity),
+  so it predates this fix and isn't something the `order` fix introduced.
+  With 10 state variables, 5 action labels and 100 random iterations, the
+  real (now-succeeding, further-running) refinement loop needs materially
+  more manager capacity than this pre-existing, apparently-never-actually-run
+  test provisions (other tests/CLI code in this crate use
+  `BDD_NODE_CAPACITY`/`BDD_CACHE_CAPACITY` = `1 << 22`, three orders of
+  magnitude larger). Left `#[ignore]`d as instructed — resizing the manager
+  and/or re-checking `quotient_symbolic` against the corrected variable
+  layout is a separate, not-yet-scoped follow-up, not part of this fix.
+- Full crate suite: `cargo nextest run -p merc_symbolic --no-fail-fast` →
+  75 passed, 1 failed (`set_var_order_without_action_vars_breaks_p_q_adjacency`,
+  expected per above), 1 skipped (`test_random_refine_bisimulation`, still
+  `#[ignore]`d) — no other regressions.
+- `cargo clippy -p merc_symbolic --all-targets` and
+  `cargo +nightly fmt --all -- --check` (after reformatting `refine.rs`,
+  which had pre-existing formatting drift from when its test module was
+  added in this phase) both pass clean for this file; the only remaining
+  `cargo fmt --check` diff in the crate is a pre-existing, unrelated
+  `use` reordering in `crates/symbolic/src/lib.rs:29` that predates this
+  phase's commit and this fix.
 
 ---
 
@@ -556,3 +642,17 @@ $ cargo nextest run -p merc_symbolic --lib -E 'test(bdd::refine::tests)' --run-i
 here via `--run-ignored all` and fails for the same underlying reason, as
 expected.) `set_var_order_with_action_vars_appended_preserves_p_q_adjacency`
 is the one that passes.
+
+**Post-fix update**: with the `order` fix applied to `refine_bisimulation`
+(see §4's Status), the same command now gives:
+```
+$ cargo nextest run -p merc_symbolic --lib -E 'test(bdd::refine::tests)' --run-ignored all
+     Summary [   0.229s] 4 tests run: 2 passed, 2 failed, 71 skipped
+        FAIL (3/4) merc_symbolic bdd::refine::tests::test_random_refine_bisimulation
+        FAIL (4/4) merc_symbolic bdd::refine::tests::set_var_order_without_action_vars_breaks_p_q_adjacency
+```
+`refine_bisimulation_panics_on_lts_with_action_variables` now passes (the
+end-to-end panic is gone). The two still-failing tests fail for reasons
+unrelated to the fix — see §4's Status for why each one is expected to keep
+failing (a permanent oxidd-level characterization test, and a pre-existing
+undersized test manager, respectively).
