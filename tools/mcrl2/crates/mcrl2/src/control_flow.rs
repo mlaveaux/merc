@@ -34,7 +34,10 @@ pub trait CfgSummand {
 ///   `d == c`), or every location when the guard does not constrain `d`, and
 /// - the edge's **target** is the location the parameter moves to once the
 ///   summand fires (the closed value it is assigned), or the same location as
-///   `source` (a self-loop) when the summand leaves `d` unchanged.
+///   `source` (a self-loop) when the summand leaves `d` unchanged, or unknown
+///   when the summand assigns it a non-constant expression (only possible for
+///   a summand excluded by [`ControlFlowGraph::new`]'s `live` predicate — see
+///   [`CfgTarget::Unknown`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CfgEdge<V> {
     /// Position into [`ControlFlowGraph::control_flow_parameters`] identifying
@@ -47,10 +50,30 @@ pub struct CfgEdge<V> {
     /// location.
     pub source: Option<V>,
 
-    /// The location this edge arrives at, i.e. the value the control flow
-    /// parameter has once the summand fires. `None` when the summand does not
-    /// change it, so the edge arrives back at `source` (a self-loop).
-    pub target: Option<V>,
+    /// The location this edge arrives at, i.e. what happens to the control
+    /// flow parameter once the summand fires. See [`CfgTarget`].
+    pub target: CfgTarget<V>,
+}
+
+/// The location a [`CfgEdge`] arrives at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CfgTarget<V> {
+    /// The summand leaves the parameter unchanged, so the edge arrives back
+    /// at `source` (a genuine self-loop).
+    Unchanged,
+
+    /// The summand assigns the parameter this closed value.
+    Constant(V),
+
+    /// The summand assigns the parameter a non-constant expression, so its
+    /// value after firing is unknown: neither pinned to `source` nor to any
+    /// other single fixed location. This can only occur for a summand
+    /// excluded by [`ControlFlowGraph::new`]'s `live` predicate: for any live
+    /// summand, `is_control_flow_parameter` already disqualifies the
+    /// parameter entirely whenever a live summand writes it a non-constant
+    /// value, so no edge for that parameter is ever built for any summand
+    /// once that happens.
+    Unknown,
 }
 
 /// The outcome of a control flow graph analysis.
@@ -119,13 +142,13 @@ impl<V> ControlFlowGraph<V> {
             let mut summand_edges = Vec::new();
             for (position, &j) in control_flow_parameters.iter().enumerate() {
                 let source = analysis.source.get(&j).map(|term| intern_term(&mut intern, term));
-                let target = analysis
-                    .target
-                    .get(&j)
-                    .and_then(|value| value.as_ref())
-                    .map(|term| intern_term(&mut intern, term));
+                let target = match analysis.target.get(&j) {
+                    None => CfgTarget::Unchanged,
+                    Some(None) => CfgTarget::Unknown,
+                    Some(Some(term)) => CfgTarget::Constant(intern_term(&mut intern, term)),
+                };
 
-                if source.is_some() || target.is_some() {
+                if source.is_some() || matches!(target, CfgTarget::Constant(_)) {
                     summand_edges.push(CfgEdge {
                         position,
                         source,
