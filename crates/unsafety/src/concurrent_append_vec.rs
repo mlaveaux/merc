@@ -367,7 +367,10 @@ mod verification {
         let block: usize = kani::any();
 
         let bucket = bucket_of_block(block);
-        assert!(bucket < NUM_BUCKETS, "bucket index must fit the fixed-size buckets array");
+        assert!(
+            bucket < NUM_BUCKETS,
+            "bucket index must fit the fixed-size buckets array"
+        );
 
         let start = bucket_start_blocks(bucket);
         let count = bucket_blocks(bucket);
@@ -465,7 +468,11 @@ mod tests {
         assert_eq!(vec.len(), 65);
 
         let collected: Vec<u64> = vec.iter().copied().collect();
-        assert_eq!(collected.len(), 65, "iter must see every element across the bucket boundary");
+        assert_eq!(
+            collected.len(),
+            65,
+            "iter must see every element across the bucket boundary"
+        );
     }
 
     /// A single short block leaves the rest of the reserved block as gaps.

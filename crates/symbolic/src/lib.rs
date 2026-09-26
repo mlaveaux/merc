@@ -29,10 +29,10 @@ pub(crate) use random_vector_set::*;
 
 pub use args::BDD_CACHE_CAPACITY;
 pub use args::BDD_NODE_CAPACITY;
-pub use args::LDD_CACHE_CAPACITY;
-pub use args::LDD_NODE_CAPACITY;
 #[cfg(feature = "clap")]
 pub use args::ExplorationArgs;
+pub use args::LDD_CACHE_CAPACITY;
+pub use args::LDD_NODE_CAPACITY;
 #[cfg(feature = "clap")]
 pub use args::MaxIterationsArgs;
 #[cfg(feature = "clap")]

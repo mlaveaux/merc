@@ -480,7 +480,10 @@ mod tests {
 
         let rhs_stack = TermStack::new(&rule);
         assert_eq!(rhs_stack.stack_size, 1, "a single Config::Term slot for the literal");
-        assert!(rhs_stack.variables.is_empty(), "the rhs does not mention the lhs variable");
+        assert!(
+            rhs_stack.variables.is_empty(),
+            "the rhs does not mention the lhs variable"
+        );
         assert_eq!(
             rhs_stack.innermost_stack.read().len(),
             1,
