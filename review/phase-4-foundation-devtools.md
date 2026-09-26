@@ -26,7 +26,7 @@ existing 37-test suite (`cargo test -p merc_rec-tests`, 216s) all pass; light pa
 
 ## Findings
 
-### 1. `cargo xtask publish` fails immediately and always: two un-versioned dependencies and one nonexistent crate name in its hard-coded list — CONFIRMED
+### 1. `cargo xtask publish` fails immediately and always: two un-versioned dependencies and one nonexistent crate name in its hard-coded list — FIXED
 
 - **Location**: `crates/xtask/src/publish.rs:8-26` (the `crates` list inside `publish_crates`).
 - **The failure scenario**: `publish_crates` iterates a hard-coded list of 17 crate names, running
@@ -74,13 +74,74 @@ existing 37-test suite (`cargo test -p merc_rec-tests`, 216s) all pass; light pa
     all dependencies must have a version requirement specified when publishing.
     dependency `merc_tools` does not specify a version
   ```
-- **Status**: CONFIRMED, three independent instances of the same class of defect (a
-  publish-order/dependency-completeness list that has drifted from the actual workspace).
-- **Fix direction**: add `version = "..."` to the `merc_tools` and `merc_typecheck` workspace
-  dependency entries in the root `Cargo.toml` (if they are meant to be published at all — if not,
-  every crate that depends on them, i.e. `merc_sabre` and `merc_symbolic`, can never be published
-  either, which is a design question for whoever owns the crate boundaries) and drop `merc_ldd`
-  from the list (or add the crate, if one was meant to exist under that name).
+- **Status**: FIXED. Both un-versioned workspace dependency entries now carry a `version`, and the
+  nonexistent `merc_ldd` entry has been removed from the list.
+- **Fix applied**:
+  - Root `Cargo.toml` `[workspace.dependencies]`: added `version = "2.0"` to both `merc_tools` and
+    `merc_typecheck` (matching the version scheme every other workspace-published crate already
+    uses — the version string mirrors that crate's own `[package]` version, and both `merc_tools`
+    and `merc_typecheck` use `version.workspace = true`, i.e. the workspace's `2.0.0`, the same
+    convention `merc_explore = { version = "2.0", ... }` already follows for a crate at `2.0.0`).
+  - `crates/xtask/src/publish.rs`: removed the `merc_ldd` entry from `publish_crates`'s list.
+    Investigated rather than assumed cargo's "did you mean `merc_lts`" suggestion: `merc_lts`
+    is a distinct, unrelated crate (LTS I/O) already present at its own, correct position (10) in
+    the same list; the actual LDD (decision-diagram) functionality lives inside `crates/symbolic`
+    as its `ldd` module (`crates/symbolic/src/ldd/`, package `merc_symbolic`, e.g.
+    `crates/symbolic/src/ldd/symbolic_explore.rs`), and `merc_symbolic` is already the very next
+    entry in the list. `merc_ldd` was therefore a leftover crate name (from before the `ldd`
+    module was folded into `merc_symbolic`) with nothing left to point it at, not a missing
+    entry — deleting it, not substituting `merc_lts`, is the correct fix. Kept the mirrored crate
+    list in `crates/xtask/tests/publish_dependencies_have_versions_test.rs` in sync, per that
+    test's own doc comment.
+  - **Verification**:
+    ```
+    $ cargo test -p xtask --test publish_dependencies_have_versions_test
+    test test_publish_crates_dependencies_all_have_versions ... ok
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+    $ cargo publish --dry-run -p merc_sabre --allow-dirty
+       Packaging merc_sabre v3.0.0 (.../crates/sabre)
+        Updating crates.io index
+    error: failed to prepare local package for uploading
+    Caused by:
+      failed to select a version for the requirement `merc_aterm = "^3.0"`
+      candidate versions found which didn't match: 2.0.0, 1.0.0
+      location searched: crates.io index
+
+    $ cargo publish --dry-run -p merc_symbolic --allow-dirty
+       Packaging merc_symbolic v3.0.0 (.../crates/symbolic)
+        Updating crates.io index
+    error: failed to prepare local package for uploading
+    Caused by:
+      failed to select a version for the requirement `merc_aterm = "^3.0"`
+      candidate versions found which didn't match: 2.0.0, 1.0.0
+      location searched: crates.io index
+
+    $ cargo publish --dry-run -p merc_ldd --allow-dirty
+    error: package ID specification `merc_ldd` did not match any packages
+    help: a package with a similar name exists: `merc_lts`
+    ```
+    The specific defect this finding names is fixed: both dry runs now get past `Packaging`
+    (the manifest "all dependencies must have a version requirement specified when publishing"
+    check) entirely — the exact error text from this finding no longer occurs anywhere. `merc_ldd`
+    is confirmed to remain correctly absent from the workspace (it was removed from the *list*,
+    not turned into a real crate); its own dry-run failure is now moot because `publish_crates`
+    no longer tries it at all.
+
+    Both `merc_sabre` and `merc_symbolic` still fail dry-run, but at a **different, later, and
+    pre-existing step** unrelated to this finding: `cargo publish --dry-run` resolves path+version
+    dependencies against the *real* crates.io registry, and this workspace's crates were bumped
+    to local version `3.0.0` well ahead of what has actually been published there (confirmed via
+    the sparse index, e.g. `curl https://index.crates.io/me/rc/merc_aterm` lists `1.0.0`/`2.0.0`
+    only). This reproduces identically for crates never touched by this finding, e.g.
+    `cargo publish --dry-run -p merc_collections --allow-dirty` fails the same way on
+    `merc_io = "^3.0"`, while a crate with no `merc_*` dependency at all,
+    `cargo publish --dry-run -p merc_utilities --allow-dirty`, dry-runs to completion. This is a
+    real, structural gap in `publish_crates` (which only ever dry-runs, so it can never make the
+    lower-numbered crates' new versions actually resolvable for the higher ones — a real release
+    would need to *publish* each crate for real, in order, before dry-running the next) but it is
+    a separate defect from the one this finding describes, is out of this fix's scope, and is not
+    claimed as fixed here.
 
 ## Checked and found correct
 
@@ -223,10 +284,11 @@ existing 37-test suite (`cargo test -p merc_rec-tests`, 216s) all pass; light pa
   `test_publish_crates_dependencies_all_have_versions` — statically re-derives, from the actual
   `Cargo.toml` files (no network access needed, unlike shelling out to `cargo publish` directly),
   whether every crate `publish_crates`' hard-coded list tries to dry-run-publish has a
-  workspace-declared name and only `[dependencies]` that carry a version. **Fails on the current
-  tree** with exactly the three problems in Finding 1 (`merc_sabre -> merc_typecheck`, `merc_ldd`
-  not a package, `merc_symbolic -> merc_tools`); would pass once the root `Cargo.toml` and/or the
-  `publish.rs` crate list are fixed. Run with: `cargo test -p xtask --test
+  workspace-declared name and only `[dependencies]` that carry a version. Originally failed on the
+  tree with exactly the three problems in Finding 1 (`merc_sabre -> merc_typecheck`, `merc_ldd`
+  not a package, `merc_symbolic -> merc_tools`); **now passes** — Finding 1 fixed the root
+  `Cargo.toml` versions and removed `merc_ldd` from `publish.rs`'s list (mirrored here, per this
+  test's own note that the two lists must be kept in sync). Run with: `cargo test -p xtask --test
   publish_dependencies_have_versions_test`. (Its hard-coded `PUBLISH_CRATES` list is a manual copy
   of `publish_crates`'s own list — that function and its list are `pub(crate)`/local, so they
   cannot be imported from an external test file without changing production code; keep the two in
@@ -238,12 +300,17 @@ existing 37-test suite (`cargo test -p merc_rec-tests`, 216s) all pass; light pa
 cargo test -p merc_collections                              # 19 unit + 1 stress test, all pass
 cargo test -p merc_collections --test indexed_set_stress_test  # new test, passes
 cargo test -p merc_utilities                                 # 25 unit + 1 doctest, all pass
-cargo test -p xtask                                           # new test FAILS (documents Finding 1)
+cargo test -p xtask                                           # test now PASSES (Finding 1 fixed)
 cargo test -p merc_rec-tests                                  # 37 tests, all pass (216s)
 
-cargo publish --dry-run -p merc_sabre --allow-dirty            # fails: merc_typecheck has no version
-cargo publish --dry-run -p merc_ldd --allow-dirty               # fails: no such package
-cargo publish --dry-run -p merc_symbolic --allow-dirty          # fails: merc_tools has no version
+cargo publish --dry-run -p merc_sabre --allow-dirty            # now past the manifest-version
+                                                                 # check; fails later on unrelated,
+                                                                 # pre-existing crates.io registry
+                                                                 # version lag (see Finding 1)
+cargo publish --dry-run -p merc_ldd --allow-dirty               # still no such package (expected -
+                                                                 # merc_ldd was removed from the
+                                                                 # publish list, not created)
+cargo publish --dry-run -p merc_symbolic --allow-dirty          # same as merc_sabre above
 grep -rln publish .github/workflows/*.yml                      # (no output - never run in CI)
 grep -rn unsafe crates/utilities/src crates/collections/src \
   crates/rec-tests/src crates/xtask/src                        # forbid attributes + 1 string literal only

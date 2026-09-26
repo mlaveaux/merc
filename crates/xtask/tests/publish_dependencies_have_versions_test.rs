@@ -49,7 +49,6 @@ const PUBLISH_CRATES: &[&str] = &[
     "merc_refinement",
     "merc_syntax",
     "merc_sabre",
-    "merc_ldd",
     "merc_symbolic",
     "merc_vpg",
 ];

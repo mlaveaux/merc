@@ -154,8 +154,8 @@ merc_sabre-ffi = { path = "crates/sabre_compiling/sabre_ffi" }
 merc_sharedmutex = { version = "3.0", path = "crates/sharedmutex" }
 merc_symbolic = { version = "3.0",path = "crates/symbolic", features = ["clap"] }
 merc_syntax = { version = "3.0", path = "crates/syntax" }
-merc_tools = { path = "crates/tools" }
-merc_typecheck = { path = "crates/typecheck" }
+merc_tools = { version = "2.0", path = "crates/tools" }
+merc_typecheck = { version = "2.0", path = "crates/typecheck" }
 merc_unsafety = { version = "3.0", path = "crates/unsafety" }
 merc_utilities = { version = "3.0", path = "crates/utilities" }
 merc_vpg = { version = "3.0", path = "crates/vpg", features = ["clap"] }
