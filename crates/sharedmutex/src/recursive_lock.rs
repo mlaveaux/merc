@@ -578,3 +578,65 @@ mod tests {
         }
     }
 }
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// `RecursiveLockReadGuard::deref` is the exact function whose `!mutating` assert is what
+    /// `with_mut` replaced the old `DerefMut`-based API to enforce (see the module-level
+    /// aliasing finding this crate's phase-1 review recorded as CONFIRMED and FIXED): under the
+    /// old API a caller could stash a `&mut T` from `deref_mut` in a `let`, call
+    /// `read_recursive()` afterwards, and deref the result, aliasing the two. This proves the
+    /// *legitimate* half of the fix directly on the real function: whenever `mutating` is
+    /// false (no `with_mut` closure is executing), `deref`'s raw pointer chase
+    /// (`self.mutex.inner.data_ptr().as_ref().unwrap_unchecked()`) is memory-safe and returns
+    /// exactly the value stored in the lock, for arbitrary `i64` and for every recursion depth
+    /// `read_recursive()` could have left the lock at (the depth value plays no role in
+    /// `deref`'s own logic, so leaving it fully symbolic checks that independence too).
+    ///
+    /// The other half — that `deref` panics instead of aliasing when `mutating` is true — is
+    /// not provable by a Kani safety proof (a reachable panic is a verification failure, not a
+    /// success, so there is no way to state "this must panic" as a `#[kani::proof]`); it is
+    /// covered by the crate's existing `test_read_recursive_deref_during_with_mut_panics`
+    /// (`#[should_panic]`, run under both plain `cargo test` and Miri).
+    ///
+    /// This harness never calls `RecursiveLock::write`/`read_recursive` themselves: both
+    /// eventually lock the real `BfSharedMutex` (`write` unconditionally; `read_recursive`
+    /// conditionally, via `acquire_shared`'s `while forbidden { .. }` loop, which CBMC cannot
+    /// prove unreachable through the `Arc`-indirected `forbidden` flag even when it is
+    /// statically `false`), which this crate's phase-1 review found is not a viable Kani target
+    /// under this toolchain (CBMC exhausts memory unwinding `std::sync::Mutex`'s internal futex
+    /// retry loop). Instead it drives the private `recursive_depth`/`mutating` `Cell`s and
+    /// constructs the guard directly — exactly the state `read_recursive()`'s own bookkeeping
+    /// would leave behind for a legitimate acquisition — which is possible only because this
+    /// module (`recursive_lock.rs`) has access to its own private fields.
+    #[kani::proof]
+    fn read_guard_deref_reads_correct_value_when_not_mutating() {
+        let value: i64 = kani::any();
+        let lock = RecursiveLock::new(value);
+
+        let depth: usize = kani::any();
+        lock.recursive_depth.set(depth);
+        lock.mutating.set(false);
+
+        let guard = RecursiveLockReadGuard { mutex: &lock };
+        assert_eq!(*guard, value);
+
+        // Do not run the guard's real `Drop` impl: it would decrement `recursive_depth` and,
+        // at depth 0, reconstruct a `BfSharedMutexReadGuard` via `create_read_guard_unchecked`
+        // to release the `busy` flag — bookkeeping for a `read_recursive()` acquisition this
+        // proof deliberately bypassed by constructing the guard directly. The guard owns
+        // nothing besides the `&RecursiveLock<T>` reference, which outlives it, so forgetting
+        // it here leaks no resource relevant to this proof.
+        std::mem::forget(guard);
+
+        // Do not let `lock` drop normally either: `RecursiveLock<T>`'s `inner: BfSharedMutex<T>`
+        // field would then run `Drop for BfSharedMutex`, which unconditionally locks the real
+        // `shared.other: std::sync::Mutex<..>` to deregister itself — the same CBMC-unbounded
+        // futex-retry-loop path this crate's phase-1 review found unviable for Kani (see the
+        // module doc comment above). Nothing this proof checks depends on `lock` ever being
+        // torn down.
+        std::mem::forget(lock);
+    }
+}

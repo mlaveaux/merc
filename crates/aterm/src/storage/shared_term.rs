@@ -320,4 +320,43 @@ mod verification {
         assert_eq!(term.arguments()[0].shared().ptr(), arg.shared().ptr());
         assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
     }
+
+    /// The one-argument harness above cannot distinguish a correct per-index offset
+    /// computation in `SharedTerm::construct` (`ptr.byte_offset(slice_offset).cast().add(index)`)
+    /// from one that silently aliases every argument slot onto the same address, since index 0
+    /// is the only slot it ever populates. This proves two *distinct* arguments land at two
+    /// distinct, correctly-ordered slots: `arguments()[0]`/`arguments()[1]` each observe the
+    /// specific argument written to that index, never the other's, and the two slots do not
+    /// alias — the invariant every multi-argument term built through
+    /// `ATermStorage::insert`'s unbounded-arity path depends on.
+    #[kani::proof]
+    fn shared_term_construct_then_read_roundtrips_two_distinct_arguments() {
+        let arg0 = build_leaf_ref();
+        let arg1 = build_leaf_ref();
+
+        let symbol_index = leak_symbol(2);
+        // SAFETY: `symbol_index` is a leaked, live `SharedSymbol`.
+        let symbol: SymbolRef<'_> = unsafe { SymbolRef::from_index(&symbol_index) };
+        let arguments = [arg0.copy(), arg1.copy()];
+        let lookup = SharedTermLookup {
+            symbol,
+            arguments: &arguments,
+        };
+
+        let ptr = Global
+            .allocate_slice_dst::<SharedTerm>(2)
+            .expect("a two-length allocation must succeed for a bounded proof");
+        // SAFETY: `ptr` was just allocated with `SharedTerm::layout_for(2)`, matching what
+        // `construct` requires for a `lookup` whose `arguments` slice has length 2.
+        unsafe { SharedTerm::construct(ptr.as_ptr(), &lookup) };
+
+        // SAFETY: `ptr` now points at a fully initialized, live `SharedTerm` of arity 2.
+        let term: &SharedTerm = unsafe { ptr.as_ref() };
+
+        assert_eq!(term.arguments().len(), 2);
+        assert_eq!(term.arguments()[0].shared().ptr(), arg0.shared().ptr());
+        assert_eq!(term.arguments()[1].shared().ptr(), arg1.shared().ptr());
+        assert_ne!(term.arguments()[0].shared().ptr(), term.arguments()[1].shared().ptr());
+        assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+    }
 }

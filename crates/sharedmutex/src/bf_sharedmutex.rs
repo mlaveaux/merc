@@ -807,3 +807,58 @@ mod tests {
         });
     }
 }
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// `BfSharedMutex::data_ptr()` returns exactly the raw pointer every guard's `Deref`/
+    /// `DerefMut` dereferences once the busy-forbidden protocol has granted access
+    /// (`BfSharedMutexReadGuard::deref`, `BfSharedMutexWriteGuard::deref`/`deref_mut`, and the
+    /// non-loom branch of `RecursiveLockReadGuard::deref` in `recursive_lock.rs`, which calls
+    /// this same method through `RecursiveLock::data_ptr`'s `delegate!`). Every one of those
+    /// `# Safety` comments asserts the pointer is "non-null" and that reading/writing through it
+    /// is sound given exclusive/shared access; this proves the pointer itself is always
+    /// non-null and that a read or write through it behaves like an ordinary `&T`/`&mut T` to the
+    /// wrapped value, for arbitrary `u64` — the actual claim those comments make, checked rather
+    /// than only argued.
+    ///
+    /// This harness never calls `read`/`write`/`try_write`/`acquire_shared`: every one of those
+    /// locks the real `shared.other: Mutex<..>` (directly, or via `acquire_exclusive`), and this
+    /// crate's own phase-1 review found that CBMC cannot bound `std::sync::Mutex`'s internal
+    /// futex-retry loop even along a provably uncontended path (any harness reaching
+    /// `self.shared.other` — including one for `create_read_guard_unchecked` paired with a
+    /// prior `acquire_shared()` on a freshly-constructed, uncontended mutex — either does not
+    /// terminate or fails with CBMC exhausting memory unwinding
+    /// `mutex::futex::Mutex::lock_contended`). `BfSharedMutex::new` only allocates two `Arc`s and
+    /// constructs an *unlocked* `Mutex`, so `data_ptr()` needs none of that machinery, making the
+    /// underlying pointer arithmetic itself — as opposed to the locking protocol around it — a
+    /// viable, non-vacuous Kani target.
+    #[kani::proof]
+    fn data_ptr_is_non_null_and_round_trips_reads_and_writes() {
+        let initial: u64 = kani::any();
+        let mutex = BfSharedMutex::new(initial);
+
+        let ptr = mutex.data_ptr();
+        assert!(!ptr.is_null());
+
+        // SAFETY: `mutex` is exclusively owned by this proof and never shared, so a direct
+        // `&T`/`&mut T` through the data pointer is exactly the access every guard's `Deref`/
+        // `DerefMut` grants once the protocol has admitted it.
+        unsafe {
+            assert_eq!(*ptr, initial);
+
+            let new_value: u64 = kani::any();
+            *ptr = new_value;
+            assert_eq!(*ptr, new_value);
+        }
+
+        // Do not let `mutex` drop normally: `Drop for BfSharedMutex` unconditionally locks the
+        // real `shared.other: std::sync::Mutex<..>` to deregister itself, which is exactly the
+        // code path this crate's phase-1 review found CBMC cannot bound (it unwinds
+        // `Mutex::lock_contended`'s internal futex retry loop without terminating, even though
+        // this lock is never actually contended here). The pointer-arithmetic property this
+        // harness proves does not depend on `mutex` ever being deregistered.
+        std::mem::forget(mutex);
+    }
+}
