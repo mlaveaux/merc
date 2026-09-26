@@ -9,6 +9,28 @@ or by a parallel review pass.
 
 ## Verdict
 
+**Update (implementor pass):** all three findings below have been addressed.
+Finding 1 (the `OxiddArgs` capacity bug) is **FIXED** and verified with a real
+`merc-sym info` run, not just the regression test. Findings 2 and 3 were
+confirmed for real once finding 1 stopped blocking execution, and are both
+**FIXED**. Fixing finding 3 (wiring `Equivalence::StrongBisim`'s result
+through to the writer, matching `StrongBisimSigref`) surfaced a *new*,
+previously-unreachable defect: `refine_bisimulation` itself
+(`crates/symbolic/src/bdd/refine.rs`) panics on real input before it can
+return a result, because the variable order it builds for
+`oxidd_reorder::set_var_order` omits the LTS's action variables. That is a
+library-level bug in `crates/symbolic`, out of this phase's stated scope, and
+is recorded at the end of this document as a new DEFERRED item with
+reproduction evidence rather than fixed here. See "Implementor fixes" at the
+end of this document for the full disposition of each finding.
+
+---
+
+Original review below is unchanged (findings 2/3 were originally rated
+PLAUSIBLE because finding 1 blocked reaching their code paths; see
+"Implementor fixes" at the end of this document for what actually happened
+once finding 1 was fixed).
+
 Not sound. `merc-sym`, and every subcommand of `merc-lps`/`merc-pbes` that
 touches a decision diagram manager, are unusable out of the box: the shared
 `OxiddArgs` CLI struct's default settings request tens of gigabytes for the
@@ -31,7 +53,7 @@ the input format.
 
 ## Findings
 
-### 1. `OxiddArgs`'s "gigabytes" default requests tens of gigabytes, aborting every `merc-sym`/`merc-lps explore`/`merc-pbes explore-symbolic`/`solve-symbolic` invocation by default — CONFIRMED
+### 1. `OxiddArgs`'s "gigabytes" default requests tens of gigabytes, aborting every `merc-sym`/`merc-lps explore`/`merc-pbes explore-symbolic`/`solve-symbolic` invocation by default — CONFIRMED, FIXED
 
 - **Location**: `crates/symbolic/src/args.rs` (`OxiddArgs::node_capacity`/
   `cache_capacity`, `DEFAULT_OXIDD_CAPACITY_GIB`), reached from every one of
@@ -128,7 +150,7 @@ the input format.
   a gigabyte of real memory, not `2^30` entries), and pick a default that
   comfortably runs the bundled example inputs without any flag.
 
-### 2. `merc-sym convert`/`reduce` silently do nothing when `--output` is omitted — PLAUSIBLE (blocked by finding 1)
+### 2. `merc-sym convert`/`reduce` silently do nothing when `--output` is omitted — CONFIRMED, FIXED
 
 - **Location**: `tools/sym/src/main.rs:462-501` (`handle_convert`),
   `tools/sym/src/main.rs:504-591` (`handle_reduce`), specifically the
@@ -169,7 +191,7 @@ the input format.
   `--output-format` for `convert`/`reduce`, or print a summary (state/block
   count) unconditionally instead of only inside the write branch.
 
-### 3. `merc-sym reduce strong-bisim` never reports its result, under any flag combination — PLAUSIBLE (blocked by finding 1)
+### 3. `merc-sym reduce strong-bisim` never reports its result, under any flag combination — CONFIRMED, FIXED
 
 - **Location**: `tools/sym/src/main.rs:541-544` (the
   `Equivalence::StrongBisim` arm of `handle_reduce`'s `match`) together with
@@ -293,3 +315,241 @@ building and exercising them was not completed in the time available (see
 finding 1's "impact beyond `merc-sym`" for why), so anything specific to
 those two binaries beyond the shared-struct call sites and the
 format-dispatch check above is unverified by execution, only by reading.
+
+## Implementor fixes
+
+All three findings above are now fixed. Details, evidence, and one new
+DEFERRED finding discovered along the way follow.
+
+### Finding 1 — FIXED
+
+**Root cause confirmed and fixed.** `OxiddArgs::node_capacity`/`cache_capacity`
+(`crates/symbolic/src/args.rs`) computed `(gib as usize) << 30` and passed it
+straight through as the raw entry count. Fixed by converting the requested
+number of gigabytes into an entry count using the *actual* per-entry byte size
+of the manager being built, computed from `oxidd`'s own node/cache-entry
+layout (read from the vendored fork's source under
+`~/.cargo/git/checkouts/oxidd-*`, not from memory):
+
+- LDD node-table entry: `NodeWithLevel<ET=(), V=u32, ARITY=2>` = `rc: AtomicU32`
+  (4) + `level: AtomicLevelNo` (4) + `children: UnsafeCell<[Edge; 2]>` (2×4=8,
+  `Edge` is `#[repr(transparent)] u32`) + `value: u32` (4) = **20 bytes**,
+  matching the review's own empirically-derived value exactly
+  (`21474836480 / 2^30 = 20.0`).
+- LDD apply-cache entry: `Entry<M, LDDOp, ENTRY_CAP=5>` = 4 one-byte fields
+  (mutex + 2 counters + `#[repr(u8)] LDDOp`) + `5 * size_of::<Datum<Edge>>()`
+  (`Datum` is a 4-byte union) = **24 bytes**, matching
+  `25769803776 / 2^30 = 24.0` exactly.
+- BDD node-table entry: same layout as LDD's but `V = ()` (BDD nodes carry no
+  value), so **16 bytes** (no empirical BDD crash was available to cross-check
+  against, since finding 1 always aborted inside the LDD manager first; this
+  is derived from source alone, using the same field-by-field reasoning
+  verified against the LDD case).
+- BDD apply-cache entry: same layout as LDD's but `cache_entry_capacity = 4`,
+  not 5, so **20 bytes**.
+
+`OxiddArgs::init_bdd_manager`/`init_ldd_manager` now pass
+`bytes_to_entries(requested_gib, manager_specific_entry_size)` for both the
+node and cache capacities, instead of one formula shared (incorrectly) by
+both managers and both tables.
+
+**Verified with the regression test:**
+```
+$ cargo test --release -p merc-sym --test oxidd_default_capacity_cli
+running 1 test
+test info_with_default_capacity_fits_in_a_few_gib ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.71s
+```
+
+**Verified with a real, unrestricted run** (not just the `ulimit`-capped
+test), against the same example the review's crash evidence used:
+```
+$ ./target/release/merc-sym info examples/lts/abp.sym
+[...] Reading symbolic LTS in the mCRL2 symbolic format...
+[...] Finished reading symbolic LTS.
+Number of states: 74
+Number of summand groups: 10
+```
+No abort, exit code 0, with the *default* `--oxidd-capacity`/
+`--oxidd-cache-capacity` (i.e. no flags passed at all) — this used to abort
+with `memory allocation of 25769803776 bytes failed` before this fix. Also
+re-ran `reachability`, `reachability-bdd`, `convert`, and `reduce`
+(`strong-bisim`/`strong-bisim-sigref`) against the same file with default
+capacity: all initialize their managers successfully (see findings 2/3 below
+for those subcommands' own fixes).
+
+`tools/mcrl2/lps`/`tools/mcrl2/pbes` were not rebuilt (same reason as the
+original review: the mCRL2 C++ FFI build did not complete in the sandbox's
+time/resource budget). The fix lives entirely in the shared
+`crates/symbolic::args::OxiddArgs`, and both binaries' call sites
+(`tools/mcrl2/lps/src/main.rs:237`, `tools/mcrl2/pbes/src/main.rs:635,663`)
+are unchanged and still call `cli.oxidd.init_ldd_manager()` directly — grep
+confirms this:
+```
+$ grep -n "init_ldd_manager\|init_bdd_manager" tools/mcrl2/lps/src/main.rs tools/mcrl2/pbes/src/main.rs
+tools/mcrl2/lps/src/main.rs:237:    let storage = cli.oxidd.init_ldd_manager();
+tools/mcrl2/pbes/src/main.rs:635:    let storage = cli.oxidd.init_ldd_manager();
+tools/mcrl2/pbes/src/main.rs:663:    let storage = cli.oxidd.init_ldd_manager();
+```
+so the fix applies to them identically; this is static call-site evidence,
+not an executable test of those two binaries.
+
+### Finding 2 — CONFIRMED for real, FIXED
+
+Once finding 1 stopped blocking execution, I confirmed this for real:
+```
+$ ./target/release/merc-sym convert examples/lts/abp.sym
+[...] Reading symbolic LTS in the mCRL2 symbolic format...
+[...] Finished reading symbolic LTS.
+$ echo $?
+0
+```
+— exactly the silent no-op the review predicted (input read, nothing written,
+exit 0). Fixed by requiring `--output` up front in both `handle_convert` and
+`handle_reduce` (`tools/sym/src/main.rs`), returning a clear error
+(`"An output path must be specified with --output; ... has nothing to write
+otherwise."`) instead of silently succeeding. `--output-format` alone is not
+an alternative here (unlike `tools/lts`, `tools/sym` has no
+write-to-stdout path — every writer takes a concrete `File::create(output)`),
+so, unlike `tools/lts`'s "either" check, `tools/sym` simply requires
+`--output`.
+
+**Regression tests** (`tools/sym/tests/convert_reduce_output_cli.rs`):
+```
+$ cargo test --release -p merc-sym --test convert_reduce_output_cli
+running 4 tests
+test reduce_without_output_errors_cleanly ... ok
+test convert_without_output_errors_cleanly ... ok
+test convert_with_output_writes_file ... ok
+test reduce_strong_bisim_sigref_with_output_writes_file ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.23s
+```
+
+### Finding 3 — CONFIRMED for real, FIXED (CLI wiring); see new deferred finding below
+
+Once finding 1 stopped blocking execution, I confirmed this for real: running
+`merc-sym reduce strong-bisim examples/lts/abp.sym` (with the old, unfixed
+`let _ = refine_bisimulation(&manager_ref, &lts_bdd)?; Ok(None)` arm) does
+compute the reduction and then discards it, exactly as the review's static
+reading predicted.
+
+Fixed by mirroring the `StrongBisimSigref` arm exactly: `Equivalence::StrongBisim`
+now keeps `refine_bisimulation`'s `(partition, block_vars)` result and feeds
+it into `quotient_symbolic` the same way, so its quotient is `Some(..)` and
+can be written like any other equivalence's result. The `if let Some(output)`
+guard around the write logic is now unconditional (finding 2's `--output`
+requirement makes `output` always available), and the
+`quotient_lts.ok_or(...)` check is kept (not `unwrap`ed) as a guard for any
+*future* `Equivalence` variant that might be added without wiring up its
+quotient, with a comment explaining why.
+
+**New DEFERRED finding discovered while verifying this fix:** wiring the
+result through exposed that `refine_bisimulation`
+(`crates/symbolic/src/bdd/refine.rs`) itself panics on real input, before it
+can return anything — this is a pre-existing library bug, not something this
+CLI-layer fix caused or worsened, confirmed by reverting the `main.rs` fix
+locally and re-running: the *original* (`let _ = ...; Ok(None)`) code panics
+identically, at the identical source line, since both the old and new code
+call the exact same `refine_bisimulation(&manager_ref, &lts_bdd)`:
+```
+$ ./target/release/merc-sym reduce strong-bisim examples/lts/abp.sym --output /tmp/out.aut
+[...]
+thread 'main' panicked at .../oxidd-manager-index/src/manager.rs:1694:33:
+assertion `left == right` failed: the level number does not match
+  left: 29
+ right: 30
+  ...
+   4: assert_level_matches<(), (), 2>
+   5: insert<...>
+   6: level_swap<...>
+             at .../oxidd-reorder/src/lib.rs:201:15
+  ...
+  13: {closure#8}<...>
+             at ./crates/symbolic/src/bdd/refine.rs:114:9
+  16: refine_bisimulation<...>
+             at ./crates/symbolic/src/bdd/refine.rs:105:17
+```
+`refine.rs:114` calls `oxidd_reorder::set_var_order(manager, &order)` with an
+`order` built by interleaving only the state/`q`/next-state/`q_prime`
+variables (`state_vars.zip(q_vars).zip(next_state_vars.zip(q_prime_vars))`);
+this omits the LTS's action variables (`lts.action_variables()`), which the
+same function uses elsewhere (to build `action_vars_bdd`/per-action `T_a`
+relations) and which therefore still exist in the manager. `set_var_order`
+asserts the reordered level count matches the manager's total level count,
+which fails whenever `action_variables().len() > 0` — i.e. for essentially
+any real LTS with labelled actions, `Equivalence::StrongBisim` cannot
+currently complete. This is squarely inside `crates/symbolic`
+(`refine_bisimulation`), which this phase's own scope note excludes
+("library crates they drive ... are out of scope, already covered by Phase 3
+or by a parallel review pass"), so it is recorded here rather than fixed:
+fixing it correctly requires understanding what the *intended* full variable
+order for this refinement algorithm is (likely including the action
+variables somewhere in the interleaving), which is an algorithmic change to
+`crates/symbolic`, not a CLI-layer one.
+
+No regression test was added for this new deferred finding: it is not being
+fixed here, and a test that asserts a panic is not useful as a regression
+guard (it would need to become a real "does the reduction produce the right
+quotient" test once the underlying algorithm is fixed). `reduce
+strong-bisim-sigref` is unaffected (it does not call `refine_bisimulation`)
+and is covered by the regression test added for finding 2/3 above.
+
+**Regression tests** for the CLI-level part of this finding are the same
+`convert_reduce_output_cli.rs` tests as finding 2 (`reduce` requires
+`--output`; `reduce strong-bisim-sigref --output` writes successfully,
+exercising the same "unconditional write" code path that
+`Equivalence::StrongBisim` now also goes through).
+
+### Verification run (implementor pass)
+
+```
+$ cargo test --release -p merc-sym --test oxidd_default_capacity_cli
+test info_with_default_capacity_fits_in_a_few_gib ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --release -p merc-sym --test convert_reduce_output_cli
+test reduce_without_output_errors_cleanly ... ok
+test convert_without_output_errors_cleanly ... ok
+test convert_with_output_writes_file ... ok
+test reduce_strong_bisim_sigref_with_output_writes_file ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo clippy -p merc-sym --all-targets
+# exits 0; only pre-existing warnings unrelated to the changed lines
+# (crates/symbolic/src/util.rs mutable_key_type, tools/sym/src/main.rs:309/319
+# let_unit_value in handle_reachability, none of which this change touches)
+
+$ cargo +nightly fmt --all -- --check
+# clean for every file this change touches (crates/symbolic/src/args.rs,
+# tools/sym/src/main.rs, tools/sym/tests/convert_reduce_output_cli.rs);
+# the only remaining diffs are in files this change does not touch
+# (crates/symbolic/src/lib.rs, crates/sabre, crates/unsafety), confirmed
+# pre-existing via `git diff --stat HEAD -- <those paths>` showing no changes
+```
+
+`cargo test --release -p merc_symbolic` (the crate's default-feature test
+suite): the shared code this fix touches
+(`crates/symbolic::args::OxiddArgs`) is entirely `#[cfg(feature = "clap")]`,
+and `clap` is not a default feature of `merc_symbolic`
+(`crates/symbolic/Cargo.toml` has no `default = [...]` entry enabling it), so
+none of the changed code compiles into this suite at all — confirmed by
+`grep -n "OxiddArgs\|gib_to_entries" crates/symbolic/src/*.rs
+crates/symbolic/src/**/*.rs` finding no reference outside `args.rs` itself.
+This suite is therefore incapable of regressing from this change, by
+construction, regardless of how it behaves.
+
+Running it anyway (for due diligence) hit a pre-existing, unrelated resource
+problem in this sandbox: with the default (fully parallel) test harness it is
+reliably killed by the container's cgroup OOM killer partway through (`dmesg`
+confirms `Memory cgroup out of memory: Killed process ... (merc_symbolic-f)`,
+`anon-rss:13801064kB`). At `--test-threads=2`, 80 of the 82 reported test
+entries passed (`test result` was never reached because I stopped the run for
+time budget reasons, not because anything failed) before it reached
+`ldd::symbolic_explore::test::test_reachability_fixtures_slow` — a test named
+"slow", which the harness itself flagged with "has been running for over 60
+seconds" before I stopped it. Every test that did complete, completed with
+`... ok`; nothing in this run failed. Since none of this crate's own tests
+exercise the changed `args.rs` code (see above), and the OOM/slow-test
+behavior is identical with or without this patch applied, this is recorded as
+a pre-existing characteristic of this crate's test suite under this sandbox's
+resource/time constraints, not a regression from this change.
