@@ -319,19 +319,19 @@ impl MultiAction {
 
 impl PartialEq for MultiAction {
     fn eq(&self, other: &Self) -> bool {
-        // Check whether both multi-actions contain the same actions
+        // A multi-action is a multiset of actions, so equality must be
+        // order-independent but multiplicity-sensitive. Sort clones (the same
+        // canonicalization `Hash` below uses) and compare the results.
         if self.actions.len() != other.actions.len() {
             return false;
         }
 
-        // Map every action onto the other, equal length means they must be the same.
-        for action in self.actions.iter() {
-            if !other.actions.contains(action) {
-                return false;
-            }
-        }
+        let mut self_actions = self.actions.clone();
+        let mut other_actions = other.actions.clone();
+        self_actions.sort();
+        other_actions.sort();
 
-        true
+        self_actions == other_actions
     }
 }
 
