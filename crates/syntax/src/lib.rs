@@ -121,5 +121,6 @@ pub use syntax_tree::UntypedStateFrmSpec;
 pub use syntax_tree::VarId;
 pub use syntax_tree::VarIdAllocator;
 pub use syntax_tree::parse_sortexpr;
+pub use traverse::MixedNode;
 pub use traverse::Recursion;
 pub use traverse::Traverse;

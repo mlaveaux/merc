@@ -116,23 +116,66 @@ worklist behind a placeholder value), not this same worklist trick. The three cu
 therefore still not stack-safe for a pathologically deep tree, and are the next thing to either
 fix (harder) or explicitly accept as a narrower, separately-documented residual gap.
 
-## What is still not fixed: the hand-written checkers don't use `Traverse` yet
+## The two capability gaps that were blocking a migration are now closed in `Traverse` itself
 
-`Traverse` being stack-safe only helps code that actually uses it. The original finding's own
-functions — `modal::check::check_state_formula`/`collect_scope`,
-`resolution::variable_resolution::resolve_in_state_frm`, `process::check::check_process_expr`,
-and `pres::check::check_pres_expr` — are hand-written recursive-descent matches, not `Traverse`
-callbacks, and migrating them is real, separate, follow-up work, not a mechanical consequence of
-the engine fix above. The two `stack_depth_probe` tests in `modal::check`/`process::check` still
-SIGABRT unchanged. The obstacle worth flagging before starting that migration: these checkers
-thread genuinely *scoped* mutable state (`check_state_formula`'s `state_vars`, pushed when a
-`mu`/`nu` binder is entered and popped when its body is done being checked), which needs an
-enter-*and*-exit hook around each node's children; `Traverse`'s current context-threading model
-(`Visit`'s `Step::Into(context)`) only offers a single pre-order visit per node with no
-corresponding "children are done, un-scope now" callback. Reusing `Traverse` for these will need
-either a real API addition (a post-order/exit hook alongside the existing pre-order one) or
-re-expressing the scoped state as an immutable, `Copy` value threaded purely through `context`
-(the pattern `merc_utilities::traversal::Visit`'s own doc comment already recommends — "state
-that grows along a path ... belongs in the callback itself (push on entry, truncate on exit) or
-in a `Copy` slice" — but "push on entry, truncate on exit" itself presumes the enter/exit hook
-that doesn't exist yet).
+The previous version of this document stopped at identifying two obstacles to migrating the
+hand-written checkers onto `Traverse` and left the API addition an act. Both are now implemented
+in `crates/syntax/src/traverse.rs`, independently of and without touching the checkers themselves:
+
+- **The enter/exit hook.** `check_state_formula` threads genuinely *scoped* mutable state
+  (`state_vars`, pushed when a `mu`/`nu` binder is entered and popped once its body is done being
+  checked), which needs a callback on both sides of a node's children, not just the one pre-order
+  callback `Visit`/`Step::Into(context)` offered. `Traverse::visit_subtree_scoped`/`visit_scoped`
+  add that second callback (`exit`), called right after a node's whole subtree finishes — using
+  the same explicit-stack technique as the rest of the trait (an `Enter`/`Exit` frame per node
+  rather than a plain node), so it's stack-safe by the same argument as the fix above, and unwinds
+  every still-open `exit` (innermost first) if the walk stops early on a `Break` or an error, so a
+  caller's scoped state is never left corrupted. The one real wrinkle: `enter` and `exit` are two
+  separate `FnMut`s, and two closures cannot both capture the *same* variable mutably at once — so
+  the scoped state itself is threaded as an explicit `&mut S` parameter (`state`) rather than
+  captured by either closure, exactly like `context` is threaded, just mutably and without the
+  `Copy` requirement. `traverse::tests::test_visit_scoped_pushes_and_pops_fixpoint_variables_like_a_real_checker`
+  reproduces `check_state_formula`'s exact `state_vars` push/pop pattern end to end (nested `mu`
+  bindings, a sibling that must not see an already-exited inner binder's variable) and
+  `test_visit_scoped_unwinds_open_scopes_on_break` covers the early-exit unwind specifically.
+- **Crossing node types.** `collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm` are three
+  hand-written functions whose only job is to walk a `StateFrm`, across into the `RegFrm` of a
+  `Modality` and across again into the `ActFrm` of an `Action` — a crossing every other method on
+  `Traverse` deliberately refuses to make on its own (see the trait's own doc comment on why).
+  `Traverse::visit_mixed`/`try_visit_mixed`, backed by a new `MixedNode` enum (one variant per
+  traversable type) and `push_mixed_children` (a new, empty-by-default trait method that a node
+  type overrides to name its foreign-type children — currently only `StateFrm`, into `RegFrm`, and
+  `RegFrm`, into `ActFrm`), do that crossing in one walk instead of three hand-wired functions.
+  `traverse::tests::test_visit_mixed_crosses_from_state_formula_into_its_regular_and_action_formulas`
+  walks `[a . b*]X` and confirms the visit order crosses from the `StateFrm` root into the whole
+  `RegFrm`/`ActFrm` subtree of the modality and back, pre-order, left to right.
+
+Both additions get the same million-deep-tree stack-safety probe as the original fix
+(`stack_depth_probe::visit_scoped_a_million_deep_negation_does_not_overflow_the_stack`,
+`visit_mixed_a_million_deep_negation_does_not_overflow_the_stack`), since each is its own,
+independent explicit-stack loop rather than a thin wrapper over `visit_subtree`.
+
+`visit_mixed` is deliberately narrower than "reach every node of every type": `push_mixed_children`
+is only overridden for the one crossing `collect_scope`'s trio needed
+(`StateFrm` → `RegFrm` → `ActFrm`). Left unwired, and still exactly the kind of gap this document
+exists to name rather than quietly leave undocumented: the `DataExpr` reachable from
+`ActFrm::DataExprVal`/`MultAct`/`At`'s `operand`, from `StateFrm::Id`'s arguments and
+`DataValExpr`/`DataValExprLeftMult`/`DataValExprRightMult`, and from the equivalent spots in
+`PbesExpr`/`PresExpr`/`ProcessExpr`; and the `SortExpression` bound by an `IdDecl`/quantifier
+variable anywhere. None of these block `collect_scope`'s own migration (it doesn't currently
+recurse into any of them either), so wiring them was left for whichever future migration actually
+needs a given one, rather than guessed at speculatively here.
+
+## What is still not fixed: the hand-written checkers themselves don't use `Traverse` yet
+
+Neither addition above migrates anything: `Traverse` being stack-safe, scoped, and cross-type-aware
+only helps code that actually uses it. The original finding's own functions —
+`modal::check::check_state_formula`/`collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm`,
+`resolution::variable_resolution::resolve_in_state_frm`, `process::check::check_process_expr`, and
+`pres::check::check_pres_expr` — are still hand-written recursive-descent matches, not `Traverse`
+callbacks, and migrating them is real, separate, follow-up work: they each thread several more
+parameters (`data`, `tables`, `scope`, `typing`, ...) than a single `context`/`state` slot has
+obvious room for, and `check_state_formula` in particular is fallible in a way that would need
+`visit_scoped` used with `E = ModalError` throughout, not just proven possible on paper. The two
+`stack_depth_probe` tests in `modal::check`/`process::check` still SIGABRT, unchanged by anything
+in this document's second pass.
