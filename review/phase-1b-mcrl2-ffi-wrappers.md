@@ -144,16 +144,80 @@ instead of delegating to `DataApplication::sort()`; grepped the whole `tools/mcr
 `DataApplication::sort()`/`DataApplicationRef::sort()`. Dead code with a plausible-sounding doc
 comment and no caller — a live trap for the first person who reaches for it.
 
-### Outcome: DEFERRED (documented, not fixed)
+### Outcome: FIXED
 
-Direction of a fix: compute the actual result sort by decomposing the head function symbol's
-(possibly curried) arrow sort by the number of applied arguments, rather than reusing
-`data_function_symbol()`'s implementation verbatim. Not applied in this pass — zero current
-callers means zero user-facing impact today, and a correct fix needs more research into how this
-binding's sort-arrow decomposition API works than was budgeted here. The regression test
-(`tools/mcrl2/crates/mcrl2/tests/data_application_sort_test.rs`) stays in the tree exactly as
-written (documenting the bug is live); once fixed, its release-mode test should be replaced with
-one asserting `sort.pretty_print() == "Nat"` (noted in the test's own doc comment already).
+Root-caused against the vendored mCRL2 C++ (`data.cpp`'s `data_expression::sort()`, and
+`function_sort.h`): the result sort of a data application `f(t_0, ..., t_n)` is the *codomain* of
+`f`'s own arrow sort (a `SortArrow(domain_list, codomain)` term, `function_symbol_SortArrow()`,
+arity 2), not `f` itself, and not `f`'s sort unmodified unless that sort isn't a function sort at
+all (the C++ fallback for an ill-typed/partial head). `DataApplication::sort()` /
+`DataApplicationRef::sort()` (`tools/mcrl2/crates/mcrl2/src/data_expression.rs`) now computes
+exactly that, reading it directly off the aterm structure — the same way `DataFunctionSymbol::sort()`
+(`self.term.arg(1)`) and `SortExpression::name()` already read other sort shapes, no new FFI added:
+
+```rust
+pub fn sort(&self) -> SortExpressionRef<'_> {
+    unsafe {
+        if self.term.arg(0).arg(1).get_head_symbol().name() == "SortArrow" {
+            self.term.arg(0).arg(1).arg(1).upgrade(&self.term)
+        } else {
+            self.term.arg(0).arg(1).upgrade(&self.term)
+        }
+    }
+    .into()
+}
+```
+
+`self.term.arg(0)` is the applied head symbol `f` (same subterm `data_function_symbol()` reads);
+`.arg(1)` on it is `f`'s own sort field (mirrors `DataFunctionSymbol::sort()`). If that sort's own
+outer aterm function symbol is named `"SortArrow"`, the application's sort is its codomain
+(`arg(1)` of the arrow term, i.e. `self.term.arg(0).arg(1).arg(1)`); otherwise the head's sort is
+returned unchanged, matching `data_expression::sort()`'s own fallback. (An earlier version of this
+fix used a `let` binding to share the `self.term.arg(0).arg(1)` computation between the condition
+and the branches; that failed to compile with E0716 "temporary value dropped while borrowed" —
+`ATermRef::arg()`'s returned lifetime ties to the borrow of the specific call that produced it, so
+it must be consumed by `.upgrade()` within the same statement, exactly like every other accessor in
+this file. Recomputing the chain in each branch, all inside one `unsafe` expression per branch,
+fixed it.)
+
+Updated `tools/mcrl2/crates/mcrl2/tests/data_application_sort_test.rs` in place (kept, not
+deleted): its old debug-mode test asserted the bug's `debug_assert!` panic and its release-mode
+test asserted the *wrong* value (`sort().name() == "f"`) — both replaced by one
+`data_application_sort_is_the_result_sort_not_the_function_symbol` test asserting the *correct*
+value (`sort().pretty_print() == "Nat"` and `sort().name() == "Nat"`, for `f: Nat -> Nat` applied
+to `f(1)`), which now holds in both debug and release since the fix computes the right term
+outright rather than relying on a `debug_assert!` to catch a mismatch.
+
+Verified, debug:
+```
+cd tools/mcrl2 && cargo test -p mcrl2 --test data_application_sort_test
+```
+```
+running 2 tests
+test data_application_sort_is_the_result_sort_not_the_function_symbol ... ok
+test data_application_head_symbol_is_the_function_not_a_sort ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+```
+and release:
+```
+cd tools/mcrl2 && cargo test --release -p mcrl2 --test data_application_sort_test
+```
+```
+running 2 tests
+test data_application_head_symbol_is_the_function_not_a_sort ... ok
+test data_application_sort_is_the_result_sort_not_the_function_symbol ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+```
+
+No behavior elsewhere in scope changed: `cargo nextest run -p mcrl2 --no-fail-fast --
+--include-ignored` still reports 47/48 (the one failure is the unrelated, pre-existing Finding 1
+`with_args_arity_mismatch_reads_out_of_bounds_in_release` test from the `atermpp` review, which is
+`#[cfg_attr(debug_assertions, ignore)]`'d specifically because forcing it to run in a debug build
+via `--include-ignored` hits its own `debug_assert_eq!` instead of the release-only SIGSEGV path it
+documents — expected, not a regression); `cargo test -p merc_lps` and `cargo test -p merc_pbes`
+both pass in full.
 
 ## Checked and found correct (agent's findings, not independently re-verified line by line)
 

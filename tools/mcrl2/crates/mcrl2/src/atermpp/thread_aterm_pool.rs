@@ -494,26 +494,28 @@ mod tests {
     /// exclude each other.
     ///
     /// `ThreadTermPool`'s `Display` impl (via `GlobalTermPool`'s `Debug`)
-    /// calls `.read()` on *every* thread's protection set, including ones
-    /// concurrently being mutated by their owning thread through
+    /// used to call `.read()` on *every* thread's protection set, including
+    /// ones concurrently being mutated by their owning thread through
     /// `write_exclusive` (e.g. from `protect_with` while creating terms).
-    /// That is exactly the forbidden interleaving: one thread observes
-    /// `&ProtectionSet<ATermPtr>` (via `.read()`) while another thread holds
+    /// That was exactly the forbidden interleaving: one thread observing
+    /// `&ProtectionSet<ATermPtr>` (via `.read()`) while another thread held
     /// `&mut ProtectionSet<ATermPtr>` (via `write_exclusive`) on the very same
     /// object, which is undefined behaviour (aliased mutable/shared access)
     /// and a genuine data race on the underlying `Vec` if it reallocates
-    /// mid-iteration.
+    /// mid-iteration. `Debug for GlobalTermPool` now uses `.write()` instead
+    /// (the real C++ *exclusive* lock, which does block until every thread's
+    /// busy flag -- including one a `write_exclusive` guard holds -- clears),
+    /// so this interleaving is no longer possible.
     ///
     /// This test drives that interleaving directly: one thread continuously
     /// creates terms (mutating its own protection set through
     /// `write_exclusive`) while another repeatedly formats the pool (reading
-    /// every thread's protection set through `.read()`), and expects it not
-    /// to crash / corrupt memory. On the reviewed code this is unsound even
-    /// though it is not exercised anywhere else in the crate today; run it
-    /// under a thread sanitizer (`cargo +nightly xtask thread-sanitizer test
-    /// -p mcrl2 -- read_races_with_concurrent_term_creation`) for conclusive
-    /// evidence, since a plain debug build may not reproduce the race on
-    /// every run.
+    /// every thread's protection set), and expects it not to crash / corrupt
+    /// memory. It is a regression test for the fix above: run it under a
+    /// thread sanitizer (`cargo +nightly xtask thread-sanitizer test -p mcrl2
+    /// -- read_races_with_concurrent_term_creation`) for conclusive evidence,
+    /// since a plain debug build may not reproduce a race on every run (and
+    /// would not reliably catch a regression back to `.read()` either).
     #[test]
     fn read_races_with_concurrent_term_creation() {
         use std::sync::Arc;

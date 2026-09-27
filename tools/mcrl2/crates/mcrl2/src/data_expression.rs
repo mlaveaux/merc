@@ -294,10 +294,26 @@ mod inner {
         }
 
         /// Returns the sort of a data application.
+        ///
+        /// The result sort of `f(t_0, ..., t_n)` is the codomain of `f`'s own
+        /// sort when that sort is a function (arrow) sort, or `f`'s sort
+        /// directly otherwise. This mirrors the `application` case of
+        /// `data_expression::sort()` in the vendored mCRL2 C++ (`data.cpp`).
         pub fn sort(&self) -> SortExpressionRef<'_> {
-            // SAFETY: `arg(0)` is a direct subterm of `self.term`, so `self.term`
-            // is a valid parent witness for widening the borrow to `&self`.
-            unsafe { self.term.arg(0).upgrade(&self.term) }.into()
+            // SAFETY: `arg(0)` (the applied head symbol `f`) and its own
+            // `arg(1)` (`f`'s sort) are transitive subterms of `self.term`;
+            // when that sort is itself a `SortArrow(domain, codomain)` term,
+            // its `arg(1)` (the codomain) is a transitive subterm too.
+            // `self.term` is therefore a valid parent witness for widening
+            // any of these borrows to `&self`.
+            unsafe {
+                if self.term.arg(0).arg(1).get_head_symbol().name() == "SortArrow" {
+                    self.term.arg(0).arg(1).arg(1).upgrade(&self.term)
+                } else {
+                    self.term.arg(0).arg(1).upgrade(&self.term)
+                }
+            }
+            .into()
         }
     }
 

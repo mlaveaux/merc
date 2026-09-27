@@ -10,12 +10,15 @@ SIGSEGV, reproduced below): a 100%-safe public entry point
 `*const _aterm` pointers when the caller passes an argument count that
 doesn't match the symbol's arity, because both the Rust-side and the C++-side
 guards against this are `debug_assert`/`assert`-only and compile out in
-release builds. There is also one **PLAUSIBLE** but not sanitizer-confirmed
-data race in the busy/forbidden locking scheme (`BfTermPool::write_exclusive`
-vs `BfTermPool::read`), currently unreachable because nothing in the crate
-calls the affected `Display`/`Debug` path, but real if that ever changes.
-Everything else checked (protection-set bookkeeping, GC marking, `ATermSend`,
-`Symbol` refcounting, the empty-list guards already present) held up.
+release builds. There is also one data race in the busy/forbidden locking
+scheme (`BfTermPool::write_exclusive` vs `BfTermPool::read`, reached via
+`GlobalTermPool`'s `Debug` impl) — originally logged as PLAUSIBLE, not
+sanitizer-confirmed, because ThreadSanitizer could not be gotten to run in
+this container at review time; a later pass got ThreadSanitizer running
+here, **CONFIRMED** the race with a real TSan report, and **FIXED** it (see
+Finding 2's Outcome section below for both). Everything else checked
+(protection-set bookkeeping, GC marking, `ATermSend`, `Symbol` refcounting,
+the empty-list guards already present) held up.
 
 ## Environment notes (read first — they cap what could be CONFIRMED here)
 
@@ -184,7 +187,7 @@ finding of this phase.
 always-checked `assert_eq!` (or a `Result`-returning API), matching what was
 already done for `ATermList::head()`/`tail()`.
 
-### 2. `BfTermPool::write_exclusive` vs `BfTermPool::read` — the busy/forbidden contract is violated by `GlobalTermPool`'s own `Debug` impl. **PLAUSIBLE**, not sanitizer-confirmed (see environment notes).
+### 2. `BfTermPool::write_exclusive` vs `BfTermPool::read` — the busy/forbidden contract is violated by `GlobalTermPool`'s own `Debug` impl. **CONFIRMED** (TSan-verified; **FIXED**, see below).
 
 `tools/mcrl2/crates/mcrl2/src/atermpp/busy_forbidden.rs` (`write_exclusive`,
 `read`) and `tools/mcrl2/crates/mcrl2/src/atermpp/global_aterm_pool.rs:188-230`
@@ -229,18 +232,18 @@ reachable API whose safety argument is simply wrong, and it is exactly the
 kind of debug/logging helper someone reaches for first when diagnosing a
 pool-size issue — at which point it becomes live.
 
-**Evidence gathered (deterministic repro, not sanitizer-confirmed):** added
-`atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation`
+**Evidence gathered — now sanitizer-confirmed.** `atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation`
 in `thread_aterm_pool.rs` — 4 threads continuously creating terms while a 5th
-repeatedly formats `THREAD_TERM_POOL`. It passed in a plain debug run
-(`cargo test -p mcrl2 --lib read_races_with_concurrent_term_creation`, 0.08s)
+repeatedly formats `THREAD_TERM_POOL` — passed in a plain debug run
+(`cargo test -p mcrl2 --lib read_races_with_concurrent_term_creation`, ~0.2s)
 without crashing, which is expected and proves nothing either way — data
 races frequently don't manifest visibly without a sanitizer, especially in a
-sub-second run. I could not get a ThreadSanitizer report in this container
-(see environment notes: ABI-mismatch build errors, then a disk-exhaustion-
-induced linker crash on retry after working around the ABI issue). Downgrading
-to **PLAUSIBLE**: a concrete scenario and a deterministic repro test exist,
-but no sanitizer report backs it.
+sub-second run. Unlike the earlier attempt recorded in this file's environment
+notes, ThreadSanitizer *did* run to completion in this container on this pass
+(`cargo +nightly xtask thread-sanitizer test --no-fail-fast -p mcrl2 --lib
+read_races_with_concurrent_term_creation`, no ABI-mismatch flag needed on this
+nightly) — see the Outcome section below for the actual before/after reports.
+Upgrading this finding from PLAUSIBLE to **CONFIRMED**.
 
 **Direction of a fix:** either make `write_exclusive` take the real C++
 *exclusive* lock (defeating its own purpose — the comment in
@@ -248,7 +251,114 @@ but no sanitizer report backs it.
 creation hot path), or have `GlobalTermPool::Debug`/`Display for
 ThreadTermPool` only read a thread's protection set from that thread itself
 (post a request and read the result), or gate it behind the same exclusive
-GC-pause mechanism `mark_protection_sets` already uses.
+GC-pause mechanism `mark_protection_sets` already uses. **Taken:** the third
+option, reusing the existing exclusive-access primitive `BfTermPool` already
+provides (`write()`) rather than either weakening `write_exclusive`'s
+per-term-creation hot path or inventing a new request/response scheme.
+
+### Outcome: FIXED
+
+`Debug for GlobalTermPool` (`global_aterm_pool.rs`) now takes `BfTermPool::write`
+instead of `BfTermPool::read` when it walks every thread's protection and
+container sets. `write()` takes the real C++ *exclusive* lock
+(`mcrl2_aterm_pool_lock_exclusive`, i.e. `shared_mutex::lock()` in the
+vendored `utilities/shared_mutex.h`), which sets every *other* registered
+thread's forbidden flag and then blocks until each one's busy flag clears —
+including a busy flag a concurrent `write_exclusive()` guard is holding.
+`read()`/`write_exclusive()` both only ever set the *calling* thread's own
+busy flag (`lock_shared()`); that's why they were mutually compatible and
+didn't exclude each other, and why `write()`/`lock()` — the only operation in
+this protocol that genuinely waits on every other thread — is the fix. No new
+synchronization scheme was invented: `write()` already existed on
+`BfTermPool` as exactly this "real exclusive access" primitive (unused
+elsewhere in the crate before this fix), and it is the same guarantee
+`mark_protection_sets` already relies on (GC holds this same exclusive lock
+for its whole callback, which is why its raw, unguarded `.get()` reads are
+sound).
+
+Doc comments tightened to match: `BfTermPool::write_exclusive`'s `# Safety`
+section in `busy_forbidden.rs`, and `read_races_with_concurrent_term_creation`'s
+own doc comment in `thread_aterm_pool.rs` — both previously described this as
+a live, unfixed bug; both now describe the fix and why it holds. The test's
+mechanics are unchanged (still the reviewer's exact repro: 4 term-creating
+threads vs. a 5th formatting the pool), only its surrounding prose was
+updated.
+
+**Verified with ThreadSanitizer, before and after, on this exact test** (the
+`-Cunsafe-allow-abi-mismatch=sanitizer` workaround this file's environment
+notes anticipated was not needed on the nightly available in this run):
+
+Before (temporarily reverted `Debug for GlobalTermPool` back to `.read()`,
+i.e. the code exactly as this file originally described it; everything else
+— including the unrelated `DataApplication::sort()` fix — left in place):
+```
+cd tools/mcrl2
+cargo +nightly xtask thread-sanitizer test --no-fail-fast -p mcrl2 --lib read_races_with_concurrent_term_creation
+```
+```
+WARNING: ThreadSanitizer: data race (pid=23099)
+  Write of size 8 at 0x721800003050 by thread T2:
+    #0 <merc_unsafety::protection_set::ProtectionSet<mcrl2::atermpp::global_aterm_pool::ATermPtr>>::protect
+          crates/unsafety/src/protection_set.rs:84:9
+    #1 <mcrl2::atermpp::thread_aterm_pool::ThreadTermPool>::protect_with
+          tools/mcrl2/crates/mcrl2/src/atermpp/thread_aterm_pool.rs:364:26
+    #2 <mcrl2::atermpp::thread_aterm_pool::ThreadTermPool>::create::<...>
+          tools/mcrl2/crates/mcrl2/src/atermpp/thread_aterm_pool.rs:219:18
+    #3 <mcrl2::atermpp::aterm::ATerm>::with_args::<...>::{closure#0}
+          tools/mcrl2/crates/mcrl2/src/atermpp/aterm.rs:265:46
+    ...
+
+  Previous read of size 8 at 0x721800003050 by thread T1:
+    #0 <merc_unsafety::protection_set::ProtectionSet<mcrl2::atermpp::global_aterm_pool::ATermPtr>>::number_of_insertions
+          crates/unsafety/src/protection_set.rs:64:9
+    #1 <mcrl2::atermpp::global_aterm_pool::GlobalTermPool as core::fmt::Debug>::fmt
+          tools/mcrl2/crates/mcrl2/src/atermpp/global_aterm_pool.rs:208:37
+    #2 <lock_api::mutex::MutexGuard<...> as core::fmt::Debug>::fmt
+    ...
+    #6 <mcrl2::atermpp::thread_aterm_pool::ThreadTermPool as core::fmt::Display>::fmt
+          tools/mcrl2/crates/mcrl2/src/atermpp/thread_aterm_pool.rs:428:9
+    ...
+    #16 mcrl2::atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation::{closure#0}::{closure#1}
+          tools/mcrl2/crates/mcrl2/src/atermpp/thread_aterm_pool.rs:551:29
+    ...
+
+SUMMARY: ThreadSanitizer: data race .../alloc/src/raw_vec/mod.rs:640:49 in <alloc::raw_vec::RawVecInner>::capacity
+==================
+test atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.48s
+
+ThreadSanitizer: reported 6 warnings
+error: test failed, to rerun pass `-p mcrl2 --lib`
+```
+(Six separate race reports total, all between `ProtectionSet::protect`
+(`write_exclusive`, called from `protect_with` while a term is created) on one
+thread and `GlobalTermPool as Debug>::fmt`'s `.read()` — `len`,
+`number_of_insertions`, `maximum_size` — on another; two are shown above and
+truncated for length, the rest are the same pattern against the other
+`ProtectionSet` accessors. `cargo test` itself reports the Rust test as
+"ok" — TSan detects the race and prints reports, but by default does not fail
+the test process on its own; the run as a whole still fails because TSan's
+non-zero exit propagates. This is the exact interleaving predicted: thread A
+mutating its own protection set through `write_exclusive` while thread B
+concurrently reads it through `Debug for GlobalTermPool`'s `.read()`.)
+
+After (fix restored — `Debug for GlobalTermPool` back to `.write()`):
+```
+cd tools/mcrl2
+cargo +nightly xtask thread-sanitizer test --no-fail-fast -p mcrl2 --lib read_races_with_concurrent_term_creation
+```
+```
+running 1 test
+test atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 1.94s
+
+ok.
+```
+Zero `WARNING: ThreadSanitizer` / `SUMMARY: ThreadSanitizer` lines in the
+after run (`grep -c` confirms 0, vs. 12 such lines — 6 reports × 2 — in the
+before run). Clean exit, clean test.
 
 ## Checked and found correct
 
@@ -342,16 +452,22 @@ All in `tools/mcrl2/crates/mcrl2/src/atermpp/`, run from `tools/mcrl2/`:
   (`--test-threads=1`, and ideally alone) since it crashes the test binary.
 - `thread_aterm_pool.rs`,
   `atermpp::thread_aterm_pool::tests::read_races_with_concurrent_term_creation`
-  — repro for finding 2 (currently passes without a sanitizer; see finding 2
-  for why that's expected and not exculpatory). Run:
+  — repro for finding 2, now **TSan-confirmed** (see finding 2's Outcome
+  section for the before/after reports) and, after the fix, TSan-clean. Run:
   ```
   cargo test -p mcrl2 --lib read_races_with_concurrent_term_creation
   ```
-  For real evidence, run under ThreadSanitizer once the container has a
-  working sanitizer toolchain / enough disk:
+  or, for real sanitizer evidence:
   ```
-  cargo +nightly xtask thread-sanitizer test --no-fail-fast -p mcrl2 -- --lib read_races_with_concurrent_term_creation
+  cargo +nightly xtask thread-sanitizer test --no-fail-fast -p mcrl2 --lib read_races_with_concurrent_term_creation
   ```
+  (note: no `--` before `--lib` here — `thread-sanitizer`'s xtask appends
+  `-Zbuild-std`/`--target` *after* whatever arguments follow `thread-sanitizer`
+  on the command line, so a `--` separator earlier in the line would push
+  those flags past it, where cargo treats them as test-binary arguments
+  instead of cargo flags, and the sanitizer build silently never happens;
+  the doc originally showed a `--` here, which is the bug that produced this
+  correction).
 
 Verifiers run vs. skipped, per the `unsafe-verify` skill:
 - **miri**: attempted, fails to even start (foreign-function call), see
@@ -360,12 +476,13 @@ Verifiers run vs. skipped, per the `unsafe-verify` skill:
   lock, not a loom-modelable Rust primitive.
 - **kani**: explicitly out of scope per this phase's instructions (CBMC
   cannot model-check across a real FFI call into C++).
-- **ASan/TSan (xtask)**: attempted TSan twice; first failed on
-  `-Zsanitizer` ABI mismatches against build-script dependencies, second
-  (after adding `-Cunsafe-allow-abi-mismatch=sanitizer`) got much further but
-  hit a disk-exhaustion-induced linker crash in this shared, multi-tenant
-  container. Not re-attempted a third time. ASan not attempted at all (same
-  resource constraints). Neither finding above rests on a sanitizer report;
-  finding 1 rests on an actual reproduced SIGSEGV plus full source-level
-  tracing through the vendored C++, finding 2 on source-level tracing plus a
-  deterministic (currently non-crashing) repro test.
+- **TSan (xtask)**: originally attempted twice and could not be gotten to run
+  in this container (ABI mismatches, then a disk-exhaustion-induced linker
+  crash); a later pass got it running (see finding 2's Outcome section for
+  the full before/after reports) — no `-Cunsafe-allow-abi-mismatch=sanitizer`
+  workaround was needed on the nightly toolchain available for that run.
+  Finding 1 rests on an actual reproduced SIGSEGV plus full source-level
+  tracing through the vendored C++; finding 2 now rests on an actual TSan
+  data-race report (before the fix) and a clean TSan run (after).
+- **ASan**: not attempted (out of scope for this pass; only finding 2 needed
+  re-verification, and it is a TSan-class bug, not a memory-safety one).
