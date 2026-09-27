@@ -609,41 +609,37 @@ mod tests {
     use crate::ATermSend;
     use crate::atermpp::THREAD_TERM_POOL;
 
-    /// `ThreadTermPool::create` (reached from the fully safe `ATerm::with_args`)
-    /// only checks "argument count matches the symbol's arity" via
-    /// `debug_assert_eq!`, which is compiled out in release builds. The
-    /// vendored C++ side it feeds into does not re-check either: for
-    /// arities 0-7 (the common case, dispatched in
-    /// `aterm_pool::create_appl_dynamic`), `_aterm_appl<N>`'s iterator
-    /// constructor (`detail/aterm.h`) loops exactly `N` times over the given
-    /// iterator regardless of where the caller's real `end` is, guarded only
-    /// by `assert(it != end)` — itself compiled out under the `-DNDEBUG=1`
-    /// this workspace's release C++ build uses. So a too-short `arguments`
-    /// slice makes the C++ side read past the end of the backing `Vec` and
-    /// store the resulting garbage `usize`s as `*const _aterm` term-argument
-    /// pointers, which are later dereferenced as live terms by anything that
-    /// walks the term (`iter()`, `Debug`, hashing, marking, ...).
+    /// Regression test for a CONFIRMED SIGSEGV (see
+    /// `review/phase-1b-mcrl2-ffi-atermpp.md`, finding 1): `ThreadTermPool::create`
+    /// (reached from the fully safe `ATerm::with_args`) used to only check
+    /// "argument count matches the symbol's arity" via `debug_assert_eq!`,
+    /// which was compiled out in release builds. The vendored C++ side it
+    /// feeds into does not re-check either: for arities 0-7 (the common
+    /// case, dispatched in `aterm_pool::create_appl_dynamic`),
+    /// `_aterm_appl<N>`'s iterator constructor (`detail/aterm.h`) loops
+    /// exactly `N` times over the given iterator regardless of where the
+    /// caller's real `end` is, guarded only by `assert(it != end)` — itself
+    /// compiled out under the `-DNDEBUG=1` this workspace's release C++
+    /// build uses. So a too-short `arguments` slice made the C++ side read
+    /// past the end of the backing `Vec` and store the resulting garbage
+    /// `usize`s as `*const _aterm` term-argument pointers, later
+    /// dereferenced as live terms by anything that walks the term
+    /// (`iter()`, `Debug`, hashing, marking, ...) — a real, reproducible
+    /// SIGSEGV in `--release`.
     ///
-    /// This is a debug-vs-release-only bug: in a debug build the
-    /// `debug_assert_eq!` panics before the FFI call is ever made, so this
-    /// test is `#[ignore]`d there. Run it with
-    /// `cargo test --release -p mcrl2 --lib
-    /// with_args_arity_mismatch_reads_out_of_bounds_in_release -- --ignored
-    /// --test-threads=1` (isolated to its own process: on the reviewed code
-    /// this is expected to crash, abort, or print a garbage argument address
-    /// rather than return normally).
+    /// The fix upgrades the Rust-side check in `ThreadTermPool::create` to a
+    /// real, always-checked `assert_eq!`, so this now panics cleanly with a
+    /// descriptive message *before* the FFI call is ever made, identically
+    /// in debug and release builds, instead of reading out of bounds.
     #[test]
-    #[cfg_attr(
-        debug_assertions,
-        ignore = "the arity mismatch is caught by a debug_assert before reaching the FFI; run --release"
-    )]
+    #[should_panic(expected = "Number of arguments does not match arity")]
     fn with_args_arity_mismatch_reads_out_of_bounds_in_release() {
         use crate::Symbol;
 
-        // A symbol of arity 40 backed by only 1 real argument: the C++ side
-        // will read 39 elements past the end of the 1-element `Vec` that
-        // backs this slice, i.e. well past its allocation, not just its
-        // length.
+        // A symbol of arity 40 backed by only 1 real argument: prior to the
+        // fix, the C++ side would have read 39 elements past the end of the
+        // 1-element `Vec` that backs this slice, i.e. well past its
+        // allocation, not just its length.
         const BOGUS_ARITY: usize = 40;
         let f = Symbol::new("with_args_arity_mismatch_reads_out_of_bounds_in_release_f", BOGUS_ARITY);
         let a = ATerm::constant(&Symbol::new(
@@ -651,15 +647,9 @@ mod tests {
             0,
         ));
 
-        let bogus = ATerm::with_args(&f, &[a]);
-
-        // Walk every argument, including the 39 out-of-range ones, which
-        // dereferences whatever garbage was read from adjacent (or entirely
-        // unmapped) heap memory as though it were a live `_aterm` pointer.
-        for (i, arg) in bogus.arguments().enumerate() {
-            let printed = format!("{arg:?}");
-            eprintln!("arg[{i}] = {printed}");
-        }
+        // Must panic here, before any FFI call reads or dereferences the
+        // out-of-bounds arguments.
+        let _bogus = ATerm::with_args(&f, &[a]);
     }
 
     #[test]

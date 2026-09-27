@@ -206,7 +206,16 @@ impl ThreadTermPool {
             tmp_args.push(arg.borrow().get());
         }
 
-        debug_assert_eq!(
+        // This must be a real, always-checked assertion rather than a
+        // `debug_assert_eq!`: `mcrl2_aterm_create` dispatches by
+        // `symbol.arity()`, not by the length of the slice it is given, and
+        // reads exactly `arity` elements from `tmp_args` regardless of where
+        // it actually ends. In a release build (`-DNDEBUG=1` on the C++
+        // side) there is no bounds check on the other side of the FFI call
+        // either, so a mismatch here silently reads past the end of
+        // `tmp_args` and stores the resulting garbage as `*const _aterm`
+        // argument pointers, which are later dereferenced as live terms.
+        assert_eq!(
             symbol.borrow().arity(),
             tmp_args.len(),
             "Number of arguments does not match arity"
@@ -241,7 +250,10 @@ impl ThreadTermPool {
 
         let symbol = &tmp_data_appl[arguments.len() + 1];
 
-        debug_assert_eq!(
+        // See the matching comment in `create`: this must stay a real,
+        // always-checked assertion, not a `debug_assert_eq!`, because the
+        // FFI call below has no bounds check of its own in release builds.
+        assert_eq!(
             symbol.arity(),
             tmp_args.len(),
             "Number of arguments does not match arity"

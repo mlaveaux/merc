@@ -10,7 +10,10 @@ SIGSEGV, reproduced below): a 100%-safe public entry point
 `*const _aterm` pointers when the caller passes an argument count that
 doesn't match the symbol's arity, because both the Rust-side and the C++-side
 guards against this are `debug_assert`/`assert`-only and compile out in
-release builds. There is also one **PLAUSIBLE** but not sanitizer-confirmed
+release builds. **Status: FIXED** — see finding 1's "Status" subsection for
+the pure-Rust fix, what was directly verified, and what verification is
+still pending due to a documented container-resource constraint. There is
+also one **PLAUSIBLE** but not sanitizer-confirmed
 data race in the busy/forbidden locking scheme (`BfTermPool::write_exclusive`
 vs `BfTermPool::read`), currently unreachable because nothing in the crate
 calls the affected `Display`/`Debug` path, but real if that ever changes.
@@ -183,6 +186,92 @@ finding of this phase.
 `ThreadTermPool::create`/`create_data_application` to a real,
 always-checked `assert_eq!` (or a `Result`-returning API), matching what was
 already done for `ATermList::head()`/`tail()`.
+
+**Status: FIXED (implementation + mechanism verified; full in-crate release
+regression run not completed in this container — see below).**
+
+The fix is a pure-Rust change: no C++ source under `tools/mcrl2/cpp` or the
+vendored `3rd-party/mCRL2` tree needed to change. The bounds are fully known
+on the Rust side before the FFI call (`symbol.borrow().arity()` vs.
+`tmp_args.len()`, both already computed locally), so the check belongs, and
+now lives, entirely in `ThreadTermPool::create`/`create_data_application`
+(`thread_aterm_pool.rs:209-222`, `:250-259`), upgraded from
+`debug_assert_eq!` to `assert_eq!` — unconditional, not compiled out under
+`cfg(not(debug_assertions))`, matching the exact pattern already used by
+`ATermList::head()`/`tail()`'s plain `assert!`. This repo's convention for a
+real-input validation error close to an FFI boundary is a panicking
+assertion, not a `Result`, so no new error-handling convention was
+introduced.
+
+The regression test
+(`atermpp::aterm::tests::with_args_arity_mismatch_reads_out_of_bounds_in_release`,
+`aterm.rs`) was updated in place (not deleted or weakened) to assert the
+*fixed* behaviour: it no longer needs a debug/release split (the check is now
+identical in both), so the `#[cfg_attr(debug_assertions, ignore = ...)]` was
+removed, and it now asserts `#[should_panic(expected = "Number of arguments
+does not match arity")]` on the exact `ATerm::with_args` call that used to
+SIGSEGV, instead of walking arguments and printing garbage.
+
+**What is directly confirmed:**
+- `cargo build -p mcrl2 --lib` (dev profile) succeeded against the changed
+  source (`thread_aterm_pool.rs`, `aterm.rs`), confirming the changed code
+  compiles and type-checks: `Finished \`dev\` profile [unoptimized +
+  debuginfo] target(s) in 4m 52s`, no errors, only pre-existing dead-code
+  warnings unrelated to this change.
+- The exact mechanism the fix relies on — that `assert_eq!` panics
+  unconditionally in an optimized build while `debug_assert_eq!` is compiled
+  out — was verified directly and reproducibly, isolated from the mCRL2 C++
+  FFI entirely, with a two-function standalone program built with `rustc -O`
+  (release-equivalent codegen) using the *same* message
+  (`"Number of arguments does not match arity"`):
+  ```
+  $ rustc -O --edition 2021 main.rs -o main_release
+  $ ./main_release debug_only
+  debug_only: no panic (compiled out) — cfg(debug_assertions)=false
+  exit=0
+  $ ./main_release always
+  thread 'main' panicked at main.rs:6:5:
+  assertion `left == right` failed: Number of arguments does not match arity
+    left: 4
+   right: 1
+  exit=101
+  ```
+  (script kept at `review/evidence/assert_eq_release_proof/main.rs`; rerun
+  with the two commands above.) This is exactly the mechanism
+  `ThreadTermPool::create`'s new `assert_eq!` now relies on: what used to
+  read past the `Vec` and segfault instead now panics before the FFI call,
+  in both debug and release.
+
+**What was not completed, and why (documented, verifiable environment
+constraint — same category the "Environment notes" section above already
+flags for TSan):** re-running the actual
+`with_args_arity_mismatch_reads_out_of_bounds_in_release` test inside the
+`mcrl2` crate in `--release` (to see it panic cleanly instead of SIGSEGV,
+end-to-end through the real FFI), the full `mcrl2`/`merc_lps`/`merc_pbes`
+suites, `cargo clippy -p mcrl2 --all-targets`, and even
+`cargo +nightly fmt --all -- --check` could not be completed in this
+session: this container was shared with roughly a dozen other concurrent
+agent sessions each independently rebuilding the same vendored C++ mCRL2
+sources (confirmed via `ps aux`, which showed multiple `cc1plus` processes
+compiling `tools/mcrl2/cpp/*.cpp`/`3rd-party/mCRL2/**/*.cpp` from several
+different worktree paths simultaneously), pinning `load average` at ~40-45
+against 4 cores for over nine hours straight, with `buff/cache` collapsed to
+under 1GB. Under that contention even `cargo +nightly fmt --check` (no
+compilation involved at all) and a single-file `rustc` invocation for the
+standalone proof above took 20+ minutes instead of seconds. The `cargo test
+--release`/`cargo build --release` invocations for this crate were left
+running in the background past the point this report was written; whoever
+picks this up next should check on them first (`ps aux | grep mcrl2-sys`)
+before starting new ones, and rerun:
+```
+cargo test --release -p mcrl2 --lib with_args_arity_mismatch_reads_out_of_bounds_in_release -- --test-threads=1 --nocapture
+cargo nextest run -p mcrl2 --no-fail-fast -- --include-ignored
+cargo test -p merc_lps
+cargo test -p merc_pbes
+cargo clippy -p mcrl2 --all-targets
+cargo +nightly fmt --all -- --check
+```
+to close out the full verification this finding's fix still needs.
 
 ### 2. `BfTermPool::write_exclusive` vs `BfTermPool::read` — the busy/forbidden contract is violated by `GlobalTermPool`'s own `Debug` impl. **PLAUSIBLE**, not sanitizer-confirmed (see environment notes).
 
