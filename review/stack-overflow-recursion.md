@@ -169,7 +169,7 @@ variable anywhere. None of these block `collect_scope`'s own migration (it doesn
 recurse into any of them either), so wiring them was left for whichever future migration actually
 needs a given one, rather than guessed at speculatively here.
 
-## `modal::check` is now migrated; `process::check`/`pres::check` and variable resolution are not
+## `modal::check`, `process::check` and `pres::check` are now migrated; variable resolution is not
 
 `modal::check::collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm` are now one function
 (`collect_scope`) built on `try_visit_mixed`, and `check_state_formula`/`check_fixed_point` are now
@@ -195,14 +195,34 @@ worked around this the same way `crates/syntax/src/traverse.rs`'s own `stack_dep
 by forgetting the formula rather than letting it drop; that workaround is gone now that the
 recursive-`Drop` bug itself is fixed too — see "The recursive-`Drop` fix" below.
 
-What is still not migrated: `resolution::variable_resolution::resolve_in_state_frm`,
-`process::check::check_process_expr`, and `pres::check::check_pres_expr` are still hand-written
-recursive-descent matches, not `Traverse` callbacks. `check_process_expr`/`check_pres_expr` don't
-have `modal::check`'s node-type-crossing shape (no `visit_mixed` need) but do thread several more
-parameters (`data`, `tables`, `scope`, `typing`, ...) than a single `context`/`state` slot has
-obvious room for, same as `modal::check` did — migrating them is real, separate, follow-up work,
-not fundamentally blocked by anything left in `Traverse`, just not done. The `stack_depth_probe`
-test in `process::check` still SIGABRTs, unchanged.
+`process::check::collect_scope`/`check_process_expr` and `pres::check::collect_scope`/
+`check_pres_expr` are migrated too, each onto a single `Traverse::try_visit` walk — simpler than
+`modal::check` needed, since neither has a fixpoint-variable-style scoped stack (`visit_scoped`) or
+a `RegFrm`/`ActFrm`-style node-type crossing (`visit_mixed`) to deal with: every arm either does its
+own per-node work against a field that isn't itself a same-type child (a `DataExpr`
+weight/condition/time/constant, an `ActionName` list, a `PropVarInst`) or is empty, and the
+traversal's own descent (`Traverse::push_children` for `ProcessExpr`/`PresExpr`) reaches every
+operand in the same order the original recursive calls did. `process::check::stack_depth_probe`
+now passes (it already existed and used to SIGABRT); `pres::check` had no `stack_depth_probe` test
+at all before this — the original finding's own framing called this checker's exposure "structurally
+the same pattern (untested)" — so one was added alongside the migration rather than left
+retroactively unverified.
+
+What is still not migrated: `resolution::variable_resolution::resolve_in_state_frm` (and its
+`resolve_in_reg_frm`/`resolve_in_act_frm` cousins) is the one piece left. It is genuinely harder
+than the three checkers above, not just unstarted: it needs *two* independent scoped stacks pushed
+and popped at *two different node types* in the same walk — `StateFrm`'s own `scope`/`state_vars`
+(around `Quantifier`/`Bound`/`FixedPoint`, the same shape `check_state_formula`'s `state_vars`
+needed) *and*, separately, `ActFrm`'s own `scope` push/pop around its *own* `Quantifier` binder,
+reached by crossing through `RegFrm` from inside a `Modality`. `visit_mixed` (the mechanism for that
+crossing) and `visit_scoped` (the mechanism for that scoping) are orthogonal — neither offers the
+other — so this doesn't reduce to picking one of the two additions the way `modal::check` did:
+`check_state_formula` never needed `ActFrm`-level scoping since checking never mutates `scope`, only
+reads it, but `resolve_in_state_frm` does, exactly at the same crossing point `check_reg_formula`
+was a plain nested call for. The route that would work is nesting two separate `visit_scoped` calls
+(one over `StateFrm`, a second over `ActFrm`, invoked from the first's `Modality` arm the same way
+`check_reg_formula` is today) rather than a single mechanical swap — real, separate follow-up work,
+not fundamentally blocked by anything left in `Traverse`, just not attempted here.
 
 ## The recursive-`Drop` fix
 

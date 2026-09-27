@@ -1,3 +1,6 @@
+use std::convert::Infallible;
+use std::ops::ControlFlow;
+
 use merc_syntax::ActionName;
 use merc_syntax::Assignment;
 use merc_syntax::CommExpr;
@@ -6,6 +9,7 @@ use merc_syntax::ProcessExpr;
 use merc_syntax::ProcessExprKind;
 use merc_syntax::Rename;
 use merc_syntax::Span;
+use merc_syntax::Traverse;
 use merc_syntax::UntypedProcessSpecification;
 use merc_syntax::VarId;
 
@@ -112,6 +116,12 @@ pub(super) fn check_process_specification(
 
 /// Collects the scope for a process expression, resolving the declared sorts of
 /// all `sum`/`dist` binders.
+///
+/// A plain [`Traverse::try_visit`] walk replaces the previous hand-written recursive-descent
+/// version: every arm here just does its own per-node work (or nothing) and lets the traversal's
+/// own descent into `ProcessExpr`'s same-type children (`Traverse::push_children`, in
+/// `crates/syntax/src/traverse.rs`) reach the rest, in the same left-to-right, pre-order sequence
+/// the original recursive calls did.
 fn collect_scope(
     data: &mut DataSpecification,
     expr: &ProcessExpr,
@@ -119,36 +129,25 @@ fn collect_scope(
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), ProcessError> {
-    match &expr.node {
-        ProcessExprKind::Delta | ProcessExprKind::Tau | ProcessExprKind::Action(..) | ProcessExprKind::Id(..) => Ok(()),
-        ProcessExprKind::Sum { variables, operand } => {
+    expr.try_visit(|expr| {
+        if let ProcessExprKind::Sum { variables, .. } | ProcessExprKind::Dist { variables, .. } = &expr.node {
             collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
-            collect_scope(data, operand, scope, sort_references, typing)
         }
-        ProcessExprKind::Dist { variables, operand, .. } => {
-            collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
-            collect_scope(data, operand, scope, sort_references, typing)
-        }
-        ProcessExprKind::Binary { lhs, rhs, .. } => {
-            collect_scope(data, lhs, scope, sort_references, typing)?;
-            collect_scope(data, rhs, scope, sort_references, typing)
-        }
-        ProcessExprKind::Condition { then, else_, .. } => {
-            collect_scope(data, then, scope, sort_references, typing)?;
-            match else_ {
-                Some(else_) => collect_scope(data, else_, scope, sort_references, typing),
-                None => Ok(()),
-            }
-        }
-        ProcessExprKind::At { expr, .. } => collect_scope(data, expr, scope, sort_references, typing),
-        ProcessExprKind::Hide { operand, .. }
-        | ProcessExprKind::Block { operand, .. }
-        | ProcessExprKind::Allow { operand, .. }
-        | ProcessExprKind::Comm { operand, .. }
-        | ProcessExprKind::Rename { operand, .. } => collect_scope(data, operand, scope, sort_references, typing),
-    }
+        Ok(ControlFlow::Continue(()))
+    })
+    .map(|_: Option<Infallible>| ())
 }
 
+/// Type-checks a process expression: every action instance/instantiation, `dist`'s weight,
+/// `cond -> ...`'s condition, an `@`-time, and the `hide`/`block`/`allow`/`comm`/`rename` action
+/// names and their sort compatibility.
+///
+/// A plain [`Traverse::try_visit`] walk replaces the previous hand-written recursive-descent
+/// version, the same way [`collect_scope`] does above: every arm checks whatever isn't itself a
+/// same-type `ProcessExpr` child (a `DataExpr` weight/condition/time, an `ActionName` list, ...)
+/// and returns, leaving the traversal's own descent to reach every operand — in the same
+/// left-to-right, pre-order sequence (condition/weight/time/names checked *before* the operand
+/// they sit alongside, exactly as the original recursive calls ordered them).
 fn check_process_expr(
     data: &mut DataSpecification,
     tables: &DeclarationTables,
@@ -156,82 +155,63 @@ fn check_process_expr(
     expr: &ProcessExpr,
     typing: &mut TypingInfo,
 ) -> Result<(), ProcessError> {
-    match &expr.node {
-        ProcessExprKind::Delta | ProcessExprKind::Tau => Ok(()),
+    expr.try_visit(|expr| {
+        match &expr.node {
+            ProcessExprKind::Delta
+            | ProcessExprKind::Tau
+            | ProcessExprKind::Sum { .. }
+            | ProcessExprKind::Binary { .. } => {}
 
-        ProcessExprKind::Action(name, args) => {
-            check_action_or_process(data, tables, scope, name, args, &expr.span, typing)
-        }
-        ProcessExprKind::Id(name, assignments) => {
-            check_instantiation(data, tables, scope, name, assignments, &expr.span, typing)
-        }
+            ProcessExprKind::Action(name, args) => {
+                check_action_or_process(data, tables, scope, name, args, &expr.span, typing)?;
+            }
+            ProcessExprKind::Id(name, assignments) => {
+                check_instantiation(data, tables, scope, name, assignments, &expr.span, typing)?;
+            }
 
-        ProcessExprKind::Sum { operand, .. } => check_process_expr(data, tables, scope, operand, typing),
-        ProcessExprKind::Dist {
-            expr: weight, operand, ..
-        } => {
             // Checked against `Real`: `dist`'s weight is the distribution's density over its own
             // bound variables, already part of `scope` (collected up front by `collect_scope`).
-            let real_sort = data.context().sorts.real_sort();
-            check_expression_against::<ProcessError>(data, scope, weight, real_sort, typing)?;
-            check_process_expr(data, tables, scope, operand, typing)
-        }
-
-        ProcessExprKind::Binary { lhs, rhs, .. } => {
-            check_process_expr(data, tables, scope, lhs, typing)?;
-            check_process_expr(data, tables, scope, rhs, typing)
-        }
-
-        ProcessExprKind::Condition { condition, then, else_ } => {
-            let bool_sort = data.context().sorts.bool_sort();
-            check_expression_against::<ProcessError>(data, scope, condition, bool_sort, typing)?;
-            check_process_expr(data, tables, scope, then, typing)?;
-            if let Some(else_) = else_ {
-                check_process_expr(data, tables, scope, else_, typing)?;
+            ProcessExprKind::Dist { expr: weight, .. } => {
+                let real_sort = data.context().sorts.real_sort();
+                check_expression_against::<ProcessError>(data, scope, weight, real_sort, typing)?;
             }
-            Ok(())
-        }
 
-        ProcessExprKind::At {
-            expr: inner,
-            operand: time,
-        } => {
-            let real_sort = data.context().sorts.real_sort();
-            check_expression_against::<ProcessError>(data, scope, time, real_sort, typing)?;
-            check_process_expr(data, tables, scope, inner, typing)
-        }
+            ProcessExprKind::Condition { condition, .. } => {
+                let bool_sort = data.context().sorts.bool_sort();
+                check_expression_against::<ProcessError>(data, scope, condition, bool_sort, typing)?;
+            }
 
-        ProcessExprKind::Hide { actions, operand } => {
-            check_action_names(tables, actions, typing)?;
-            check_process_expr(data, tables, scope, operand, typing)
-        }
-        ProcessExprKind::Block { actions, operand } => {
-            check_action_names(tables, actions, typing)?;
-            check_process_expr(data, tables, scope, operand, typing)
-        }
-        ProcessExprKind::Allow { actions, operand } => {
-            for label in actions {
-                check_action_names(tables, &label.actions, typing)?;
+            ProcessExprKind::At { operand: time, .. } => {
+                let real_sort = data.context().sorts.real_sort();
+                check_expression_against::<ProcessError>(data, scope, time, real_sort, typing)?;
             }
-            check_process_expr(data, tables, scope, operand, typing)
-        }
-        ProcessExprKind::Comm { comm, operand } => {
-            for c in comm {
-                check_action_names(tables, &c.from.actions, typing)?;
-                check_action_names(tables, std::slice::from_ref(&c.to), typing)?;
-                check_comm_sorts(data, tables, c)?;
+
+            ProcessExprKind::Hide { actions, .. } | ProcessExprKind::Block { actions, .. } => {
+                check_action_names(tables, actions, typing)?;
             }
-            check_process_expr(data, tables, scope, operand, typing)
-        }
-        ProcessExprKind::Rename { renames, operand } => {
-            for r in renames {
-                check_action_names(tables, std::slice::from_ref(&r.from), typing)?;
-                check_action_names(tables, std::slice::from_ref(&r.to), typing)?;
-                check_rename_sorts(data, tables, r)?;
+            ProcessExprKind::Allow { actions, .. } => {
+                for label in actions {
+                    check_action_names(tables, &label.actions, typing)?;
+                }
             }
-            check_process_expr(data, tables, scope, operand, typing)
+            ProcessExprKind::Comm { comm, .. } => {
+                for c in comm {
+                    check_action_names(tables, &c.from.actions, typing)?;
+                    check_action_names(tables, std::slice::from_ref(&c.to), typing)?;
+                    check_comm_sorts(data, tables, c)?;
+                }
+            }
+            ProcessExprKind::Rename { renames, .. } => {
+                for r in renames {
+                    check_action_names(tables, std::slice::from_ref(&r.from), typing)?;
+                    check_action_names(tables, std::slice::from_ref(&r.to), typing)?;
+                    check_rename_sorts(data, tables, r)?;
+                }
+            }
         }
-    }
+        Ok(ControlFlow::Continue(()))
+    })
+    .map(|_: Option<Infallible>| ())
 }
 
 /// Which declaration table an [`check_action_or_process`] candidate came from, kept alongside its
@@ -672,6 +652,12 @@ fn combined_sort_matches(
 mod stack_depth_probe {
     //! Isolates `check_process_expr`'s own recursion from the parser's: the tree here is built
     //! directly, so a stack overflow can only come from this module's own walk.
+    //!
+    //! This used to SIGABRT (see `review/stack-overflow-recursion.md`) before `check_process_expr`
+    //! and `collect_scope` were migrated onto `Traverse::try_visit`, which walks with an explicit
+    //! heap stack rather than native recursion; it now passes, and `expr` is let drop normally at
+    //! the end of the test (rather than leaked with `mem::forget`) as proof the separate
+    //! recursive-`Drop` bug covering the same document doesn't fire here either.
     use merc_syntax::ProcessExprKind;
     use merc_syntax::Span;
     use merc_syntax::UntypedDataSpecification;
