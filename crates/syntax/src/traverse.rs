@@ -35,6 +35,56 @@ use crate::StateFrmKind;
 /// per variant.
 pub type Recursion<T, E> = ControlFlow<Result<T, E>, ()>;
 
+/// A node from any of this crate's traversable trees, named by which one it is.
+///
+/// [Traverse::visit_mixed] holds these on a single stack to walk across the boundary between node
+/// types that every other method on [Traverse] stays within by design (see the trait's own doc
+/// comment). Cheap to pass around: every variant is a plain reference.
+#[derive(Clone, Copy, Debug)]
+pub enum MixedNode<'a> {
+    SortExpression(&'a SortExpression),
+    DataExpr(&'a DataExpr),
+    ProcessExpr(&'a ProcessExpr),
+    StateFrm(&'a StateFrm),
+    RegFrm(&'a RegFrm),
+    ActFrm(&'a ActFrm),
+    PbesExpr(&'a PbesExpr),
+    PresExpr(&'a PresExpr),
+}
+
+/// The shared step of [Traverse::visit_mixed]/[Traverse::try_visit_mixed]: appends `node`'s
+/// children to `stack`, in the order they should be visited in.
+///
+/// A node's foreign-type children ([Traverse::push_mixed_children]) are listed before its
+/// same-type ones ([Traverse::push_children], called with a throwaway `()` context since a mixed
+/// walk has no shared context type to thread across node types). That ordering happens to match
+/// source order for the one node currently wired with both kinds of child in the same place
+/// (`StateFrmKind::Modality`'s `formula: RegFrm` precedes its `expr: Box<StateFrm>`, i.e.
+/// `[formula]expr`); see [Traverse::push_mixed_children]'s own doc comment.
+fn mixed_push_children<'a>(node: MixedNode<'a>, stack: &mut Vec<MixedNode<'a>>) {
+    fn extend<'a, N: Traverse>(node: &'a N, into: &mut Vec<MixedNode<'a>>) {
+        node.push_mixed_children(into);
+        let mut children = Vec::new();
+        let _ = node.push_children((), &mut children);
+        into.extend(children.into_iter().map(|(child, ())| child.as_mixed()));
+    }
+
+    let mut children = Vec::new();
+    match node {
+        MixedNode::SortExpression(node) => extend(node, &mut children),
+        MixedNode::DataExpr(node) => extend(node, &mut children),
+        MixedNode::ProcessExpr(node) => extend(node, &mut children),
+        MixedNode::StateFrm(node) => extend(node, &mut children),
+        MixedNode::RegFrm(node) => extend(node, &mut children),
+        MixedNode::ActFrm(node) => extend(node, &mut children),
+        MixedNode::PbesExpr(node) => extend(node, &mut children),
+        MixedNode::PresExpr(node) => extend(node, &mut children),
+    }
+    // Reproduces the same "push in written order, then reverse so the LIFO stack pops them back
+    // out in that order" trick every other stack-based walk in this file uses.
+    stack.extend(children.into_iter().rev());
+}
+
 /// A syntax tree node whose children are of its own type, traversed top-down.
 ///
 /// The traversal is defined once per node type by [Traverse::push_children] and
@@ -61,9 +111,28 @@ pub type Recursion<T, E> = ControlFlow<Result<T, E>, ()>;
 /// (`ir/desugar.rs`, `ir/lower.rs`, `resolution/name_resolution.rs`) are not stack-safe for a
 /// pathologically deep tree.
 ///
-/// The traversal never crosses into a *different* node type: a state formula traversal does not
-/// descend into the regular formula of a modality, nor into data expressions. Nest the traversals
-/// explicitly when that is wanted, so that each callback keeps a single node type.
+/// None of the above crosses into a *different* node type on its own: a [StateFrm] traversal does
+/// not, by itself, descend into the [RegFrm] of a `Modality` or the [ActFrm] inside that. Two more
+/// pieces close gaps that used to force a caller to work around this trait rather than through it:
+///
+/// - [Traverse::visit_mixed]/[Traverse::try_visit_mixed] *do* cross that boundary, visiting every
+///   node of every type reachable from `self` (see [MixedNode]) in one walk, for callbacks that
+///   need to see a whole formula regardless of which node type each part of it lives in without
+///   hand-rolling one recursive function per type and wiring the crossings between them, the way
+///   e.g. `crates/typecheck`'s `modal::check::{collect_scope, collect_scope_regfrm,
+///   collect_scope_actfrm}` currently do.
+/// - [Traverse::visit_subtree_scoped]/[Traverse::visit_scoped] add the enter-*and*-exit hook that
+///   [Visit]'s single pre-order callback cannot express, for a caller that pushes genuinely scoped
+///   mutable state on entering a node (e.g. `check_state_formula`'s `state_vars`, pushed for a
+///   `mu`/`nu` binder's body) and needs it popped again once that node's subtree, not just the
+///   node itself, is done being visited.
+///
+/// Neither of these migrates the hand-written checkers named above -- doing so is real, separate
+/// follow-up work, since they thread several more parameters than a `Traverse` callback's `context`
+/// slot has room for -- they only remove the two capability gaps that were blocking it; see
+/// `review/stack-overflow-recursion.md`. A single-type traversal still does not cross node types on
+/// its own outside of `visit_mixed`, and everywhere but the one node currently wired for it,
+/// nesting a traversal explicitly at the point it's needed is still exactly how to do it.
 pub trait Traverse: Sized {
     /// Appends each direct child of this node to `stack`, paired with `context`, in the order in
     /// which they are written. Always returns `ControlFlow::Continue(())`; the return type only
@@ -89,6 +158,21 @@ pub trait Traverse: Sized {
     fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
         F: FnMut(&mut Self) -> Result<(), E>;
+
+    /// Wraps `self` in the [MixedNode] variant naming its own type, so [Traverse::visit_mixed] can
+    /// hold nodes of every traversable type on one stack.
+    fn as_mixed(&self) -> MixedNode<'_>;
+
+    /// Appends this node's children that are of a *different* [Traverse] type to `sink`, in the
+    /// order they are written -- the crossing [Traverse::push_children] deliberately does not make
+    /// (see the trait's own doc comment) -- for [Traverse::visit_mixed] to follow.
+    ///
+    /// The default pushes nothing, correct for a node type with no such crossing. Only
+    /// [StateFrm] (into its `Modality`'s [RegFrm]) and [RegFrm] (into an `Action`'s [ActFrm])
+    /// currently override it; see `review/stack-overflow-recursion.md` for what descending further
+    /// (e.g. into the [DataExpr] inside an `ActFrm::DataExprVal`, or the `val(...)` of a
+    /// `StateFrmKind::DataValExpr`) would take.
+    fn push_mixed_children<'a>(&'a self, _sink: &mut Vec<MixedNode<'a>>) {}
 
     /// Drains an explicit stack of pending `(node, context)` pairs depth-first, in the order they
     /// would be visited by native pre-order recursion — the shared core of [Self::visit_subtree]
@@ -138,6 +222,104 @@ pub trait Traverse: Sized {
             stack[start..].reverse();
         }
         ControlFlow::Continue(())
+    }
+
+    /// See [Traverse::visit_subtree]; additionally calls `exit` on a node right after all of its
+    /// children have finished being visited -- the "children are done, un-scope now" hook a plain
+    /// [Visit] callback cannot express, for a caller that pushes scoped mutable state in `enter`
+    /// (e.g. a `mu`/`nu` binder's own variable, as `check_state_formula`'s `state_vars` does) and
+    /// must pop it again once the node's whole subtree is done, not merely once `enter` returns.
+    ///
+    /// The scoped state itself is `state`, threaded through as an explicit `&mut S` rather than
+    /// captured by either closure: `enter` and `exit` are two separate `FnMut`s, and two closures
+    /// cannot both capture the *same* variable mutably (each borrows it only for the one call it's
+    /// made with here, never at the same time as the other). `enter` and `exit` typically re-match
+    /// the same node kinds against `state`, each only pushing or popping for the ones that need
+    /// scoping — the "push on entry, truncate on exit" pattern [Visit]'s own doc comment
+    /// recommends, now with a real place to put the truncate.
+    ///
+    /// `exit` is always given the same `context` `enter` was for that node, not whatever `enter`
+    /// returned for its children: it names the node being un-scoped, not its children's context.
+    /// It still runs for a pruned node (immediately, since it has no children to wait for) and for
+    /// every node still open when the walk stops early on a [ControlFlow::Break] or an error, in
+    /// the same innermost-first order a normal return from the bottom of the tree would give — so
+    /// a `Break`/error never leaves scoped state pushed by `enter` dangling in `state`.
+    fn visit_subtree_scoped<C, S, T, E, F, G>(
+        &self,
+        context: C,
+        state: &mut S,
+        enter: &mut F,
+        exit: &mut G,
+    ) -> Recursion<T, E>
+    where
+        C: Copy,
+        F: FnMut(&Self, C, &mut S) -> Visit<Infallible, C, T, E>,
+        G: FnMut(&Self, C, &mut S),
+    {
+        enum Frame<'a, N, C> {
+            Enter(&'a N, C),
+            Exit(&'a N, C),
+        }
+
+        fn unwind<N, C, S>(stack: Vec<Frame<'_, N, C>>, state: &mut S, exit: &mut impl FnMut(&N, C, &mut S)) {
+            for frame in stack.into_iter().rev() {
+                if let Frame::Exit(node, context) = frame {
+                    exit(node, context, state);
+                }
+            }
+        }
+
+        let mut stack = vec![Frame::Enter(self, context)];
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Exit(node, context) => exit(node, context, state),
+                Frame::Enter(node, context) => match enter(node, context, state) {
+                    Err(error) => {
+                        unwind(stack, state, exit);
+                        return ControlFlow::Break(Err(error));
+                    }
+                    Ok(ControlFlow::Break(value)) => {
+                        unwind(stack, state, exit);
+                        return ControlFlow::Break(Ok(value));
+                    }
+                    Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
+                    Ok(ControlFlow::Continue(Step::Prune)) => exit(node, context, state),
+                    Ok(ControlFlow::Continue(Step::Into(child_context))) => {
+                        stack.push(Frame::Exit(node, context));
+                        let mut children = Vec::new();
+                        let _ = node.push_children(child_context, &mut children);
+                        stack.extend(
+                            children
+                                .into_iter()
+                                .rev()
+                                .map(|(child, context)| Frame::Enter(child, context)),
+                        );
+                    }
+                },
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// See [Traverse::visit_subtree_scoped]; the ergonomic top-level entry point, mirroring
+    /// [Traverse::visit_with].
+    fn visit_scoped<C, S, T, E, F, G>(
+        &self,
+        context: C,
+        state: &mut S,
+        mut enter: F,
+        mut exit: G,
+    ) -> Result<Option<T>, E>
+    where
+        C: Copy,
+        F: FnMut(&Self, C, &mut S) -> Visit<Infallible, C, T, E>,
+        G: FnMut(&Self, C, &mut S),
+    {
+        match self.visit_subtree_scoped(context, state, &mut enter, &mut exit) {
+            ControlFlow::Break(Ok(value)) => Ok(Some(value)),
+            ControlFlow::Break(Err(error)) => Err(error),
+            ControlFlow::Continue(()) => Ok(None),
+        }
     }
 
     /// See [Traverse::visit_subtree]; a replaced node is not descended into.
@@ -243,6 +425,40 @@ pub trait Traverse: Sized {
         }
     }
 
+    /// Visits `self` and its subtree, *crossing* into a different [Traverse] type wherever
+    /// [Traverse::push_mixed_children] reports one — e.g. from a [StateFrm]'s `Modality` into its
+    /// [RegFrm], and from there into the [ActFrm] of an `Action` — unlike every other traversal on
+    /// this trait, which by design stays within a single node type (see the trait's own doc
+    /// comment).
+    ///
+    /// The callback receives a [MixedNode] and pattern-matches on which type it names. Unlike the
+    /// single-type traversals above there is no shared `context`, no [Step::Prune], and no
+    /// [Step::Replace] here: those need a `Copy` context type shared across every node type at
+    /// once, which a walk spanning eight different node types cannot offer without erasing it to
+    /// something like `Box<dyn Any>`. A caller that needs them nests a single-type traversal
+    /// manually at the point it's needed, same as without this method.
+    fn try_visit_mixed<T, E>(
+        &self,
+        mut function: impl FnMut(MixedNode) -> Result<ControlFlow<T>, E>,
+    ) -> Result<Option<T>, E> {
+        let mut stack = vec![self.as_mixed()];
+        while let Some(node) = stack.pop() {
+            if let ControlFlow::Break(value) = function(node)? {
+                return Ok(Some(value));
+            }
+            mixed_push_children(node, &mut stack);
+        }
+        Ok(None)
+    }
+
+    /// See [Traverse::try_visit_mixed], for callbacks that cannot fail.
+    fn visit_mixed<T>(&self, mut function: impl FnMut(MixedNode) -> ControlFlow<T>) -> Option<T> {
+        match self.try_visit_mixed::<T, Infallible>(|node| Ok(function(node))) {
+            Ok(result) => result,
+            Err(error) => match error {},
+        }
+    }
+
     /// Rewrites this node and its subtree top-down, threading `context` from a node to its
     /// children.
     ///
@@ -332,9 +548,14 @@ pub trait Traverse: Sized {
 /// dereference a box therefore has to be written twice, once in each of the optional
 /// `shared_only` and `mut_only` sections; the compiler still checks that each of the two
 /// resulting matches is exhaustive.
+///
+/// An optional trailing `mixed: { ... }` section, in the same match-arm shape but calling
+/// `recurse` on a [MixedNode] rather than a `?`-able child, describes this node type's foreign-type
+/// children for [Traverse::push_mixed_children] (see that method's own doc comment); omitting it
+/// leaves that method at the trait's empty default, correct for a node type with no such children.
 macro_rules! define_traversal {
     (
-        node: $Node:ty,
+        node: $Node:ident,
         children: |$recurse:ident| { $($child:tt)* },
     ) => {
         define_traversal! {
@@ -345,12 +566,29 @@ macro_rules! define_traversal {
         }
     };
     (
-        node: $Node:ty,
+        node: $Node:ident,
+        children: |$recurse:ident| { $($child:tt)* },
+        mixed: { $($mixed_child:tt)* },
+    ) => {
+        define_traversal! {
+            node: $Node,
+            children: |$recurse| { $($child)* },
+            shared_only: {},
+            mut_only: {},
+            mixed: { $($mixed_child)* },
+        }
+    };
+    (
+        node: $Node:ident,
         children: |$recurse:ident| { $($child:tt)* },
         shared_only: { $($shared_child:tt)* },
         mut_only: { $($mut_child:tt)* },
     ) => {
         impl Traverse for $Node {
+            fn as_mixed(&self) -> MixedNode<'_> {
+                MixedNode::$Node(self)
+            }
+
             fn push_children<'a, C: Copy>(
                 &'a self,
                 context: C,
@@ -385,6 +623,79 @@ macro_rules! define_traversal {
                 }
 
                 ControlFlow::Continue(())
+            }
+
+            fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
+            where
+                F: FnMut(&mut Self) -> Result<(), E>,
+            {
+                let mut $recurse = |child: &mut $Node| child.try_transform(function);
+
+                match &mut self.node {
+                    $($child)*
+                    $($mut_child)*
+                }
+
+                Ok(())
+            }
+        }
+    };
+    (
+        node: $Node:ident,
+        children: |$recurse:ident| { $($child:tt)* },
+        shared_only: { $($shared_child:tt)* },
+        mut_only: { $($mut_child:tt)* },
+        mixed: { $($mixed_child:tt)* },
+    ) => {
+        impl Traverse for $Node {
+            fn as_mixed(&self) -> MixedNode<'_> {
+                MixedNode::$Node(self)
+            }
+
+            fn push_children<'a, C: Copy>(
+                &'a self,
+                context: C,
+                stack: &mut Vec<(&'a Self, C)>,
+            ) -> Recursion<Infallible, Infallible> {
+                let mut $recurse = |child: &'a $Node| -> Recursion<Infallible, Infallible> {
+                    stack.push((child, context));
+                    ControlFlow::Continue(())
+                };
+
+                match &self.node {
+                    $($child)*
+                    $($shared_child)*
+                }
+
+                ControlFlow::Continue(())
+            }
+
+            fn push_children_mut<'a, C: Copy>(
+                &'a mut self,
+                context: C,
+                stack: &mut Vec<(&'a mut Self, C)>,
+            ) -> Recursion<Infallible, Infallible> {
+                let mut $recurse = |child: &'a mut $Node| -> Recursion<Infallible, Infallible> {
+                    stack.push((child, context));
+                    ControlFlow::Continue(())
+                };
+
+                match &mut self.node {
+                    $($child)*
+                    $($mut_child)*
+                }
+
+                ControlFlow::Continue(())
+            }
+
+            fn push_mixed_children<'a>(&'a self, sink: &mut Vec<MixedNode<'a>>) {
+                let mut $recurse = |child: MixedNode<'a>| sink.push(child);
+
+                match &self.node {
+                    $($mixed_child)*
+                    #[allow(unreachable_patterns)]
+                    _ => {}
+                }
             }
 
             fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
@@ -573,6 +884,13 @@ define_traversal! {
         | StateFrmKind::Resolved(_, _, _)
         | StateFrmKind::DataValExpr(_) => {}
     },
+    // A modality's own `expr` is a `StateFrm` (handled above, same as every other child); its
+    // `formula` is a `RegFrm`, a different node type entirely, only reachable through `visit_mixed`.
+    mixed: {
+        StateFrmKind::Modality { formula, .. } => {
+            recurse(MixedNode::RegFrm(formula));
+        }
+    },
 }
 
 define_traversal! {
@@ -586,6 +904,13 @@ define_traversal! {
             recurse(rhs)?;
         }
         RegFrmKind::Action(_act_frm) => {}
+    },
+    // An `Action`'s payload is an `ActFrm`, a different node type, only reachable through
+    // `visit_mixed`; every other `RegFrm` variant's children are already `RegFrm` (handled above).
+    mixed: {
+        RegFrmKind::Action(act_frm) => {
+            recurse(MixedNode::ActFrm(act_frm));
+        }
     },
 }
 
@@ -685,6 +1010,7 @@ mod tests {
     use crate::UntypedPres;
     use crate::UntypedProcessSpecification;
     use crate::UntypedStateFrmSpec;
+    use crate::traverse::MixedNode;
     use crate::traverse::Recursion;
 
     /// Parses a state formula, for example `mu X. [a]X`.
@@ -996,6 +1322,126 @@ mod tests {
         assert!(matches!(outcome, ControlFlow::Continue(())));
         assert_eq!(children, ["[a]X", "(nu Z0 . Z0)"]);
     }
+
+    /// A plain `.visit()` over a [StateFrm] cannot see the actions inside a modality's regular
+    /// formula at all: `RegFrm`/`ActFrm` are a different node type, outside what a single-type
+    /// traversal crosses into. `visit_mixed` is the one traversal that does, following exactly the
+    /// crossing `crates/typecheck/src/modal/check.rs`'s `collect_scope`/`collect_scope_regfrm`/
+    /// `collect_scope_actfrm` currently make by hand.
+    #[test]
+    fn test_visit_mixed_crosses_from_state_formula_into_its_regular_and_action_formulas() {
+        let formula = state_formula("[a . b*]X");
+
+        let mut labels = Vec::new();
+        formula.visit_mixed::<Infallible>(|node| {
+            labels.push(match node {
+                MixedNode::StateFrm(_) => "state",
+                MixedNode::RegFrm(_) => "reg",
+                MixedNode::ActFrm(_) => "act",
+                _ => "other",
+            });
+            ControlFlow::Continue(())
+        });
+
+        // Pre-order, left to right, and crossing every boundary: the modality itself, then its
+        // whole `RegFrm` subtree (`a . b*`, i.e. `Sequence(Action(a), Iteration(Action(b)))`, each
+        // `Action` node's `ActFrm` payload included), and only then the modality's own `StateFrm`
+        // child `X` -- not reachable at all without the crossing.
+        assert_eq!(labels, ["state", "reg", "reg", "act", "reg", "reg", "act", "state"]);
+    }
+
+    /// `try_visit_mixed` propagates a callback's error immediately, the same as every other
+    /// `try_*`/fallible traversal on this trait.
+    #[test]
+    fn test_try_visit_mixed_reports_the_error_of_the_callback() {
+        let formula = state_formula("[a]true");
+
+        let result: Result<Option<Infallible>, &str> = formula.try_visit_mixed(|_node| Err("failed"));
+
+        assert_eq!(result, Err("failed"));
+    }
+
+    /// Mirrors `crates/typecheck/src/modal/check.rs`'s `check_state_formula`/`check_fixed_point`:
+    /// `state_vars` grows for a `FixedPoint`'s body and must shrink again once that whole body has
+    /// been visited, so an inner fixpoint's variable is invisible to whatever follows it at the
+    /// *same* level as the fixpoint that bound it, not just to formulas nested inside a sibling.
+    #[test]
+    fn test_visit_scoped_pushes_and_pops_fixpoint_variables_like_a_real_checker() {
+        let formula = state_formula("mu X. (mu Y. X) && Z");
+
+        let mut state_vars: Vec<String> = Vec::new();
+        let mut scope_at_each_id = Vec::new();
+
+        let result = formula.visit_scoped::<(), Vec<String>, Infallible, Infallible, _, _>(
+            (),
+            &mut state_vars,
+            |formula, context, state_vars| {
+                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
+                    state_vars.push(variable.identifier.clone());
+                }
+                if let StateFrmKind::Id(name, _) = &formula.node {
+                    scope_at_each_id.push((name.clone(), state_vars.clone()));
+                }
+                Ok(ControlFlow::Continue(Step::Into(context)))
+            },
+            |formula, _context, state_vars| {
+                if let StateFrmKind::FixedPoint { .. } = &formula.node {
+                    state_vars.pop();
+                }
+            },
+        );
+
+        assert_eq!(result, Ok(None));
+        // `X` is visited while both `mu X` and `mu Y` are open; `Z` only while `mu X` still is,
+        // `mu Y` (and its own variable) having already been exited by the time its sibling `&&`
+        // operand is reached.
+        assert_eq!(
+            scope_at_each_id,
+            [
+                ("X".to_string(), vec!["X".to_string(), "Y".to_string()]),
+                ("Z".to_string(), vec!["X".to_string()]),
+            ]
+        );
+        assert!(state_vars.is_empty());
+    }
+
+    /// `exit` must still run for every scope still open when the walk stops early, in innermost-
+    /// first order, or a caller's scoped state (e.g. `state_vars` above) is left corrupted for
+    /// whatever it does next -- exactly the failure mode a `Break`/error mid-traversal risks if the
+    /// unwind in [Traverse::visit_subtree_scoped] were missing.
+    #[test]
+    fn test_visit_scoped_unwinds_open_scopes_on_break() {
+        let formula = state_formula("mu X. (mu Y. Z)");
+
+        let mut state_vars: Vec<String> = Vec::new();
+        let mut exited_in_order = Vec::new();
+
+        let found = formula.visit_scoped::<(), Vec<String>, &str, Infallible, _, _>(
+            (),
+            &mut state_vars,
+            |formula, context, state_vars| {
+                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
+                    state_vars.push(variable.identifier.clone());
+                }
+                if let StateFrmKind::Id(name, _) = &formula.node
+                    && name == "Z"
+                {
+                    return Ok(ControlFlow::Break("stopped"));
+                }
+                Ok(ControlFlow::Continue(Step::Into(context)))
+            },
+            |formula, _context, state_vars| {
+                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
+                    exited_in_order.push(variable.identifier.clone());
+                    state_vars.pop();
+                }
+            },
+        );
+
+        assert_eq!(found, Ok(Some("stopped")));
+        assert_eq!(exited_in_order, ["Y", "X"]);
+        assert!(state_vars.is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -1056,6 +1502,51 @@ mod stack_depth_probe {
         assert_eq!(count, 1_000_001);
 
         // See the comment in the `visit` test above: recursive `Drop` is a separate, un-fixed gap.
+        std::mem::forget(formula);
+    }
+
+    /// [Traverse::visit_scoped] is a second, independent stack-based loop (`enter`/`exit` frames
+    /// rather than plain nodes) added alongside the ones the doc comment above already covers; it
+    /// gets its own probe rather than relying on the two above to also exercise it.
+    #[test]
+    fn visit_scoped_a_million_deep_negation_does_not_overflow_the_stack() {
+        let formula = deep_negation(1_000_000);
+
+        let mut depth = 0usize;
+        let mut max_depth = 0usize;
+        let result: Result<Option<Infallible>, Infallible> = formula.visit_scoped(
+            (),
+            &mut depth,
+            |_, context, depth| {
+                *depth += 1;
+                max_depth = max_depth.max(*depth);
+                Ok(ControlFlow::Continue(Step::Into(context)))
+            },
+            |_, _, depth| *depth -= 1,
+        );
+        assert_eq!(result, Ok(None));
+        assert_eq!(max_depth, 1_000_001);
+        assert_eq!(depth, 0); // every `enter` was matched by an `exit`.
+
+        std::mem::forget(formula);
+    }
+
+    /// [Traverse::visit_mixed] is a third, independent stack-based loop (over [MixedNode] rather
+    /// than a single node type); a chain of plain `Unary` negations never leaves [StateFrm], so
+    /// this exercises the same "no native recursion" property for that loop specifically, even
+    /// though it does not exercise crossing into a different node type (covered separately by
+    /// `test_visit_mixed_crosses_from_state_formula_into_its_regular_and_action_formulas`).
+    #[test]
+    fn visit_mixed_a_million_deep_negation_does_not_overflow_the_stack() {
+        let formula = deep_negation(1_000_000);
+
+        let mut count = 0usize;
+        formula.visit_mixed::<Infallible>(|_| {
+            count += 1;
+            ControlFlow::Continue(())
+        });
+        assert_eq!(count, 1_000_001);
+
         std::mem::forget(formula);
     }
 }
