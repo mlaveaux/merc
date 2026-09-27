@@ -41,7 +41,9 @@ unsafe fn node_to_index(node: *const c_void) -> ATermIndex {
 
 /// Returns the shared term node address backing a term reference.
 fn node_of<'a, T: Term<'a, 'a>>(term: &T) -> *const c_void {
-    term.shared().ptr().as_ptr() as *const c_void
+    // SAFETY: `term: &T` is a live borrow, so the `SharedTerm` it points into is live for the
+    // duration of this call.
+    unsafe { term.shared().ptr() }.as_ptr() as *const c_void
 }
 
 /// Wraps an owned [`DataExpression`] as a [`DataExpressionFFI`] handle.

@@ -312,7 +312,9 @@ impl ATermStorage {
 /// of the given arity.
 unsafe fn cast_to_shared_term_ptr<T>(ptr: &StablePointer<T>, arity: usize) -> StablePointer<SharedTerm> {
     // Build a fat pointer for SharedTerm with metadata equal to the term arity.
-    let raw = slice_from_raw_parts_mut(ptr.ptr().as_ptr(), arity) as *mut SharedTerm;
+    // SAFETY: this function's own contract (`ptr` points at a valid term of the given arity)
+    // is exactly `ptr()`'s precondition too.
+    let raw = unsafe { slice_from_raw_parts_mut(ptr.ptr().as_ptr(), arity) as *mut SharedTerm };
     unsafe { StablePointer::from_related_ptr(NonNull::new_unchecked(raw), ptr) }
 }
 
@@ -496,16 +498,24 @@ mod verification {
         let shared_stable = unsafe { cast_to_shared_term_ptr(&fixed_stable, 0) };
 
         // The reconstructed pointer's address is exactly the source's address.
-        assert!(std::ptr::eq(
-            shared_stable.ptr().as_ptr() as *const u8,
-            fixed_stable.ptr().as_ptr() as *const u8,
-        ));
+        // SAFETY: both `shared_stable` and `fixed_stable` point at the same live,
+        // just-allocated `SharedTermFixed<0>` for the duration of this bounded proof.
+        unsafe {
+            assert!(std::ptr::eq(
+                shared_stable.ptr().as_ptr() as *const u8,
+                fixed_stable.ptr().as_ptr() as *const u8,
+            ));
+        }
 
         // SAFETY: the pointee is the live `SharedTermFixed<0>` allocated above, whose layout
         // matches `SharedTerm` for a zero-length arguments slice.
         let shared_term = unsafe { shared_stable.deref() };
         assert_eq!(shared_term.arguments().len(), 0);
-        assert_eq!(shared_term.symbol().shared().ptr(), symbol_index.ptr());
+        // SAFETY: `symbol_index` is Sized (`SharedSymbol`), so `ptr()` never reads the pointee;
+        // both handles are live for this proof regardless.
+        unsafe {
+            assert_eq!(shared_term.symbol().shared().ptr(), symbol_index.ptr());
+        }
     }
 
     /// The same reconstruction with a populated argument slot: `cast_to_shared_term_ptr` must
@@ -532,7 +542,11 @@ mod verification {
         let shared_term = unsafe { shared_stable.deref() };
 
         assert_eq!(shared_term.arguments().len(), 1);
-        assert_eq!(shared_term.arguments()[0].shared().ptr(), leaf.ptr());
+        // SAFETY: `leaf` is a leaked, live zero-arity `SharedTerm`, still live for the
+        // duration of this bounded proof.
+        unsafe {
+            assert_eq!(shared_term.arguments()[0].shared().ptr(), leaf.ptr());
+        }
     }
 
     /// Mirrors the exact unsafe expression behind `ATermInt::value_unchecked`
