@@ -202,8 +202,19 @@ impl Debug for GlobalTermPool {
         let mut total = 0;
         let mut max = 0;
 
+        // Use `write()`, not `read()`: `read()` and `write_exclusive()` both
+        // only take the C++ *shared* ("busy") lock (see `BfTermPool`'s safety
+        // contract), so `read()` here would not actually exclude a
+        // concurrent `write_exclusive()` on another thread's own set (e.g.
+        // from `protect_with` while it creates a term) -- that was the bug
+        // `read_races_with_concurrent_term_creation` demonstrates. `write()`
+        // takes the real C++ *exclusive* lock, which blocks until every
+        // thread's busy flag (including one held by a `write_exclusive`
+        // guard) has cleared, so it is genuinely mutually exclusive with
+        // `write_exclusive()` -- the same guarantee `mark_protection_sets`
+        // relies on while GC holds that same exclusive lock.
         for set in self.thread_protection_sets.iter().flatten() {
-            let protection_set = set.read();
+            let protection_set = set.write();
             protected += protection_set.len();
             total += protection_set.number_of_insertions();
             max += protection_set.maximum_size();
@@ -214,7 +225,7 @@ impl Debug for GlobalTermPool {
         let mut total_containers = 0;
         let mut inside_containers = 0;
         for set in self.thread_container_sets.iter().flatten() {
-            let protection_set = set.read();
+            let protection_set = set.write();
             num_containers += protection_set.len();
             total_containers += protection_set.number_of_insertions();
             max_containers += protection_set.maximum_size();

@@ -98,11 +98,12 @@ impl<'a, T: ?Sized> BfTermPool<T> {
     /// other than the caller may call [`Self::read`], [`Self::get`] or
     /// `write_exclusive` again on this same `BfTermPool<T>` value (see the
     /// struct's safety contract). `ThreadTermPool` upholds this for its own
-    /// per-thread sets, but `GlobalTermPool`'s `Debug` impl (reached via
-    /// `ThreadTermPool`'s `Display`) currently violates it by calling
-    /// `read()` on every thread's set regardless of who else is mutating
-    /// it — a known, unfixed soundness bug; see the
-    /// `read_races_with_concurrent_term_creation` test.
+    /// per-thread sets; `GlobalTermPool`'s `Debug` impl (reached via
+    /// `ThreadTermPool`'s `Display`) used to violate it by calling `read()`
+    /// on every thread's set regardless of who else was mutating it — it now
+    /// calls [`Self::write`] instead, which takes the real C++ *exclusive*
+    /// lock and therefore does exclude a concurrent `write_exclusive`; see
+    /// the `read_races_with_concurrent_term_creation` test.
     ///
     /// Guarantees: the returned guard's `DerefMut` yields a `&mut T` valid
     /// until dropped or unlocked via [`BfTermPoolThreadWrite::unlock`],
