@@ -166,16 +166,36 @@ variable anywhere. None of these block `collect_scope`'s own migration (it doesn
 recurse into any of them either), so wiring them was left for whichever future migration actually
 needs a given one, rather than guessed at speculatively here.
 
-## What is still not fixed: the hand-written checkers themselves don't use `Traverse` yet
+## `modal::check` is now migrated; `process::check`/`pres::check` and variable resolution are not
 
-Neither addition above migrates anything: `Traverse` being stack-safe, scoped, and cross-type-aware
-only helps code that actually uses it. The original finding's own functions —
-`modal::check::check_state_formula`/`collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm`,
-`resolution::variable_resolution::resolve_in_state_frm`, `process::check::check_process_expr`, and
-`pres::check::check_pres_expr` — are still hand-written recursive-descent matches, not `Traverse`
-callbacks, and migrating them is real, separate, follow-up work: they each thread several more
+`modal::check::collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm` are now one function
+(`collect_scope`) built on `try_visit_mixed`, and `check_state_formula`/`check_fixed_point` are now
+`check_state_formula` (fallible state now local to it, no longer threaded in from
+`check_modal_specification`) built on `visit_scoped`, with `check_reg_formula`/`check_action_formula`
+similarly collapsed into one `try_visit_mixed`-based `check_reg_formula`. Each hand-written
+`_regfrm`/`_actfrm` recursive cousin is gone; only the per-node work remains, at the same left-to-right
+checking order the original recursive-descent version had (the one place order needed active
+preserving: `check_state_formula`'s `Modality` arm calls `check_reg_formula` on the modality's regular
+formula *inside* `enter`, before returning `Step::Into`, so it still fully finishes before
+`visit_scoped`'s own descent reaches the modality's `StateFrm` operand — mirroring the original's
+"check the regular formula, then recurse into the operand" order exactly).
+
+`modal::check::stack_depth_probe::deeply_nested_negation_does_not_overflow_the_stack` now passes.
+Getting it there also surfaced a second thing worth recording precisely: after the migration it
+*still* SIGABRT'd once, on the same test, not from `check_state_formula`'s own walk (confirmed by
+`std::mem::forget`-ing the test's formula immediately after a successful `check_state_formula`
+call: the SIGABRT moved to the end of the test regardless) — it was the recursive-`Drop` bug from
+this document's own [earlier section](#2-a-second-different-bug-sits-directly-underneath-the-first-recursive-drop)
+firing on the same 100,000-deep `Box<StateFrm>` chain once the *first* bug (the traversal recursion
+this migration just fixed) was no longer masking it by overflowing first. The test now forgets its
+formula for the same reason `crates/syntax/src/traverse.rs`'s own `stack_depth_probe` tests do,
+which makes it, retroactively, a second confirmation of that bug rather than only the first one.
+
+What is still not migrated: `resolution::variable_resolution::resolve_in_state_frm`,
+`process::check::check_process_expr`, and `pres::check::check_pres_expr` are still hand-written
+recursive-descent matches, not `Traverse` callbacks. `check_process_expr`/`check_pres_expr` don't
+have `modal::check`'s node-type-crossing shape (no `visit_mixed` need) but do thread several more
 parameters (`data`, `tables`, `scope`, `typing`, ...) than a single `context`/`state` slot has
-obvious room for, and `check_state_formula` in particular is fallible in a way that would need
-`visit_scoped` used with `E = ModalError` throughout, not just proven possible on paper. The two
-`stack_depth_probe` tests in `modal::check`/`process::check` still SIGABRT, unchanged by anything
-in this document's second pass.
+obvious room for, same as `modal::check` did — migrating them is real, separate, follow-up work,
+not fundamentally blocked by anything left in `Traverse`, just not done. The `stack_depth_probe`
+test in `process::check` still SIGABRTs, unchanged.

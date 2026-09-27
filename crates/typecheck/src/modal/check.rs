@@ -1,21 +1,31 @@
 // The scoped walk over the state formula, checking each `val(...)` expression, action instance and
 // fixpoint-variable reference. See `ValSort` for what a state-level `val`'s declared sort allows.
+//
+// `collect_scope` and `check_state_formula` each cross from a `StateFrm` into the `RegFrm`/`ActFrm`
+// of its modalities via `Traverse::try_visit_mixed`, rather than each maintaining its own hand-written
+// `_regfrm`/`_actfrm` recursive cousin; `check_state_formula`'s own scoped `state_vars` stack (pushed
+// for a `FixedPoint`'s body, popped once it's done) is threaded through `Traverse::visit_scoped`'s
+// `enter`/`exit` hooks. See `review/stack-overflow-recursion.md` for why this needed two additions to
+// `Traverse` before it was possible at all.
 
 use std::collections::HashSet;
+use std::convert::Infallible;
+use std::ops::ControlFlow;
 
-use merc_syntax::ActFrm;
 use merc_syntax::ActFrmKind;
 use merc_syntax::Action;
 use merc_syntax::DataExpr;
+use merc_syntax::MixedNode;
 use merc_syntax::RegFrm;
-use merc_syntax::RegFrmKind;
 use merc_syntax::Span;
 use merc_syntax::StateFrm;
 use merc_syntax::StateFrmKind;
 use merc_syntax::StateVarDecl;
 use merc_syntax::StateVarId;
+use merc_syntax::Traverse;
 use merc_syntax::UntypedStateFrmSpec;
 use merc_syntax::VarId;
+use merc_utilities::Step;
 
 use crate::DataSpecification;
 use crate::ResolvedName;
@@ -56,28 +66,27 @@ pub(super) fn check_modal_specification(
     let mut scope = Vec::new();
     collect_scope(data, &spec.formula, &mut scope, &mut sort_references, &mut typing)?;
 
-    let mut state_vars = StateVarStack::new();
-    check_state_formula(
-        data,
-        tables,
-        &scope,
-        &mut state_vars,
-        &spec.formula,
-        formula_type,
-        &mut typing,
-    )?;
+    check_state_formula(data, tables, &scope, &spec.formula, formula_type, &mut typing)?;
 
     typing_info::push_sort_references(data, &sort_references, &mut typing);
     Ok(typing)
 }
 
 /// Collects the scope for a state formula, resolving the declared sorts of every
-/// `forall`/`exists`/`inf`/`sup`/`sum` binder and of every fixpoint variable's own parameters —
-/// the latter are ordinary data variables throughout the fixpoint's body, exactly like a PRES
-/// equation's parameters.
+/// `forall`/`exists`/`inf`/`sup`/`sum` binder — in the state formula itself, or nested inside one of
+/// its modalities' action formulas — and of every fixpoint variable's own parameters, the latter
+/// ordinary data variables throughout the fixpoint's body, exactly like a PRES equation's
+/// parameters.
 ///
 /// The fixpoint variable *names* are not collected here; they live on their own stack, maintained
-/// by [`check_fixed_point`] as the walk enters and leaves each binder.
+/// by [`check_state_formula`]'s own scoped walk as it enters and leaves each binder.
+///
+/// One [`Traverse::try_visit_mixed`] walk replaces what used to be three hand-written recursive
+/// functions, one per node type (`collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm`):
+/// crossing from a `StateFrm`'s `Modality` into its [`RegFrm`], and from there into an `Action`'s
+/// [`ActFrm`], is `Traverse::push_mixed_children`'s job now, not this function's, and descending
+/// into a node's own same-type children no longer needs writing out either — only the per-node work
+/// (pushing a binder's variables into `scope`) remains.
 fn collect_scope(
     data: &mut DataSpecification,
     formula: &StateFrm,
@@ -85,165 +94,150 @@ fn collect_scope(
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), ModalError> {
-    match &formula.node {
-        StateFrmKind::True
-        | StateFrmKind::False
-        | StateFrmKind::Delay(_)
-        | StateFrmKind::Yaled(_)
-        | StateFrmKind::Id(_, _)
-        | StateFrmKind::Resolved(_, _, _)
-        | StateFrmKind::DataValExpr(_) => Ok(()),
-        StateFrmKind::DataValExprLeftMult(_, expr) | StateFrmKind::DataValExprRightMult(expr, _) => {
-            collect_scope(data, expr, scope, sort_references, typing)
-        }
-        StateFrmKind::Modality { formula, expr, .. } => {
-            collect_scope_regfrm(data, formula, scope, sort_references, typing)?;
-            collect_scope(data, expr, scope, sort_references, typing)
-        }
-        StateFrmKind::Unary { expr, .. } => collect_scope(data, expr, scope, sort_references, typing),
-        StateFrmKind::Binary { lhs, rhs, .. } => {
-            collect_scope(data, lhs, scope, sort_references, typing)?;
-            collect_scope(data, rhs, scope, sort_references, typing)
-        }
-        StateFrmKind::Quantifier { variables, body, .. } | StateFrmKind::Bound { variables, body, .. } => {
-            collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
-            collect_scope(data, body, scope, sort_references, typing)
-        }
-        StateFrmKind::FixedPoint { variable, body, .. } => {
-            for argument in &variable.arguments {
-                typing_info::collect_sort_name_references(&argument.sort, sort_references);
-                let sort = resolve_declared_sort(data, &argument.sort)?;
-                typing_info::push_binder_declaration(
-                    data,
-                    typing,
-                    argument.identifier.span.clone(),
-                    argument.identifier.node.clone(),
-                    sort,
-                );
-                let var_id = argument.id.expect("resolve_modal_variables ran before checking");
-                scope.push((var_id, sort, argument.identifier.span.clone()));
+    formula
+        .try_visit_mixed::<Infallible, ModalError>(|node| {
+            match node {
+                MixedNode::StateFrm(formula) => match &formula.node {
+                    StateFrmKind::Quantifier { variables, .. } | StateFrmKind::Bound { variables, .. } => {
+                        collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
+                    }
+                    StateFrmKind::FixedPoint { variable, .. } => {
+                        for argument in &variable.arguments {
+                            typing_info::collect_sort_name_references(&argument.sort, sort_references);
+                            let sort = resolve_declared_sort(data, &argument.sort)?;
+                            typing_info::push_binder_declaration(
+                                data,
+                                typing,
+                                argument.identifier.span.clone(),
+                                argument.identifier.node.clone(),
+                                sort,
+                            );
+                            let var_id = argument.id.expect("resolve_modal_variables ran before checking");
+                            scope.push((var_id, sort, argument.identifier.span.clone()));
+                        }
+                    }
+                    _ => {}
+                },
+                MixedNode::ActFrm(formula) => {
+                    if let ActFrmKind::Quantifier { variables, .. } = &formula.node {
+                        collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
+                    }
+                }
+                // A `RegFrm` node itself never carries a binder, only crossing through one to reach
+                // an `ActFrm` does; the other five `MixedNode` variants are unreachable from a
+                // `StateFrm` root (nothing crossed into from here reaches them) and are listed only
+                // so this match stays exhaustive as `MixedNode` grows further crossings elsewhere.
+                MixedNode::RegFrm(_)
+                | MixedNode::SortExpression(_)
+                | MixedNode::DataExpr(_)
+                | MixedNode::ProcessExpr(_)
+                | MixedNode::PbesExpr(_)
+                | MixedNode::PresExpr(_) => {}
             }
-            collect_scope(data, body, scope, sort_references, typing)
-        }
-    }
+            Ok(ControlFlow::Continue(()))
+        })
+        .map(|_| ())
 }
 
-fn collect_scope_regfrm(
-    data: &mut DataSpecification,
-    formula: &RegFrm,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
-    sort_references: &mut Vec<typing_info::SortReference>,
-    typing: &mut TypingInfo,
-) -> Result<(), ModalError> {
-    match &formula.node {
-        RegFrmKind::Action(action) => collect_scope_actfrm(data, action, scope, sort_references, typing),
-        RegFrmKind::Iteration(inner) | RegFrmKind::Plus(inner) => {
-            collect_scope_regfrm(data, inner, scope, sort_references, typing)
-        }
-        RegFrmKind::Sequence { lhs, rhs } | RegFrmKind::Choice { lhs, rhs } => {
-            collect_scope_regfrm(data, lhs, scope, sort_references, typing)?;
-            collect_scope_regfrm(data, rhs, scope, sort_references, typing)
-        }
-    }
-}
-
-fn collect_scope_actfrm(
-    data: &mut DataSpecification,
-    formula: &ActFrm,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
-    sort_references: &mut Vec<typing_info::SortReference>,
-    typing: &mut TypingInfo,
-) -> Result<(), ModalError> {
-    match &formula.node {
-        ActFrmKind::True | ActFrmKind::False | ActFrmKind::MultAct(_) | ActFrmKind::DataExprVal(_) => Ok(()),
-        ActFrmKind::Negation(inner) => collect_scope_actfrm(data, inner, scope, sort_references, typing),
-        ActFrmKind::Quantifier { variables, body, .. } => {
-            collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
-            collect_scope_actfrm(data, body, scope, sort_references, typing)
-        }
-        ActFrmKind::Binary { lhs, rhs, .. } => {
-            collect_scope_actfrm(data, lhs, scope, sort_references, typing)?;
-            collect_scope_actfrm(data, rhs, scope, sort_references, typing)
-        }
-        ActFrmKind::At { expr, .. } => collect_scope_actfrm(data, expr, scope, sort_references, typing),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
+/// Type-checks a state formula against the declared sorts: every `val(...)` expression, action
+/// instance and fixpoint-variable reference in it.
+///
+/// The scoped stack of fixpoint variables currently in scope (`state_vars`, pushed for a
+/// `FixedPoint`'s body and popped again once that body is done being checked, so an enclosing
+/// formula never sees an inner fixpoint's variable) is local to this walk, not threaded in from
+/// [`check_modal_specification`] as it used to be: [`Traverse::visit_scoped`]'s `enter`/`exit` hooks
+/// push and pop it directly, in place of the recursive `check_fixed_point` helper this used to call
+/// out to. Crossing from a `Modality` into its [`RegFrm`] is still a plain nested call to
+/// [`check_reg_formula`] (not a further `visit_mixed` from in here), since it needs to happen
+/// *before* [`Traverse::visit_scoped`]'s own descent reaches the modality's `StateFrm` operand, to
+/// keep the same left-to-right checking order the original recursive-descent version had.
 fn check_state_formula(
     data: &mut DataSpecification,
     tables: &DeclarationTables,
     scope: &Scope,
-    state_vars: &mut StateVarStack,
     formula: &StateFrm,
     formula_type: FormulaType,
     typing: &mut TypingInfo,
 ) -> Result<(), ModalError> {
-    match &formula.node {
-        StateFrmKind::True | StateFrmKind::False => Ok(()),
+    let mut state_vars = StateVarStack::new();
+    formula
+        .visit_scoped::<(), StateVarStack, Infallible, ModalError, _, _>(
+            (),
+            &mut state_vars,
+            |formula, context, state_vars| {
+                match &formula.node {
+                    StateFrmKind::True | StateFrmKind::False => {}
 
-        StateFrmKind::Delay(time) | StateFrmKind::Yaled(time) => match time {
-            Some(time) => {
-                let real_sort = data.context().sorts.real_sort();
-                check_expression_against::<ModalError>(data, scope, time, real_sort, typing)
-            }
-            None => Ok(()),
-        },
+                    StateFrmKind::Delay(time) | StateFrmKind::Yaled(time) => {
+                        if let Some(time) = time {
+                            let real_sort = data.context().sorts.real_sort();
+                            check_expression_against::<ModalError>(data, scope, time, real_sort, typing)?;
+                        }
+                    }
 
-        // `resolve_modal_variables` runs before checking and rewrites every `Id` naming an
-        // enclosing `mu`/`nu` into `Resolved`; one surviving here refers to no enclosing binder.
-        StateFrmKind::Id(name, _arguments) => Err(ModalError::UndeclaredStateVariable {
-            name: name.to_string(),
-            span: formula.span.clone(),
-        }),
+                    // `resolve_modal_variables` runs before checking and rewrites every `Id` naming
+                    // an enclosing `mu`/`nu` into `Resolved`; one surviving here refers to no
+                    // enclosing binder.
+                    StateFrmKind::Id(name, _arguments) => {
+                        return Err(ModalError::UndeclaredStateVariable {
+                            name: name.to_string(),
+                            span: formula.span.clone(),
+                        });
+                    }
 
-        StateFrmKind::Resolved(name, arguments, declaration) => check_state_var_inst(
-            data,
-            state_vars,
-            scope,
-            name,
-            arguments,
-            *declaration,
-            &formula.span,
-            typing,
-        ),
+                    StateFrmKind::Resolved(name, arguments, declaration) => {
+                        check_state_var_inst(
+                            data,
+                            state_vars,
+                            scope,
+                            name,
+                            arguments,
+                            *declaration,
+                            &formula.span,
+                            typing,
+                        )?;
+                    }
 
-        StateFrmKind::DataValExpr(data_expr) => check_val_expr(data, scope, data_expr, formula_type, typing),
+                    StateFrmKind::DataValExpr(data_expr) => {
+                        check_val_expr(data, scope, data_expr, formula_type, typing)?;
+                    }
 
-        StateFrmKind::DataValExprLeftMult(constant, expr) | StateFrmKind::DataValExprRightMult(expr, constant) => {
-            if formula_type == FormulaType::Bool {
-                return Err(ModalError::ConstantMultiplyInBooleanFormula {
-                    span: formula.span.clone(),
-                });
-            }
+                    StateFrmKind::DataValExprLeftMult(constant, _)
+                    | StateFrmKind::DataValExprRightMult(_, constant) => {
+                        if formula_type == FormulaType::Bool {
+                            return Err(ModalError::ConstantMultiplyInBooleanFormula {
+                                span: formula.span.clone(),
+                            });
+                        }
 
-            let real_sort = data.context().sorts.real_sort();
-            check_expression_against::<ModalError>(data, scope, constant, real_sort, typing)?;
-            check_state_formula(data, tables, scope, state_vars, expr, formula_type, typing)
-        }
+                        let real_sort = data.context().sorts.real_sort();
+                        check_expression_against::<ModalError>(data, scope, constant, real_sort, typing)?;
+                    }
 
-        StateFrmKind::Modality { formula: reg, expr, .. } => {
-            check_reg_formula(data, tables, scope, reg, typing)?;
-            check_state_formula(data, tables, scope, state_vars, expr, formula_type, typing)
-        }
+                    StateFrmKind::Modality { formula: reg, .. } => {
+                        check_reg_formula(data, tables, scope, reg, typing)?;
+                    }
 
-        StateFrmKind::Unary { expr, .. } => {
-            check_state_formula(data, tables, scope, state_vars, expr, formula_type, typing)
-        }
+                    StateFrmKind::Unary { .. }
+                    | StateFrmKind::Binary { .. }
+                    | StateFrmKind::Quantifier { .. }
+                    | StateFrmKind::Bound { .. } => {}
 
-        StateFrmKind::Binary { lhs, rhs, .. } => {
-            check_state_formula(data, tables, scope, state_vars, lhs, formula_type, typing)?;
-            check_state_formula(data, tables, scope, state_vars, rhs, formula_type, typing)
-        }
-
-        StateFrmKind::Quantifier { body, .. } | StateFrmKind::Bound { body, .. } => {
-            check_state_formula(data, tables, scope, state_vars, body, formula_type, typing)
-        }
-
-        StateFrmKind::FixedPoint { variable, body, .. } => {
-            check_fixed_point(data, tables, scope, state_vars, variable, body, formula_type, typing)
-        }
-    }
+                    StateFrmKind::FixedPoint { variable, .. } => {
+                        let params = check_fixed_point_declaration(data, scope, variable, typing)?;
+                        let state_var_id = variable.id.expect("resolve_modal_variables ran before checking");
+                        state_vars.push((state_var_id, variable.span.clone(), params));
+                    }
+                }
+                Ok(ControlFlow::Continue(Step::Into(context)))
+            },
+            |formula, _context, state_vars| {
+                if let StateFrmKind::FixedPoint { .. } = &formula.node {
+                    state_vars.pop();
+                }
+            },
+        )
+        .map(|_| ())
 }
 
 /// Type-checks a state-formula-level `val(...)` occurrence against the declared `formula_type`.
@@ -285,20 +279,17 @@ fn check_val_expr(
 }
 
 /// Checks a fixpoint variable's own declaration: each parameter's initial value against its
-/// declared sort, in the *outer* scope since the parameter it initializes isn't bound yet. The
-/// variable is then pushed onto `state_vars` for `body` to reference recursively, and popped again
-/// afterwards so an enclosing formula never sees an inner fixpoint's variable.
-#[allow(clippy::too_many_arguments)]
-fn check_fixed_point(
+/// declared sort, in the *outer* scope since the parameter it initializes isn't bound yet. Returns
+/// the resolved parameter sorts for [`check_state_formula`]'s `visit_scoped` `enter` hook to push
+/// onto `state_vars`, alongside the variable's own [`StateVarId`], for its body to reference
+/// recursively; the corresponding pop happens in that same walk's `exit` hook, once the body is
+/// done being checked — this function itself no longer recurses into the body at all.
+fn check_fixed_point_declaration(
     data: &mut DataSpecification,
-    tables: &DeclarationTables,
     scope: &Scope,
-    state_vars: &mut StateVarStack,
     variable: &StateVarDecl,
-    body: &StateFrm,
-    formula_type: FormulaType,
     typing: &mut TypingInfo,
-) -> Result<(), ModalError> {
+) -> Result<Vec<ResolvedSortId>, ModalError> {
     let mut seen = HashSet::new();
     let mut params = Vec::with_capacity(variable.arguments.len());
     for argument in &variable.arguments {
@@ -313,12 +304,7 @@ fn check_fixed_point(
         check_expression_against::<ModalError>(data, scope, &argument.expr, sort, typing)?;
         params.push(sort);
     }
-
-    let state_var_id = variable.id.expect("resolve_modal_variables ran before checking");
-    state_vars.push((state_var_id, variable.span.clone(), params));
-    let result = check_state_formula(data, tables, scope, state_vars, body, formula_type, typing);
-    state_vars.pop();
-    result
+    Ok(params)
 }
 
 /// Type-checks an already-[`resolved`](StateFrmKind::Resolved) `name(args)` reference against its
@@ -340,9 +326,9 @@ fn check_state_var_inst(
     // the innermost shadowing declaration the way a name-keyed lookup would.
     let (_, decl_span, params) = state_vars.iter().find(|(id, _, _)| *id == declaration).expect(
         "a `StateFrmKind::Resolved` occurrence's declaration always matches an enclosing \
-             `FixedPoint` pushed onto `state_vars` by `check_fixed_point`, since \
-             `resolve_modal_variables` only ever resolves a name against a genuinely enclosing \
-             binder",
+             `FixedPoint` pushed onto `state_vars` by `check_state_formula`'s `visit_scoped` `enter` \
+             hook, since `resolve_modal_variables` only ever resolves a name against a genuinely \
+             enclosing binder",
     );
     typing.push(
         span.clone(),
@@ -367,6 +353,15 @@ fn check_state_var_inst(
     Ok(())
 }
 
+/// Type-checks a modality's regular formula: every action instance inside it against the `act`
+/// table, and every `val(...)`/`@`-time data expression against its expected sort.
+///
+/// One [`Traverse::try_visit_mixed`] walk starting at `formula` replaces the previous
+/// `check_reg_formula`/`check_action_formula` pair of hand-written recursive functions: a `RegFrm`
+/// node itself never needs checking, only dispatching towards an `Action`'s [`ActFrm`], so all the
+/// per-node work below lives in the `MixedNode::ActFrm` arm; crossing from a `RegFrm`'s `Action`
+/// into that `ActFrm`, and descending into both node types' own same-type children (an `ActFrm`
+/// `Negation`/`Quantifier`/`Binary`/`At`'s nested formula), no longer needs writing out here either.
 fn check_reg_formula(
     data: &mut DataSpecification,
     tables: &DeclarationTables,
@@ -374,56 +369,41 @@ fn check_reg_formula(
     formula: &RegFrm,
     typing: &mut TypingInfo,
 ) -> Result<(), ModalError> {
-    match &formula.node {
-        RegFrmKind::Action(action) => check_action_formula(data, tables, scope, action, typing),
-        RegFrmKind::Iteration(inner) | RegFrmKind::Plus(inner) => check_reg_formula(data, tables, scope, inner, typing),
-        RegFrmKind::Sequence { lhs, rhs } | RegFrmKind::Choice { lhs, rhs } => {
-            check_reg_formula(data, tables, scope, lhs, typing)?;
-            check_reg_formula(data, tables, scope, rhs, typing)
-        }
-    }
-}
+    formula
+        .try_visit_mixed::<Infallible, ModalError>(|node| {
+            if let MixedNode::ActFrm(formula) = node {
+                match &formula.node {
+                    ActFrmKind::MultAct(multi_action) => {
+                        for action in &multi_action.actions {
+                            check_action(data, tables, scope, action, typing)?;
+                        }
+                    }
 
-fn check_action_formula(
-    data: &mut DataSpecification,
-    tables: &DeclarationTables,
-    scope: &Scope,
-    formula: &ActFrm,
-    typing: &mut TypingInfo,
-) -> Result<(), ModalError> {
-    match &formula.node {
-        ActFrmKind::True | ActFrmKind::False => Ok(()),
+                    ActFrmKind::DataExprVal(data_expr) => {
+                        let bool_sort = data.context().sorts.bool_sort();
+                        check_expression_against::<ModalError>(data, scope, data_expr, bool_sort, typing)?;
+                    }
 
-        ActFrmKind::MultAct(multi_action) => {
-            for action in &multi_action.actions {
-                check_action(data, tables, scope, action, typing)?;
+                    // Like `StateFrmKind::Delay`/`Yaled`'s own `@`-time argument, `operand` is
+                    // checked against `Real` regardless of `expr`'s own sort — there's no
+                    // `ValSort`-style ambiguity here since an action formula's `val(...)` is always
+                    // `Bool` (see `ValSort`'s doc comment). `expr` itself is a same-type `ActFrm`
+                    // child, checked separately when the walk reaches it in its own right.
+                    ActFrmKind::At { operand, .. } => {
+                        let real_sort = data.context().sorts.real_sort();
+                        check_expression_against::<ModalError>(data, scope, operand, real_sort, typing)?;
+                    }
+
+                    ActFrmKind::True
+                    | ActFrmKind::False
+                    | ActFrmKind::Negation(_)
+                    | ActFrmKind::Quantifier { .. }
+                    | ActFrmKind::Binary { .. } => {}
+                }
             }
-            Ok(())
-        }
-
-        ActFrmKind::DataExprVal(data_expr) => {
-            let bool_sort = data.context().sorts.bool_sort();
-            check_expression_against::<ModalError>(data, scope, data_expr, bool_sort, typing)
-        }
-
-        ActFrmKind::Negation(inner) => check_action_formula(data, tables, scope, inner, typing),
-
-        ActFrmKind::Quantifier { body, .. } => check_action_formula(data, tables, scope, body, typing),
-
-        ActFrmKind::Binary { lhs, rhs, .. } => {
-            check_action_formula(data, tables, scope, lhs, typing)?;
-            check_action_formula(data, tables, scope, rhs, typing)
-        }
-
-        // Like `StateFrmKind::Delay`/`Yaled`'s own `@`-time argument, `operand` is checked against
-        // `Real` regardless of `expr`'s own sort — there's no `ValSort`-style ambiguity here since
-        // an action formula's `val(...)` is always `Bool` (see `ValSort`'s doc comment).
-        ActFrmKind::At { expr, operand } => {
-            check_action_formula(data, tables, scope, expr, typing)?;
-            let real_sort = data.context().sorts.real_sort();
-            check_expression_against::<ModalError>(data, scope, operand, real_sort, typing)
-        }
-    }
+            Ok(ControlFlow::Continue(()))
+        })
+        .map(|_| ())
 }
 
 /// Resolves one action instance inside a multi-action against the `act` table, trying every
@@ -514,6 +494,11 @@ mod stack_depth_probe {
     //! Isolates `check_state_formula`'s own recursion from the parser's and from
     //! `resolve_modal_variables`': the tree here is built directly, bypassing both, so a stack
     //! overflow can only come from this module's own `check_state_formula`/`collect_scope` walk.
+    //!
+    //! This used to SIGABRT (see `review/stack-overflow-recursion.md`) before `check_state_formula`
+    //! and `collect_scope` were migrated onto `Traverse::visit_scoped`/`try_visit_mixed`, which walk
+    //! with an explicit heap stack rather than native recursion; it now passes, and stays here as a
+    //! regression test for that.
     use merc_syntax::Span;
     use merc_syntax::StateFrmKind;
     use merc_syntax::StateFrmUnaryOp;
@@ -539,22 +524,20 @@ mod stack_depth_probe {
         let mut data = DataSpecification::from_untyped(UntypedDataSpecification::parse("").unwrap()).unwrap();
         let tables: ActionTable = ActionTable::build(&mut data, &[], resolve_declared_sort).unwrap();
         let mut typing = TypingInfo::default();
-        let mut state_vars = StateVarStack::new();
         let scope: Vec<(VarId, ResolvedSortId, Span)> = Vec::new();
 
         // 100,000 nested `!`s: well within what a real, if pathological, `.mcf` file could contain
         // (the parser itself already overflows at a similar depth — a separate, out-of-scope
         // concern), but small enough that a bounded-recursion walk would handle it trivially.
         let formula = deep_negation(100_000);
-        let result = check_state_formula(
-            &mut data,
-            &tables,
-            &scope,
-            &mut state_vars,
-            &formula,
-            FormulaType::Bool,
-            &mut typing,
-        );
+        let result = check_state_formula(&mut data, &tables, &scope, &formula, FormulaType::Bool, &mut typing);
         assert!(result.is_ok());
+
+        // Dropping a 100,000-deep `Box<StateFrm>` chain recurses through the default drop glue one
+        // `Box` at a time and overflows the stack on its own -- a known, separate bug from the one
+        // this test exists to check (see `review/stack-overflow-recursion.md` and
+        // `crates/syntax/src/traverse.rs`'s own `stack_depth_probe` tests, which forget for the same
+        // reason). Leak it so this test only exercises `check_state_formula`'s own walk.
+        std::mem::forget(formula);
     }
 }
