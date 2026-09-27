@@ -21,26 +21,67 @@ session rate limit before delivering findings; not covered here.
 - **Fix**: split the two format cases; `LtsFormat::AutMcrl2` now calls
   `write_mcrl2_aut`. Verified with `cargo test -p merc-lts`, clippy and fmt clean.
 
-### 2. `quotient_lts_block` (branching) mishandles a block with no bottom state — CONFIRMED, not fixed
+### 2. `quotient_lts_block` (branching) mishandles a block with no bottom state — FIXED
 
 - **Location**: `crates/reduction/src/quotient.rs`, `quotient_lts_block::<_, true>`'s
   bottom-state search (the `debug_assert!(!diverges(lts, candidate), ...)` guard).
-- **Scenario**: the search assumes every block has a genuine bottom state, which
+- **Scenario**: the search assumed every block has a genuine bottom state, which
   holds for partitions produced by the crate's own `reduce_lts` (tau-SCCs are
-  always collapsed first) but is undocumented and unchecked for `quotient_lts_block`
-  itself, a `pub fn` callable with any caller-supplied `BlockPartition` (e.g.
-  from `merc_refinement`). On a block containing a tau-cycle, the cycle-detection
-  is a `debug_assert!`: it panics in debug builds and is compiled out in release
-  builds, where the search silently picks a non-bottom-state representative and
-  drops that block's non-tau transitions from the quotient.
-- **Evidence**: `crates/reduction/src/quotient.rs::test_quotient_lts_block_branching_uses_true_bottom_state`
-  (`#[ignore]`d — panics in debug builds as described). Hand-built LTS with a
-  2-state tau-cycle reached via a tail state, one visible transition only
-  reachable from the cycle's far state.
-- **Status**: CONFIRMED, not fixed — left as a documented, ignored regression
-  test rather than changed production behavior, since the fix (either document
-  the precondition on every caller, or make the search itself tau-SCC-aware)
-  is a design decision outside this review's scope.
+  always collapsed first — `tau_cycle_elimination_and_reorder` runs before
+  `branching_bisim_sigref_impl`, so the resulting block's tau-subgraph is a
+  subgraph of a DAG and always has a sink) but was undocumented and unchecked
+  for `quotient_lts_block` itself, a `pub fn` callable with any caller-supplied
+  `BlockPartition` (e.g. from `merc_refinement`). On a block containing a
+  tau-cycle, the cycle-detection was a `debug_assert!`: it panicked in debug
+  builds and was compiled out in release builds, where the search silently
+  picked a non-bottom-state representative and dropped that block's non-tau
+  transitions from the quotient. A second, independent issue in the same
+  search: even the bottom-detection walk itself only followed one arbitrarily
+  chosen tau successor per state, so it could report "no bottom state" simply
+  because the edge it happened to follow led into a cycle, even when another
+  edge from the same state led to a genuine bottom state elsewhere in the
+  block.
+- **Root cause**: a block can legitimately have no bottom state under
+  branching bisimulation. `{0, 1, 2}` with `0 -tau-> 1`, `1 -tau-> 2`,
+  `2 -tau-> 1`, `2 -x-> 3` is a genuine branching-bisimulation-stable block
+  (by the branching condition, `1 ~ 2` because `2`'s `-x->` is weakly matched
+  by `1 =tau=> 2 -x-> 3`, and `2 ~ 1` symmetrically via the inert
+  `2 -tau-> 1`), yet every state in it has an outgoing same-block tau
+  transition — there is no single state whose direct transitions capture the
+  whole block's behaviour, since only state `2` performs `x` directly. This
+  cannot arise from the crate's own `reduce_lts` pipeline (which always
+  tau-SCC-collapses first, see above), but is fully reachable through the
+  public API with a hand-built `BlockPartition`.
+- **Fix**: the bottom-state search now explores *all* outgoing tau edges of
+  every visited state via a worklist (not one arbitrary successor at a time),
+  so it cannot be fooled by picking the "wrong" edge when a real bottom state
+  is reachable via another. When no bottom state is reachable at all — the
+  visited states form one or more tau-cycles with no exit — every visited
+  state becomes a representative instead of one arbitrary (non-bottom) state,
+  so their transitions (e.g. state 2's `x`-transition) are unioned into the
+  quotient instead of being dropped. The former `debug_assert!(!diverges(..))`
+  is now a real, always-true invariant check on the fallback path rather than
+  an assertion of "this never happens".
+- **Evidence**: `crates/reduction/src/quotient.rs::test_quotient_lts_block_branching_uses_true_bottom_state`,
+  un-`#[ignore]`d. Hand-built LTS with a 2-state tau-cycle reached via a tail
+  state, one visible transition only reachable from the cycle's far state.
+  Confirmed the test fails without the fix (reverted the fix locally, kept
+  the test un-ignored: panics at `crates/reduction/src/quotient.rs:224`,
+  `"The states of the given LTS should be non-divergent."`) and passes with
+  it restored:
+  ```
+  $ cargo test -p merc_reduction --lib quotient::tests::test_quotient_lts_block_branching_uses_true_bottom_state
+  test quotient::tests::test_quotient_lts_block_branching_uses_true_bottom_state ... ok
+  ```
+- **Status**: FIXED. Full crate suite including previously-ignored tests:
+  `cargo nextest run -p merc_reduction --no-fail-fast -- --include-ignored`
+  → `46 tests run: 46 passed (8 slow), 0 skipped`. Downstream: `cargo test -p
+  merc_lts` → 19 passed + 1 doctest. No dedicated quotienting tests exist in
+  `tools/lts/tests` or `tools/rewrite` (`tools/rewrite` has no `tests/`
+  directory at all; `grep -rn quotient tools/lts/tests` finds nothing —
+  `tools/lts/src/main.rs` is the only non-test hit). `cargo clippy -p
+  merc_reduction --all-targets` clean, `cargo +nightly fmt -p merc_reduction
+  -- --check` clean.
 
 ### 3. Two test-quality fixes (not bugs in reviewed production code)
 
@@ -79,11 +120,19 @@ reviewed code.
 ## Verification
 
 ```
-cargo test -p merc_reduction --lib          # 38 passed, 1 ignored (finding #2)
+cargo test -p merc_reduction --lib          # 38 passed, 1 ignored (finding #2, pre-fix)
+cargo nextest run -p merc_reduction --no-fail-fast -- --include-ignored   # 46 passed, 0 skipped (post-fix; 39 lib + 7 ltsconvert_test)
 cargo test -p merc_symbolic --lib -- --test-threads=1   # 75 passed
 cargo test -p merc_sabre --test automaton_construction_tests   # 3 passed
 cargo test -p merc-lts                       # 5 passed (finding #1's regression test)
 cd tools/mcrl2 && cargo test -p merc_pbes --lib empty_pbes_is_rejected   # 1 passed
 cargo clippy -p merc_syntax -p merc_typecheck -p merc-lts --all-targets
 cargo +nightly fmt -p merc_aterm -p merc-lts -- --check
+
+# Finding #2's fix, added afterwards:
+cargo test -p merc_reduction --lib quotient::tests::test_quotient_lts_block_branching_uses_true_bottom_state
+  # ok, both with the fix applied and (confirmed separately, fix reverted) panicking without it
+cargo test -p merc_lts                       # 19 passed + 1 doctest
+cargo clippy -p merc_reduction --all-targets # clean
+cargo +nightly fmt -p merc_reduction -- --check   # clean
 ```

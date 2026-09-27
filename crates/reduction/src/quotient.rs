@@ -186,8 +186,22 @@ fn is_redundant_transition<L: LTS>(lts: &L, from: StateIndex, label: LabelIndex,
 /// Optimised implementation for block partitions.
 ///
 /// Chooses a single state in the block as representative. If `BRANCHING` then
-/// the chosen state is a bottom state. For `BRANCHING` we only consider bottom
-/// states as representatives.
+/// the chosen state is a bottom state, i.e. a state with no outgoing tau
+/// transition that stays inside the block. For `BRANCHING` we only consider
+/// bottom states as representatives.
+///
+/// A block produced by this crate's own branching bisimulation reduction
+/// always has a bottom state, because the LTS is tau-SCC collapsed before
+/// refinement runs, so every block's tau-subgraph is acyclic. This function
+/// is also `pub` and callable with any caller-supplied [`BlockPartition`]
+/// though, and for those a block's tau-subgraph is not guaranteed acyclic: it
+/// can contain a tau-cycle with no state that escapes it. In that case there
+/// is no single state whose direct transitions capture the whole block's
+/// behaviour (different states in the cycle can carry different outgoing
+/// transitions, e.g. only one of them may perform a given visible action),
+/// so every state in the (block-restricted) tau-cycle that the search finds
+/// becomes a representative and all of their transitions are included,
+/// instead of picking one arbitrary state and dropping the rest.
 ///
 /// If `eliminate_tau_loops` is true then tau self-loops are eliminated.
 pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
@@ -207,68 +221,107 @@ pub fn quotient_lts_block<L: LTS, const BRANCHING: bool>(
     let mut visited = vec![false; lts.num_of_states()];
     // Only touched states are reset to avoid clearing the entire visited vector.
     let mut touched = Vec::new();
+    // Reused across blocks: the representative state(s) whose outgoing transitions are
+    // copied into the quotient for the current block. Normally a single state.
+    let mut representatives = Vec::new();
 
     for block in (0..partition.num_of_blocks()).map(BlockIndex::new) {
         // Pick any state in the block
-        let mut candidate = if let Some(state) = partition.iter_block(block).next() {
+        let seed = if let Some(state) = partition.iter_block(block).next() {
             state
         } else {
             panic!("Blocks in the partition should not be empty {}", block);
         };
 
+        representatives.clear();
+
         if BRANCHING {
-            // traverse any outgoing transition to find a bottom state.
-            'outer: loop {
-                if visited[candidate] {
-                    // No bottom state exists in this block. Stop early to avoid looping forever.
-                    debug_assert!(
-                        !diverges(lts, candidate),
-                        "The states of the given LTS should be non-divergent."
-                    );
+            // Explore the block-restricted tau-subgraph reachable from `seed`, over *all*
+            // outgoing tau transitions of every visited state (not just one arbitrarily chosen
+            // successor at a time), looking for a bottom state. Exploring every edge is what
+            // makes this tau-SCC-aware: a single-successor walk can be fooled into reporting
+            // "no bottom state" merely because the edge it happened to follow leads into a
+            // cycle, while another edge from the same state leads to a genuine bottom state.
+            let mut worklist = vec![seed];
+            visited[seed] = true;
+            touched.push(seed);
+            let mut bottom = None;
+
+            while let Some(state) = worklist.pop() {
+                let mut has_inert_successor = false;
+
+                for trans in lts.outgoing_transitions(state) {
+                    if lts.is_hidden_label(trans.label)
+                        && state != trans.to // Ignore self loops for the bottom state search.
+                        && partition.block_number(trans.to) == block
+                    {
+                        has_inert_successor = true;
+                        if !visited[trans.to] {
+                            visited[trans.to] = true;
+                            touched.push(trans.to);
+                            worklist.push(trans.to);
+                        }
+                    }
+                }
+
+                if !has_inert_successor {
+                    // No outgoing tau transition to the same block, so we found a bottom state.
+                    bottom = Some(state);
                     break;
                 }
-                visited[candidate] = true;
-                touched.push(candidate);
+            }
 
-                if let Some(trans) = lts.outgoing_transitions(candidate).find(|trans| {
-                    lts.is_hidden_label(trans.label)
-                        && candidate != trans.to // Ignore self loops for the bottom state search.
-                        && partition.block_number(trans.to) == block
-                }) {
-                    candidate = trans.to;
-                    continue 'outer;
+            match bottom {
+                Some(state) => representatives.push(state),
+                None => {
+                    // No bottom state is reachable from `seed`: every state visited above still
+                    // has an outgoing same-block tau transition, so together they form one or
+                    // more tau-cycles with no exit (a "bottom SCC" rather than a bottom state).
+                    // `diverges` would report such states as divergent, which is expected here
+                    // (this is exactly the case the old `debug_assert!(!diverges(..))` fired on).
+                    // Since no single one of them is guaranteed to carry all of the block's
+                    // outgoing behaviour, use all visited states as representatives instead of
+                    // an arbitrary one, so their transitions are not silently dropped.
+                    debug_assert!(
+                        touched.iter().any(|&state| diverges(lts, state)),
+                        "A block with no reachable bottom state must diverge"
+                    );
+                    representatives.extend(touched.iter().copied());
                 }
-
-                // No outgoing tau transition to the same block, so we found a bottom state.
-                break;
             }
 
             // Reset only the entries touched by this walk.
             for state in touched.drain(..) {
                 visited[state] = false;
             }
+        } else {
+            representatives.push(seed);
         }
 
-        // Add all transitions from the representative state (or the bottom state if BRANCHING) to the quotient LTS.
-        for transition in lts.outgoing_transitions(candidate) {
-            if BRANCHING {
-                debug_assert!(
-                    !(lts.is_hidden_label(transition.label)
-                        && candidate != transition.to
-                        && partition.block_number(transition.to) == block),
-                    "The representative {} is not bottom state",
-                    candidate
-                );
-            }
+        // Add all transitions from the representative state(s) to the quotient LTS. For
+        // BRANCHING this is normally a single bottom state; see the doc comment above for the
+        // fallback used when the block has none.
+        for &candidate in &representatives {
+            for transition in lts.outgoing_transitions(candidate) {
+                if BRANCHING && representatives.len() == 1 {
+                    debug_assert!(
+                        !(lts.is_hidden_label(transition.label)
+                            && candidate != transition.to
+                            && partition.block_number(transition.to) == block),
+                        "The representative {} is not bottom state",
+                        candidate
+                    );
+                }
 
-            if !(eliminate_tau_loops && lts.is_hidden_label(transition.label) && candidate == transition.to) {
-                builder
-                    .add_transition(
-                        StateIndex::new(*block),
-                        &lts.labels()[transition.label],
-                        StateIndex::new(*partition.block_number(transition.to)),
-                    )
-                    .expect("Adding transitions does not fail");
+                if !(eliminate_tau_loops && lts.is_hidden_label(transition.label) && candidate == transition.to) {
+                    builder
+                        .add_transition(
+                            StateIndex::new(*block),
+                            &lts.labels()[transition.label],
+                            StateIndex::new(*partition.block_number(transition.to)),
+                        )
+                        .expect("Adding transitions does not fail");
+                }
             }
         }
     }
@@ -304,16 +357,15 @@ mod tests {
     use crate::quotient_lts_block;
     use crate::reduce_lts;
 
-    /// `quotient_lts_block::<_, true>` assumes every block has a genuine bottom state, which
-    /// holds when the partition comes from the crate's own `reduce_lts` (it always collapses
-    /// tau-SCCs first) but not in general -- the function is `pub` and takes a caller-supplied
-    /// `BlockPartition` with no such precondition documented. This builds a block with a
-    /// tau-cycle (1 -tau-> 2 -tau-> 1, reached via 0 -tau-> 1) and no bottom state; on current
-    /// code the bottom-state search's cycle check is a `debug_assert!`, so this panics in debug
-    /// builds (`#[ignore]`d below) and would silently pick a non-bottom representative in
-    /// release builds, dropping that block's `x`-transition from the quotient.
+    /// `quotient_lts_block::<_, true>` used to assume every block has a genuine bottom state,
+    /// which holds when the partition comes from the crate's own `reduce_lts` (it always
+    /// collapses tau-SCCs first) but not in general -- the function is `pub` and takes a
+    /// caller-supplied `BlockPartition` with no such precondition documented. This builds a
+    /// block with a tau-cycle (1 -tau-> 2 -tau-> 1, reached via 0 -tau-> 1) and no bottom
+    /// state, and checks that the `x`-transition that is only directly available from state 2
+    /// (inside the cycle) is still present in the quotient. See
+    /// review/phase-3-algorithmic-core.md for the original finding.
     #[test]
-    #[ignore = "known bug: quotient_lts_block panics (debug) / silently drops transitions (release) on a block with no bottom state, see review/phase-3-algorithmic-core.md"]
     fn test_quotient_lts_block_branching_uses_true_bottom_state() {
         // Label 0 = tau, label 1 = "x".
         // 0 -tau-> 1, 1 -tau-> 2, 2 -tau-> 1, 2 -x-> 3.
