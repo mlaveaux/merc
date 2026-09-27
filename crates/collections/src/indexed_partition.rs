@@ -128,6 +128,59 @@ impl IndexedPartition {
     }
 }
 
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Small, fixed element domain the harness below explores exhaustively:
+    /// `kani::any` enumerates every combination of element/block-number pair
+    /// bounded by `N`, for all 3 iterations of the loop, not a random sample.
+    const N: usize = 4;
+
+    /// Proves `set_block`/`num_of_blocks`'s bookkeeping against a plain
+    /// reference model, for every combination of 3 `set_block` calls over
+    /// `N` elements and block numbers bounded by `N`: `block(i)` always
+    /// returns the most recently set block number for `i` (or block 0,
+    /// `new`'s initial state, if `i` was never set), and `num_of_blocks()`
+    /// always equals one plus the highest block number ever passed to
+    /// `set_block` -- the "block numbers are dense" contract `set_block`'s
+    /// own doc comment claims, which real callers depend on as an accurate
+    /// upper bound (e.g. `BlockPartition::from_indexed_partition` sizes its
+    /// block array directly from `num_of_blocks()`).
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn set_block_and_num_of_blocks_match_reference_model() {
+        let mut partition = IndexedPartition::new(N);
+        let mut expected = [0usize; N];
+        let mut expected_num_of_blocks = 1usize;
+
+        for _ in 0..3 {
+            let element: usize = kani::any();
+            let block: usize = kani::any();
+            kani::assume(element < N);
+            kani::assume(block < N);
+
+            partition.set_block(element, BlockIndex::new(block));
+            expected[element] = block;
+            expected_num_of_blocks = expected_num_of_blocks.max(block + 1);
+        }
+
+        assert_eq!(
+            partition.num_of_blocks(),
+            expected_num_of_blocks,
+            "num_of_blocks() must equal one plus the highest block number ever set"
+        );
+        for i in 0..N {
+            assert_eq!(
+                partition.block(i).value(),
+                expected[i],
+                "block({i}) does not match the reference model after the set_block sequence"
+            );
+        }
+    }
+
+}
+
 /// Reorders the blocks of the given partition according to the given permutation.
 #[allow(dead_code)]
 pub(crate) fn reorder_partition<P>(partition: IndexedPartition, permutation: P) -> IndexedPartition

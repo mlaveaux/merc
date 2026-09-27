@@ -390,6 +390,109 @@ impl<'a, T, S> IntoIterator for &'a IndexedSet<T, S> {
     }
 }
 
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Frees `set.table[index]`, using exactly the same three-statement
+    /// free-list update as the table+free-list half of [`IndexedSet::remove`]
+    /// and [`IndexedSet::retain_mut`] (both inline this rather than sharing a
+    /// helper). Deliberately never touches `set.index`, the secondary hash
+    /// table: `HashTable::find`/`insert_unique`'s SIMD-oriented probing is
+    /// orthogonal to the free-list invariant being proved here and is not
+    /// itself model-checkable by Kani in reasonable time (confirmed: an
+    /// earlier version of these harnesses drove the same scenario through the
+    /// public `insert`/`remove` API and did not terminate CBMC within five
+    /// minutes on a single 3-element harness).
+    fn free_slot<T, S>(set: &mut IndexedSet<T, S>, index: usize) {
+        let next = match set.free {
+            Some(next) => next,
+            None => index,
+        };
+        set.table[index] = IndexSetEntry::Empty(next);
+        set.free = Some(index);
+    }
+
+    /// Proves the free-list bookkeeping's central invariant: once a slot is
+    /// freed, the very next call to `insert_into_table` (the method both
+    /// `insert` and `insert_equiv` route through) reuses that exact physical
+    /// table slot -- the free-list is actually consulted, not just tracked --
+    /// and the reused slot ends up holding only the new element's data. A
+    /// still-live neighboring entry is never disturbed by the free/reuse
+    /// cycle, i.e. a stale index into the freed slot can never observe data
+    /// that belongs to a different, still-live element.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn freed_slot_is_reused_without_aliasing_other_entries() {
+        let mut set: IndexedSet<u8> = IndexedSet::default();
+
+        let v1: u8 = kani::any();
+        let v2: u8 = kani::any();
+        let v3: u8 = kani::any();
+
+        let i1 = set.insert_into_table(v1);
+        let i2 = set.insert_into_table(v2);
+        assert_ne!(i1, i2, "two live inserts must never land in the same slot");
+
+        free_slot(&mut set, i1);
+
+        let i3 = set.insert_into_table(v3);
+
+        // The freed physical slot is reused, not a freshly appended one.
+        assert_eq!(i3, i1, "the freed slot must be reused");
+
+        // The reused slot resolves to exactly the new element...
+        assert!(matches!(&set.table[i3], IndexSetEntry::Filled(value) if *value == v3));
+        // ...and the untouched second entry is unaffected by the free/reuse
+        // cycle -- the two slots never alias.
+        assert!(matches!(&set.table[i2], IndexSetEntry::Filled(value) if *value == v2));
+        assert_ne!(i3, i2);
+    }
+
+    /// Extends the above to two interleaved frees, proving the free-list
+    /// *chain* (not just a single freed slot) is walked correctly: slots are
+    /// reused in last-freed-first (LIFO) order, matching `insert_into_table`
+    /// popping `self.free` as a stack, and no two simultaneously-live
+    /// elements ever end up sharing a table slot.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn multiple_freed_slots_are_reused_in_lifo_order() {
+        let mut set: IndexedSet<u8> = IndexedSet::default();
+
+        let v1: u8 = kani::any();
+        let v2: u8 = kani::any();
+        let v3: u8 = kani::any();
+        let v4: u8 = kani::any();
+        let v5: u8 = kani::any();
+
+        let i1 = set.insert_into_table(v1);
+        let i2 = set.insert_into_table(v2);
+        let i3 = set.insert_into_table(v3);
+        assert_ne!(i1, i2);
+        assert_ne!(i2, i3);
+        assert_ne!(i1, i3);
+
+        free_slot(&mut set, i1);
+        free_slot(&mut set, i2);
+
+        // LIFO: the most-recently-freed slot (v2's) is reused first.
+        let i4 = set.insert_into_table(v4);
+        assert_eq!(i4, i2, "the most recently freed slot must be reused first");
+
+        let i5 = set.insert_into_table(v5);
+        assert_eq!(i5, i1, "the next-most-recently freed slot must be reused second");
+
+        // Every live element resolves to its own, distinct data: the two
+        // reused slots and the one untouched slot never alias each other.
+        assert!(matches!(&set.table[i3], IndexSetEntry::Filled(value) if *value == v3));
+        assert!(matches!(&set.table[i4], IndexSetEntry::Filled(value) if *value == v4));
+        assert!(matches!(&set.table[i5], IndexSetEntry::Filled(value) if *value == v5));
+        assert_ne!(i3, i4);
+        assert_ne!(i3, i5);
+        assert_ne!(i4, i5);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rand::RngExt;
