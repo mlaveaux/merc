@@ -446,3 +446,61 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod stack_depth_probe {
+    //! `resolve_type_var_name`/`resolve_type_var_names_in_expr` are two of the three
+    //! `crates/typecheck` call sites `review/stack-overflow-recursion.md` named as depending on
+    //! `Traverse::transform`'s own stack safety without having a regression test of their own;
+    //! these are those tests. The trees here are built directly, bypassing the parser (which has
+    //! its own, unrelated recursion limit).
+    use std::collections::HashSet;
+
+    use merc_syntax::DataExprKind;
+    use merc_syntax::SortExpressionKind;
+    use merc_syntax::Span;
+
+    use super::resolve_type_var_name;
+    use super::resolve_type_var_names_in_expr;
+
+    #[test]
+    fn deeply_nested_sort_expression_does_not_overflow_the_stack() {
+        let names: HashSet<&str> = HashSet::from(["S"]);
+        let mut sort = SortExpressionKind::Reference("S".to_string()).spanned(Span::default());
+        for _ in 0..100_000 {
+            sort = SortExpressionKind::Function {
+                domain: Box::new(SortExpressionKind::Reference("S".to_string()).spanned(Span::default())),
+                range: Box::new(sort),
+            }
+            .spanned(Span::default());
+        }
+
+        resolve_type_var_name(&mut sort, &names);
+
+        // Every `Reference("S")` -- both `domain`'s and the innermost one -- became `TypeVar`.
+        let mut current = &sort;
+        for _ in 0..100_000 {
+            let SortExpressionKind::Function { domain, range } = &current.node else {
+                panic!("expected a Function sort");
+            };
+            assert!(matches!(&domain.node, SortExpressionKind::TypeVar(name) if name == "S"));
+            current = range;
+        }
+        assert!(matches!(&current.node, SortExpressionKind::TypeVar(name) if name == "S"));
+    }
+
+    #[test]
+    fn deeply_nested_data_expression_binder_does_not_overflow_the_stack() {
+        let names: HashSet<&str> = HashSet::from(["S"]);
+        let mut expr = DataExprKind::Bool(true).spanned(Span::default());
+        for _ in 0..100_000 {
+            expr = DataExprKind::Unary {
+                op: merc_syntax::DataExprUnaryOp::Negation,
+                expr: Box::new(expr),
+            }
+            .spanned(Span::default());
+        }
+
+        resolve_type_var_names_in_expr(&mut expr, &names);
+    }
+}

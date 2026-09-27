@@ -99,18 +99,20 @@ fn mixed_push_children<'a>(node: MixedNode<'a>, stack: &mut Vec<MixedNode<'a>>) 
 /// `apply_children`) walk with an explicit, heap-allocated stack rather than native recursion, so
 /// a tree's depth is bounded only by available memory, not the call stack — see `stack_depth_probe`
 /// in this module's tests for a 100,000-deep regression case per node type.
-/// [Traverse::transform_children] (and `try_transform`/`transform`) do **not** share this: a
-/// bottom-up rewrite needs a node's children fully processed *before* touching the node itself,
-/// which — for an owned, `Box`/`Vec`-based tree like this one, as opposed to an arena addressed by
-/// index — means holding a live mutable borrow of the already-processed children at the same time
-/// as the borrow needed to reach the parent again, which the borrow checker rejects (there is no
-/// such conflict top-down: once a node has been visited/replaced, its old borrow is dropped before
-/// its children are ever reached). Making that iterative too needs a genuinely different
-/// representation (an arena, or owned nodes moved in and out of a worklist behind a placeholder),
-/// not just this same worklist trick; it remains recursive, and is a known, separate gap in
-/// covering the review finding: `crates/typecheck`'s `.transform`/`.try_transform` call sites
-/// (`ir/desugar.rs`, `ir/lower.rs`, `resolution/name_resolution.rs`) are not stack-safe for a
-/// pathologically deep tree.
+/// [Traverse::try_transform]/`transform` share this too, needing a fundamentally different
+/// technique to get there: a bottom-up rewrite needs a node's children fully processed *before*
+/// touching the node itself, which the worklist-of-borrows trick above cannot do for an owned,
+/// `Box`/`Vec`-based tree like this one (as opposed to an arena addressed by index) -- it would mean
+/// holding a live mutable borrow of the already-processed children at the same time as the borrow
+/// needed to reach the parent again, which the borrow checker rejects. [Traverse::try_transform]'s
+/// own doc comment covers the different technique this needed instead: moving *owned* nodes between
+/// two worklists (`Self: Default`, via [std::mem::take], stands in for the node a worklist entry
+/// took the place of, the same way [`crate::TakeRecursiveChildren`] does and for the same reason).
+/// [Traverse::transform_children] is built on top of the now-iterative `try_transform`, one call per
+/// direct child, rather than needing its own copy of the same technique. `crates/typecheck`'s
+/// `.transform`/`.try_transform` call sites (`ir/desugar.rs`, `ir/lower.rs`,
+/// `resolution/name_resolution.rs`) are stack-safe for a pathologically deep tree as a result,
+/// with no call-site changes needed.
 ///
 /// None of the above crosses into a *different* node type on its own: a [StateFrm] traversal does
 /// not, by itself, descend into the [RegFrm] of a `Modality` or the [ActFrm] inside that. Three more
@@ -161,9 +163,27 @@ pub trait Traverse: Sized {
     ) -> Recursion<Infallible, Infallible>;
 
     /// See [Traverse::apply_children]; this variant rewrites each child bottom-up.
+    ///
+    /// Built on [Traverse::push_children_mut] plus [Traverse::try_transform] (itself iterative --
+    /// see that method's own doc comment), so this adds no native recursion of its own: it detaches
+    /// each of `self`'s own direct children, in turn hands each one wholesale to `try_transform`
+    /// (which fully transforms it and everything below it before returning), and puts it back --
+    /// one call per *direct* child, never nested inside another, so the native call depth this adds
+    /// is bounded by `self`'s own branching factor, not the tree's depth.
     fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
-        F: FnMut(&mut Self) -> Result<(), E>;
+        Self: Default,
+        F: FnMut(&mut Self) -> Result<(), E>,
+    {
+        let mut children = Vec::new();
+        let _ = self.push_children_mut((), &mut children);
+        for (child, ()) in children {
+            let mut owned = std::mem::take(child);
+            owned.try_transform(function)?;
+            *child = owned;
+        }
+        Ok(())
+    }
 
     /// Wraps `self` in the [MixedNode] variant naming its own type, so [Traverse::visit_mixed] can
     /// hold nodes of every traversable type on one stack.
@@ -620,17 +640,88 @@ pub trait Traverse: Sized {
     /// a tree that contains that same node terminates here too, since every node is handed to the
     /// callback exactly once. The callback rewrites through `&mut`, so nothing is cloned; take the
     /// node apart with [std::mem::replace] when its parts have to be moved into the replacement.
+    ///
+    /// A bottom-up rewrite needs a node's children fully processed *before* touching the node
+    /// itself, which rules out [Traverse::apply_subtree]'s worklist-of-borrows trick: that stack
+    /// holds `&mut` references *into* the still-standing tree, so a node reached later and a node
+    /// already finished earlier could otherwise both be live at once when the later one is the
+    /// earlier one's own ancestor -- the borrow checker (rightly) refuses this for a `Box`/`Vec`-
+    /// owned tree (an arena addressed by index wouldn't have the same conflict, since "reaching a
+    /// node" would no longer mean borrowing through its ancestors). This instead moves *owned*
+    /// nodes between two worklists, detaching a node's children (via [Traverse::push_children_mut]
+    /// and [std::mem::take], needing `Self: Default` the same way [`crate::TakeRecursiveChildren`]
+    /// does and for the same underlying reason: extracting a value from a borrowed slot without
+    /// leaving it empty needs *something* to leave behind) before it is ever pushed anywhere, so no
+    /// two worklist entries ever alias the same storage:
+    ///
+    /// - `stack` holds `Enter(node)` / `Assemble(node, child_count)` frames, LIFO.
+    /// - `results` accumulates each fully-transformed node, in the order it finishes.
+    ///
+    /// `Enter(node)` detaches `node`'s own children in written order, pushes `Assemble(node,
+    /// count)` (to run once they're all done), then pushes each child as its own `Enter` frame in
+    /// *reverse* -- so the LIFO stack pops them back out left-to-right, the same order native
+    /// recursion would visit them in. `Assemble(node, count)` only ever runs once every one of
+    /// `node`'s `count` children has itself been fully transformed and pushed onto `results`: they
+    /// are its last `count` entries, in original order, because nothing between them and the top of
+    /// `results` at that point can belong to any other node (an `Enter` frame is never pushed for a
+    /// node until all of its *earlier* siblings' whole subtrees have already finished and landed in
+    /// `results`, and a node's own `Assemble` frame sits right below its children's `Enter` frames on
+    /// `stack`, so it cannot run before every one of them has). `Assemble` puts those children back
+    /// into `node` (replacing the placeholders `Enter` left), calls `function` on the now-whole node,
+    /// and pushes the result onto `results` in turn -- so by the time an ancestor's own `Assemble`
+    /// frame runs, its children are already waiting there for it, and once the loop empties `stack`,
+    /// `results` holds exactly one value: the fully-transformed root.
     fn try_transform<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
+        Self: Default,
         F: FnMut(&mut Self) -> Result<(), E>,
     {
-        self.transform_children(function)?;
-        function(self)
+        enum Frame<N> {
+            Enter(N),
+            Assemble(N, usize),
+        }
+
+        let mut stack = vec![Frame::Enter(std::mem::take(self))];
+        let mut results: Vec<Self> = Vec::new();
+
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Enter(mut node) => {
+                    let mut child_refs = Vec::new();
+                    let _ = node.push_children_mut((), &mut child_refs);
+                    let children: Vec<Self> = child_refs
+                        .into_iter()
+                        .map(|(child, ())| std::mem::take(child))
+                        .collect();
+                    stack.push(Frame::Assemble(node, children.len()));
+                    stack.extend(children.into_iter().rev().map(Frame::Enter));
+                }
+                Frame::Assemble(mut node, count) => {
+                    let start = results.len() - count;
+                    let mut transformed = results.split_off(start).into_iter();
+                    let mut child_refs = Vec::new();
+                    let _ = node.push_children_mut((), &mut child_refs);
+                    for (child, ()) in child_refs {
+                        *child = transformed.next().expect(
+                            "Assemble's own child_count matches how many children Enter detached from this same node",
+                        );
+                    }
+                    function(&mut node)?;
+                    results.push(node);
+                }
+            }
+        }
+
+        *self = results
+            .pop()
+            .expect("stack only ever empties with exactly one result: the transformed root");
+        Ok(())
     }
 
     /// See [Traverse::try_transform], for callbacks that cannot fail.
     fn transform<F>(&mut self, mut function: F)
     where
+        Self: Default,
         F: FnMut(&mut Self),
     {
         match self.try_transform::<Infallible, _>(&mut |node| Ok(function(node))) {
@@ -744,20 +835,6 @@ macro_rules! define_traversal {
 
                 ControlFlow::Continue(())
             }
-
-            fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
-            where
-                F: FnMut(&mut Self) -> Result<(), E>,
-            {
-                let mut $recurse = |child: &mut $Node| child.try_transform(function);
-
-                match &mut self.node {
-                    $($child)*
-                    $($mut_child)*
-                }
-
-                Ok(())
-            }
         }
 
         impl TakeRecursiveChildren for $Kind {
@@ -839,20 +916,6 @@ macro_rules! define_traversal {
                     #[allow(unreachable_patterns)]
                     _ => {}
                 }
-            }
-
-            fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
-            where
-                F: FnMut(&mut Self) -> Result<(), E>,
-            {
-                let mut $recurse = |child: &mut $Node| child.try_transform(function);
-
-                match &mut self.node {
-                    $($child)*
-                    $($mut_child)*
-                }
-
-                Ok(())
             }
         }
 
@@ -1613,6 +1676,86 @@ mod tests {
         assert_eq!(exited_in_order, ["Y", "X"]);
         assert!(state_vars.is_empty());
     }
+
+    #[test]
+    fn test_transform_visits_bottom_up_left_to_right() {
+        // A leaf's own children (none) finish before it does, each operand of `&&` finishes before
+        // the `&&` node itself, and the left operand before the right one.
+        let mut formula = state_formula("X && Y");
+
+        let mut order = Vec::new();
+        formula.transform(|formula| match &formula.node {
+            StateFrmKind::Id(name, _) => order.push(name.clone()),
+            StateFrmKind::Binary { .. } => order.push("&&".to_string()),
+            _ => {}
+        });
+
+        assert_eq!(order, ["X", "Y", "&&"]);
+    }
+
+    #[test]
+    fn test_transform_no_op_reassembles_the_exact_same_tree() {
+        // Exercises the take-apart/reassemble round trip across every shape in one formula: a
+        // `FixedPoint`'s own variable, a `Modality`'s `RegFrm`, a `Quantifier` binder, and a
+        // `Binary` -- if any child landed back in the wrong slot, or the wrong number of results
+        // were consumed for some node, this would no longer structurally equal the original
+        // (`Spanned`'s `PartialEq` compares only `.node`, so the placeholder spans transform
+        // briefly leaves behind can never hide a misplaced *value*).
+        let text = "mu X. [a](exists n: Nat . val(n == n) && X)";
+        let original = state_formula(text);
+        let mut formula = state_formula(text);
+
+        formula.transform(|_| {});
+
+        assert_eq!(formula, original);
+    }
+
+    #[test]
+    fn test_transform_rewrites_every_node_including_the_root() {
+        let mut formula = state_formula("X && Y");
+
+        let mut count = 0usize;
+        formula.transform(|_| count += 1);
+
+        // `X`, `Y`, and the `&&` node itself: `transform` (unlike `transform_children`) also
+        // rewrites the root.
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_transform_children_rewrites_children_but_not_the_root() {
+        let mut formula = state_formula("X && Y");
+
+        let mut count = 0usize;
+        let result: Result<(), Infallible> = formula.transform_children(&mut |_| {
+            count += 1;
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(count, 2); // `X` and `Y`, not the `&&` node itself.
+    }
+
+    #[test]
+    fn test_try_transform_propagates_an_error_without_rewriting_further() {
+        let mut formula = state_formula("X && Y");
+
+        let mut visited = Vec::new();
+        let result: Result<(), &str> = formula.try_transform(&mut |formula| {
+            if let StateFrmKind::Id(name, _) = &formula.node {
+                visited.push(name.clone());
+                if name == "Y" {
+                    return Err("stopped at Y");
+                }
+            }
+            Ok(())
+        });
+
+        assert_eq!(result, Err("stopped at Y"));
+        // `X` (whose own subtree finished first) was rewritten before the error on `Y` stopped the
+        // walk; the enclosing `&&` never was, since it comes after both operands in bottom-up order.
+        assert_eq!(visited, ["X", "Y"]);
+    }
 }
 
 #[cfg(test)]
@@ -1734,6 +1877,28 @@ mod stack_depth_probe {
         assert_eq!(result, Ok(None));
         assert_eq!(max_depth, 1_000_001);
         assert_eq!(depth, 0); // every `enter` was matched by an `exit`.
+
+        // `formula` drops here -- see `visit_a_million_deep_negation_does_not_overflow_the_stack`.
+    }
+
+    /// [Traverse::try_transform] (and `transform`) use a fundamentally different, two-worklist
+    /// technique from every walk above -- see that method's own doc comment -- so it gets its own
+    /// probe rather than relying on any of them to also exercise it. Rewriting every node's own
+    /// operator field in place (the same as `apply_scoped`'s probe) also proves the reassembled
+    /// tree is the *same* tree, not just one of the same depth: a node landing in the wrong slot
+    /// during reassembly would still count correctly here, but would carry the wrong operator.
+    #[test]
+    fn transform_a_million_deep_negation_does_not_overflow_the_stack() {
+        let mut formula = deep_negation(1_000_000);
+
+        let mut count = 0usize;
+        formula.transform(|formula| {
+            if let StateFrmKind::Unary { op, .. } = &mut formula.node {
+                *op = StateFrmUnaryOp::Negation;
+                count += 1;
+            }
+        });
+        assert_eq!(count, 1_000_000); // every `Unary` node, not the `True` leaf at the bottom.
 
         // `formula` drops here -- see `visit_a_million_deep_negation_does_not_overflow_the_stack`.
     }

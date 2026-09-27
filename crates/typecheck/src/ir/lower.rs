@@ -282,3 +282,32 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod stack_depth_probe {
+    //! `lower_data_expr` is one of the three `crates/typecheck` call sites
+    //! `review/stack-overflow-recursion.md` named as depending on `Traverse::transform`'s own
+    //! stack safety without having a regression test of its own; this is that test. The tree here
+    //! is built directly, bypassing the parser (which has its own, unrelated recursion limit).
+    use merc_syntax::DataExprKind;
+    use merc_syntax::DataExprUnaryOp;
+    use merc_syntax::Span;
+
+    use super::is_lowered;
+    use super::lower_data_expr;
+
+    #[test]
+    fn deeply_nested_unary_does_not_overflow_the_stack() {
+        let mut expr = DataExprKind::Bool(true).spanned(Span::default());
+        for _ in 0..100_000 {
+            expr = DataExprKind::Unary {
+                op: DataExprUnaryOp::Negation,
+                expr: Box::new(expr),
+            }
+            .spanned(Span::default());
+        }
+
+        let lowered = lower_data_expr(expr);
+        assert!(is_lowered(&lowered));
+    }
+}

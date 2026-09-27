@@ -1,4 +1,4 @@
-# Unbounded recursion → stack overflow (SIGABRT): `Traverse` itself is now fixed; the checkers that don't use it yet are not
+# Unbounded recursion → stack overflow (SIGABRT): `Traverse` itself, every hand-written checker, and bottom-up rewriting are now all fixed
 
 The original finding was narrow and precise: `crates/typecheck/src/modal/check.rs`'s
 `check_state_formula`/`collect_scope` and `crates/typecheck/src/process/check.rs`'s
@@ -104,20 +104,52 @@ and two new ones (`traverse::stack_depth_probe`) build a plain, directly-constru
 `StateFrm` (ten times the depth that SIGABRTs the hand-written checkers below) and confirm both
 `visit` and `apply_mut` complete it without overflowing.
 
-**`transform_children`/`try_transform`/`transform` (bottom-up rewriting) is not fixed and remains
-recursive.** This is a harder, different problem, not just more of the same trick: a bottom-up
-rewrite needs a node's children fully processed *before* the node itself is touched again, which
-for an owned, `Box`/`Vec`-based tree (as opposed to an arena addressed by index) means holding a
-live mutable borrow of the already-processed children at the same time as the borrow needed to
-reach the parent again — the borrow checker rejects this, and it's why the top-down half above
-has no such conflict (a node's borrow is dropped before its children are ever reached, since
-nothing needs to come back to the parent afterward). Making bottom-up rewriting iterative too
-needs a genuinely different representation (an arena, or owned nodes moved in and out of a
-worklist behind a placeholder value), not this same worklist trick. The three current
-`.transform`/`.try_transform` call sites (`crates/typecheck/src/ir/desugar.rs`,
-`crates/typecheck/src/ir/lower.rs`, `crates/typecheck/src/resolution/name_resolution.rs`) are
-therefore still not stack-safe for a pathologically deep tree, and are the next thing to either
-fix (harder) or explicitly accept as a narrower, separately-documented residual gap.
+**`transform_children`/`try_transform`/`transform` (bottom-up rewriting) is fixed too, now.** This
+was a harder, different problem from the top-down half above, not just more of the same trick: a
+bottom-up rewrite needs a node's children fully processed *before* the node itself is touched
+again, which rules out the pre-order worklist's approach of holding `&mut` references *into* the
+still-standing tree -- a node reached later and one already finished earlier could otherwise both
+be live at once, when the later one is the earlier one's own ancestor (the borrow checker rejects
+this for a `Box`/`Vec`-owned tree, and it's exactly why the top-down half has no such conflict: a
+node's borrow is dropped before its children are ever reached, since nothing needs to come back to
+the parent afterward).
+
+The fix moves *owned* nodes between two explicit worklists instead of borrowed ones. `try_transform`
+detaches a node's own children (`push_children_mut` plus `std::mem::take`, needing `Self: Default`
+the same way [`TakeRecursiveChildren`](#2-a-second-different-bug-sits-directly-underneath-the-first-recursive-drop)
+does and for the same reason: taking a value out of a slot without leaving it empty needs
+*something* to leave behind) before pushing anything, so no two worklist entries ever alias the
+same storage:
+
+- `stack` holds `Enter(node)` / `Assemble(node, child_count)` frames, LIFO.
+- `results` accumulates each fully-transformed node, in the order it finishes.
+
+`Enter(node)` detaches `node`'s children in written order, pushes `Assemble(node, count)` (to run
+once they're all done), then pushes each child as its own `Enter` frame in *reverse* -- so the LIFO
+stack pops them back out left-to-right, the order native recursion would visit them in.
+`Assemble(node, count)` only runs once every one of `node`'s `count` children has itself been fully
+transformed and landed on `results`: they are its last `count` entries there, in original order,
+because nothing between them and the top of `results` at that point can belong to any other node.
+It puts them back into `node` (replacing the placeholders `Enter` left), calls the callback on the
+now-whole node, and pushes the result onto `results` in turn — so once the loop empties `stack`,
+`results` holds exactly one value: the fully-transformed root. `transform_children` no longer needs
+its own copy of this: it's now built on the now-iterative `try_transform`, called once per direct
+child (never nested inside another such call), so it adds no native recursion of its own either.
+
+No call-site changes were needed for the three current `.transform`/`.try_transform` call sites
+(`crates/typecheck/src/ir/desugar.rs`'s `hoist_binder_sorts_in_place`,
+`crates/typecheck/src/ir/lower.rs`'s `lower_data_expr`,
+`crates/typecheck/src/resolution/name_resolution.rs`'s `resolve_type_var_name`/
+`resolve_type_var_names_in_expr`/`apply_sorts_in_data_expr`) — all 8 node types already satisfied
+`Self: Default` from the recursive-`Drop` fix above, so the new bound on `try_transform`/`transform`
+was free. Each of the four functions got its own 100,000-deep regression test (built directly,
+bypassing the parser), none of which existed before; `traverse.rs` itself gained four new tests
+(bottom-up visitation order, a full take-apart/reassemble round trip across every shape in one
+formula, that `transform` rewrites the root while `transform_children` doesn't, and that an error
+mid-walk stops without rewriting further) plus its own million-deep `stack_depth_probe`, matching
+every other `Traverse` method's convention. `merc_syntax` (518/518), `merc_typecheck` (887/887),
+and `tools/mcrl2`'s `merc_pbes`/`merc_lps` suites (163/163, exercising these same lowering/
+desugaring passes on real academic-example specifications) all pass.
 
 ## The two capability gaps that were blocking a migration are now closed in `Traverse` itself
 
