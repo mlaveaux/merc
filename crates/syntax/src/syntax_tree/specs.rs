@@ -154,6 +154,10 @@ pub struct PropVarInstData {
     pub arguments: Vec<DataExpr>,
 }
 
+// Not itself self-recursive (its `arguments` are `DataExpr`, a different type whose own `Spanned`
+// wrapper already detaches its own children on drop), so the default no-op is correct.
+impl crate::TakeRecursiveChildren for PropVarInstData {}
+
 /// A propositional-variable instantiation, paired with the source [Span] it was parsed from.
 /// Equality/ordering/hashing ignore the span, per [Spanned]'s documented convention.
 pub type PropVarInst = Spanned<PropVarInstData>;
@@ -213,6 +217,9 @@ pub struct EqnSpecData {
     /// Unique ID assigned to this block during declaration-id resolution.
     pub id: Option<EqnSpecId>,
 }
+
+// Not itself self-recursive, so the default no-op is correct.
+impl crate::TakeRecursiveChildren for EqnSpecData {}
 
 /// An equation-specification block (`var ... eqn ...`), paired with the source [Span] of the
 /// whole block, from `var`/`eqn` (whichever comes first) to at least the final `;`.
@@ -1315,7 +1322,8 @@ impl Mcrl2Parser {
         match_nodes!(decl.into_children();
             // The alias form (`sort A = Bool;`) always names exactly one sort per node.
             [IdAt(identifier), SortExpr(expr)] => {
-                Ok(vec![SortDecl::new(identifier.node, Some(expr), identifier.span)])
+                let (identifier, span) = identifier.into_parts();
+                Ok(vec![SortDecl::new(identifier, Some(expr), span)])
             },
             // `sort A, B, C;`: each gets its own precise identifier span (see `IdList`).
             [IdList(ids)] => {

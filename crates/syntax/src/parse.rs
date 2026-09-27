@@ -119,7 +119,7 @@ pub fn parse_action_names(input: &str) -> Result<Vec<String>, MercError> {
     let root = result.next().expect("Could not parse action name list");
 
     let names: Vec<ActionName> = Mcrl2Parser::ActIdSet(ParseNode::new(root))?;
-    Ok(names.into_iter().map(|name| name.node).collect())
+    Ok(names.into_iter().map(|name| name.into_node()).collect())
 }
 
 /// Parses the action names for the allow operator from the given input string.

@@ -34,8 +34,9 @@ pub enum ActFrmBinaryOp {
 /// The kind of an [ActFrm] node, without its source span. Every recursive
 /// child is an [ActFrm] (a [Spanned] wrapper), so each node carries its own
 /// location.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub enum ActFrmKind {
+    #[default]
     True,
     False,
     MultAct(MultiAction),

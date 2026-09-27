@@ -55,7 +55,7 @@ pub enum DataExprBinaryOp {
 }
 
 /// The kind of a [DataExpr] node.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprKind {
     Id(String),
     /// A variable reference paired with its declaring binder's own [VarId]: not this
@@ -67,6 +67,7 @@ pub enum DataExprKind {
         function: Box<DataExpr>,
         arguments: Vec<DataExpr>,
     },
+    #[default]
     EmptyList,
     List(Vec<DataExpr>),
     EmptySet,
@@ -146,6 +147,10 @@ pub struct AssignmentData {
     /// variable, in scope for the body).
     pub id: Option<VarId>,
 }
+
+// Not itself self-recursive (its `expr: DataExpr` field is a different type, whose own `Spanned`
+// wrapper already detaches its children on drop), so the default no-op is correct.
+impl crate::TakeRecursiveChildren for AssignmentData {}
 
 /// A process-instantiation assignment (`x = e`, as in `P(x = 1)`), paired with the source [Span]
 /// it was parsed from. Equality/ordering/hashing ignore the span, per [Spanned]'s documented
@@ -409,7 +414,7 @@ fn dataexpr_primary(primary: Pair<'_, Rule>) -> ParseResult<DataExpr> {
         Rule::DataExprSetBagComp => Mcrl2Parser::DataExprSetBagComp(Node::new(primary)),
         Rule::DataExprSetEnum => Mcrl2Parser::DataExprSetEnum(Node::new(primary)),
         Rule::Number => Mcrl2Parser::Number(Node::new(primary)),
-        Rule::IdAt => Ok(DataExprKind::Id(Mcrl2Parser::IdAt(Node::new(primary))?.node).spanned(span)),
+        Rule::IdAt => Ok(DataExprKind::Id(Mcrl2Parser::IdAt(Node::new(primary))?.into_node()).spanned(span)),
 
         Rule::DataExprBrackets => {
             // Handle parentheses by recursively parsing the inner expression
@@ -644,7 +649,8 @@ impl Mcrl2Parser {
     pub(crate) fn Assignment(assignment: ParseNode) -> ParseResult<Assignment> {
         match_nodes!(assignment.into_children();
             [IdAt(identifier), DataExpr(expr)] => {
-                Ok(AssignmentData { identifier: identifier.node, expr, id: None }.spanned(identifier.span))
+                let (identifier, span) = identifier.into_parts();
+                Ok(AssignmentData { identifier, expr, id: None }.spanned(span))
             },
         )
     }
@@ -718,7 +724,8 @@ impl Mcrl2Parser {
     fn VarDecl(decl: ParseNode) -> ParseResult<IdDecl> {
         match_nodes!(decl.into_children();
             [IdAt(identifier), SortExpr(sort)] => {
-                Ok(IdDecl::new(identifier.node, sort, identifier.span))
+                let (identifier, span) = identifier.into_parts();
+                Ok(IdDecl::new(identifier, sort, span))
             },
         )
     }

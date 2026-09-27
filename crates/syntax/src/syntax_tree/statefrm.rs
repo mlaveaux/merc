@@ -88,8 +88,9 @@ pub enum ModalityOperator {
 /// The kind of a [StateFrm] node, without its source span. Every recursive
 /// child is a [StateFrm] (a [Spanned] wrapper), so each node carries its own
 /// location.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub enum StateFrmKind {
+    #[default]
     True,
     False,
     /// `delay` or `delay@t`; the optional time is `None` for a bare `delay`.
@@ -531,10 +532,10 @@ impl Mcrl2Parser {
         let span: Span = id.as_span().into();
         match_nodes!(id.into_children();
             [Id(identifier)] => {
-                Ok(StateFrmKind::Id(identifier.node, Vec::new()).spanned(span))
+                Ok(StateFrmKind::Id(identifier.into_node(), Vec::new()).spanned(span))
             },
             [Id(identifier), DataExprList(expressions)] => {
-                Ok(StateFrmKind::Id(identifier.node, expressions).spanned(span))
+                Ok(StateFrmKind::Id(identifier.into_node(), expressions).spanned(span))
             },
         )
     }
@@ -663,7 +664,7 @@ impl Mcrl2Parser {
         match_nodes!(input.into_children();
             [Id(identifier), StateVarAssignmentList(arguments)] => {
                 Ok(StateVarDecl {
-                    identifier: identifier.node,
+                    identifier: identifier.into_node(),
                     arguments,
                     span: span.into(),
                     id: None,
@@ -671,7 +672,7 @@ impl Mcrl2Parser {
             },
             [Id(identifier)] => {
                 Ok(StateVarDecl {
-                    identifier: identifier.node,
+                    identifier: identifier.into_node(),
                     arguments: Vec::new(),
                     span: span.into(),
                     id: None,

@@ -30,6 +30,15 @@ pub enum RegFrmKind {
     Choice { lhs: Box<RegFrm>, rhs: Box<RegFrm> },
 }
 
+// `#[derive(Default)]`'s `#[default]` attribute only accepts a unit variant, and `RegFrmKind` has
+// none; a manual impl is the only way to give it the cheap, non-recursive default
+// `TakeRecursiveChildren`'s generated impl (see `crates/syntax/src/traverse.rs`) needs.
+impl Default for RegFrmKind {
+    fn default() -> Self {
+        RegFrmKind::Action(ActFrm::default())
+    }
+}
+
 /// A regular formula: a [RegFrmKind] paired with the source [Span] it was
 /// parsed from. Synthetic formulas built by later passes use [Span::default].
 pub type RegFrm = Spanned<RegFrmKind>;

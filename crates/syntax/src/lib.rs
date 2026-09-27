@@ -45,6 +45,7 @@ pub use random_pres::random_pres_with_data_specification;
 pub use random_value_expression::random_value_expression;
 pub use span_offset::OffsetSpans;
 pub use spanned::Spanned;
+pub use spanned::TakeRecursiveChildren;
 pub use spanned::respan;
 pub use syntax_tree::ActDecl;
 pub use syntax_tree::ActFrm;

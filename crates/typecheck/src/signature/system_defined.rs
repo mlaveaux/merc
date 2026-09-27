@@ -62,7 +62,7 @@ pub(crate) fn function_update_arities(spec: &UntypedDataSpecification) -> BTreeS
     collect_system_sorts_in_spec(spec, &mut worklist, SortCollectionMode::ContainersAndFunctions);
     worklist
         .into_iter()
-        .filter_map(|sort| match sort.node {
+        .filter_map(|sort| match &sort.node {
             SortExpressionKind::Function { .. } => Some(1),
             SortExpressionKind::FlattenedFunction { domain, .. } => Some(domain.len()),
             _ => None,

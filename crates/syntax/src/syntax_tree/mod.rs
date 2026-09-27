@@ -223,7 +223,7 @@ pub enum Fixity {
 }
 
 /// Implemented by every `*Kind` enum whose values are Pratt-parsed.
-pub trait Operator: Sized {
+pub trait Operator: Sized + crate::TakeRecursiveChildren {
     /// Returns the fixity and precedence level of this operator.
     fn fixity(&self) -> Fixity;
 

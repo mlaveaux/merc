@@ -533,11 +533,9 @@ mod stack_depth_probe {
         let result = check_state_formula(&mut data, &tables, &scope, &formula, FormulaType::Bool, &mut typing);
         assert!(result.is_ok());
 
-        // Dropping a 100,000-deep `Box<StateFrm>` chain recurses through the default drop glue one
-        // `Box` at a time and overflows the stack on its own -- a known, separate bug from the one
-        // this test exists to check (see `review/stack-overflow-recursion.md` and
-        // `crates/syntax/src/traverse.rs`'s own `stack_depth_probe` tests, which forget for the same
-        // reason). Leak it so this test only exercises `check_state_formula`'s own walk.
-        std::mem::forget(formula);
+        // Dropping a 100,000-deep `Box<StateFrm>` chain here, rather than leaking it, is this
+        // test's proof that the separate recursive-`Drop` bug this document originally found
+        // underneath this one is also fixed -- see `review/stack-overflow-recursion.md` and
+        // `crates/syntax/src/spanned.rs`'s `Drop` impl for `Spanned`.
     }
 }

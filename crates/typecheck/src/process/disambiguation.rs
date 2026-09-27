@@ -209,7 +209,7 @@ fn peel_condition(
         let Some(proc_op) = swallow else {
             break;
         };
-        let DataExprKind::Binary { lhs, rhs, .. } = current.node else {
+        let DataExprKind::Binary { lhs, rhs, .. } = current.into_node() else {
             unreachable!("just matched this shape above");
         };
         branches.push((proc_op, reinterpret_as_process(names, *lhs)));
@@ -251,11 +251,11 @@ fn take_swallow(
         condition,
         then: inner_then,
         else_: inner_else,
-    } = node.node
+    } = node.into_node()
     else {
         unreachable!("just matched this shape above");
     };
-    let DataExprKind::Binary { lhs, rhs, .. } = condition.node else {
+    let DataExprKind::Binary { lhs, rhs, .. } = condition.into_node() else {
         unreachable!("just matched this shape above");
     };
     let this = reinterpret_as_process(names, *lhs);
@@ -289,7 +289,8 @@ fn flatten_at_chain(expr: DataExpr) -> Vec<DataExpr> {
     let mut parts = Vec::new();
     let mut current = expr;
     loop {
-        match current.node {
+        let (node, span) = current.into_parts();
+        match node {
             DataExprKind::Binary {
                 op: DataExprBinaryOp::At,
                 lhs,
@@ -298,8 +299,8 @@ fn flatten_at_chain(expr: DataExpr) -> Vec<DataExpr> {
                 parts.push(*rhs);
                 current = *lhs;
             }
-            _ => {
-                parts.push(current);
+            other => {
+                parts.push(other.spanned(span));
                 break;
             }
         }
@@ -434,7 +435,7 @@ fn is_fully_process_content(names: &Names, expr: &DataExpr) -> bool {
 /// [`super::check`] resolves which table it belongs to.
 fn reinterpret_as_process(names: &Names, expr: DataExpr) -> ProcessExpr {
     let span = expr.span.clone();
-    match expr.node {
+    match expr.into_node() {
         DataExprKind::Binary {
             op: DataExprBinaryOp::At,
             lhs,
@@ -458,7 +459,7 @@ fn reinterpret_as_process(names: &Names, expr: DataExpr) -> ProcessExpr {
             // The identifier's own span, not the whole `name(args)` application's — captured
             // before `function.node` is destructured below.
             let name_span = function.span.clone();
-            let DataExprKind::Id(name) = function.node else {
+            let DataExprKind::Id(name) = function.into_node() else {
                 unreachable!("is_fully_process_content only accepts an Id-headed application");
             };
             match (ProcessOperator::from_name(&name), <[DataExpr; 2]>::try_from(arguments)) {

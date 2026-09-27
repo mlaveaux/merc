@@ -56,7 +56,7 @@ pub(crate) fn lower_data_expressions(spec: &mut UntypedDataSpecification) {
 pub(crate) fn lower_data_expr(mut expr: DataExpr) -> DataExpr {
     expr.transform(|expr| {
         // The node is taken out so that its parts can be moved into the replacement.
-        let DataExpr { node, span } = std::mem::replace(expr, DataExprKind::EmptyList.into());
+        let (node, span) = std::mem::replace(expr, DataExprKind::EmptyList.into()).into_parts();
         *expr = match node {
             DataExprKind::Binary { op, lhs, rhs } => apply(op.to_string(), vec![*lhs, *rhs], span),
             DataExprKind::Unary { op, expr } => apply(op.to_string(), vec![*expr], span),

@@ -54,7 +54,7 @@ fn state_formula_bounds_are_distinct() {
         ("sup n: Nat . val(n < 3)", Bound::Sup),
     ] {
         let spec = UntypedStateFrmSpec::parse(input).expect("state formula should parse");
-        match spec.formula.node {
+        match spec.formula.into_node() {
             StateFrmKind::Bound { bound, .. } => assert_eq!(bound, expected, "for input {input:?}"),
             other => panic!("expected a Bound for {input:?}, got {other:?}"),
         }
@@ -65,7 +65,7 @@ fn state_formula_bounds_are_distinct() {
 #[test]
 fn process_until_operator_parses() {
     let spec = UntypedProcessSpecification::parse("init a << b;").expect("`<<` should parse");
-    match spec.init.expect("init present").node {
+    match spec.init.expect("init present").into_node() {
         ProcessExprKind::Binary { op, .. } => assert_eq!(op, ProcExprBinaryOp::Until),
         other => panic!("expected a binary Until, got {other:?}"),
     }

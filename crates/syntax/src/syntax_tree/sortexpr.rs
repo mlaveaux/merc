@@ -58,6 +58,15 @@ pub enum SortExpressionKind {
     },
 }
 
+// `#[derive(Default)]`'s `#[default]` attribute only accepts a unit variant, and `SortExpressionKind`
+// has none; a manual impl is the only way to give it the cheap, non-recursive default
+// `TakeRecursiveChildren`'s generated impl (see `crates/syntax/src/traverse.rs`) needs.
+impl Default for SortExpressionKind {
+    fn default() -> Self {
+        SortExpressionKind::Reference(String::default())
+    }
+}
+
 /// A sort expression paired with the source [Span] it was parsed from.
 pub type SortExpression = Spanned<SortExpressionKind>;
 
@@ -212,7 +221,9 @@ pub fn parse_sortexpr_primary(primary: Pair<'_, Rule>) -> ParseResult<SortExpres
         return Ok(SortExpressionKind::Simple(sort).spanned(span));
     }
     match primary.as_rule() {
-        Rule::IdAt => Ok(SortExpressionKind::Reference(Mcrl2Parser::IdAt(Node::new(primary))?.node).spanned(span)),
+        Rule::IdAt => {
+            Ok(SortExpressionKind::Reference(Mcrl2Parser::IdAt(Node::new(primary))?.into_node()).spanned(span))
+        }
         Rule::SortExpr => Mcrl2Parser::SortExpr(Node::new(primary)),
 
         Rule::SortExprList => Mcrl2Parser::SortExprList(Node::new(primary)),

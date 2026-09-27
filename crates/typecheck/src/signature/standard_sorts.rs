@@ -878,7 +878,7 @@ mod tests {
             .into_iter()
             .find_map(|decl| decl.expr)
             .expect("expected a sort alias with a structured sort");
-        let SortExpressionKind::Struct { inner } = expr.node else {
+        let SortExpressionKind::Struct { inner } = expr.into_node() else {
             panic!("expected a structured sort");
         };
         inner

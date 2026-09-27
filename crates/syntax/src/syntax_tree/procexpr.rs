@@ -43,11 +43,12 @@ pub enum ProcExprBinaryOp {
 /// The kind of a [ProcessExpr] node, without its source span. Every recursive
 /// child is a [ProcessExpr] (a [Spanned] wrapper), so each node carries its own
 /// location.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub enum ProcessExprKind {
     // Both `Id`'s and `Action`'s own name keep the [Span] they were parsed from.
     Id(ActionName, Vec<Assignment>),
     Action(ActionName, Vec<DataExpr>),
+    #[default]
     Delta,
     Tau,
     Sum {

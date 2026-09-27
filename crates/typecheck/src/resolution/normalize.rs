@@ -122,11 +122,11 @@ mod tests {
     fn test_alias_inside_container_is_expanded() {
         // `f: List(D)` with `D = Nat` normalizes to `List(Nat)`.
         let sort = map_sort("sort D = Nat; map f: List(D);", "f");
-        let SortExpressionKind::Complex(op, subsort) = sort.node else {
+        let SortExpressionKind::Complex(op, subsort) = sort.into_node() else {
             panic!("expected a container sort");
         };
         assert_eq!(op, merc_syntax::ComplexSort::List);
-        assert_eq!(subsort.node, SortExpressionKind::Simple(Sort::Nat));
+        assert_eq!(subsort.into_node(), SortExpressionKind::Simple(Sort::Nat));
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
         // A structured sort is its own representative, so `f: D` stays `D`
         // rather than being replaced by the (recursive) struct body.
         let sort = map_sort("sort D = struct a | b; map f: D;", "f");
-        let SortExpressionKind::Resolved(name, _) = sort.node else {
+        let SortExpressionKind::Resolved(name, _) = sort.into_node() else {
             panic!("expected a resolved nominal sort");
         };
         assert_eq!(name, "D");
@@ -150,7 +150,7 @@ mod tests {
         let a = map_sort(text, "f");
         let b = map_sort(text, "g");
         assert_eq!(a, b);
-        let SortExpressionKind::Resolved(name, _) = a.node else {
+        let SortExpressionKind::Resolved(name, _) = a.into_node() else {
             panic!("expected a resolved nominal sort");
         };
         assert_eq!(name, "B");

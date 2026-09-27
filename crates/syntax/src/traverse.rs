@@ -25,6 +25,7 @@ use crate::SortExpressionKind;
 use crate::Spanned;
 use crate::StateFrm;
 use crate::StateFrmKind;
+use crate::TakeRecursiveChildren;
 
 /// The outcome of descending into a subtree: `Continue(())` when the whole subtree was traversed,
 /// and `Break(Ok(value))` / `Break(Err(error))` when the traversal stopped early.
@@ -553,13 +554,24 @@ pub trait Traverse: Sized {
 /// `recurse` on a [MixedNode] rather than a `?`-able child, describes this node type's foreign-type
 /// children for [Traverse::push_mixed_children] (see that method's own doc comment); omitting it
 /// leaves that method at the trait's empty default, correct for a node type with no such children.
+///
+/// `kind: $Kind` (the `Kind` enum `$Node` wraps, e.g. `StateFrmKind` for `StateFrm`) drives a
+/// second, unrelated piece this macro generates alongside the `Traverse` impl:
+/// `impl TakeRecursiveChildren for $Kind`, reusing the exact same `$child`/`$mut_child` arms
+/// (calling `recurse` on each same-type child exactly as `push_children_mut` does) to fix a
+/// different bug than `Traverse` itself does -- see [TakeRecursiveChildren]'s own doc comment for
+/// why a *second* fix was needed even after `Traverse`'s traversals became stack-safe. It relies on
+/// `$Kind: Default` (see each `*Kind` enum's own `#[default]`-marked variant) for a cheap,
+/// non-recursive value to detach a child in favor of.
 macro_rules! define_traversal {
     (
         node: $Node:ident,
+        kind: $Kind:ident,
         children: |$recurse:ident| { $($child:tt)* },
     ) => {
         define_traversal! {
             node: $Node,
+            kind: $Kind,
             children: |$recurse| { $($child)* },
             shared_only: {},
             mut_only: {},
@@ -567,11 +579,13 @@ macro_rules! define_traversal {
     };
     (
         node: $Node:ident,
+        kind: $Kind:ident,
         children: |$recurse:ident| { $($child:tt)* },
         mixed: { $($mixed_child:tt)* },
     ) => {
         define_traversal! {
             node: $Node,
+            kind: $Kind,
             children: |$recurse| { $($child)* },
             shared_only: {},
             mut_only: {},
@@ -580,6 +594,7 @@ macro_rules! define_traversal {
     };
     (
         node: $Node:ident,
+        kind: $Kind:ident,
         children: |$recurse:ident| { $($child:tt)* },
         shared_only: { $($shared_child:tt)* },
         mut_only: { $($mut_child:tt)* },
@@ -639,9 +654,32 @@ macro_rules! define_traversal {
                 Ok(())
             }
         }
+
+        impl TakeRecursiveChildren for $Kind {
+            fn take_recursive_children(&mut self, stack: &mut Vec<Self>) {
+                // The shared `$child`/`$mut_child` arms end each of their statements with `?`,
+                // which needs an enclosing function whose return type supports it; wrapped here so
+                // the trait method itself can keep the plain `()` its default impl already has.
+                fn inner(this: &mut $Kind, stack: &mut Vec<$Kind>) -> Recursion<Infallible, Infallible> {
+                    let mut $recurse = |child: &mut $Node| -> Recursion<Infallible, Infallible> {
+                        stack.push(std::mem::take(child).into_node());
+                        ControlFlow::Continue(())
+                    };
+
+                    match this {
+                        $($child)*
+                        $($mut_child)*
+                    }
+
+                    ControlFlow::Continue(())
+                }
+                let _ = inner(self, stack);
+            }
+        }
     };
     (
         node: $Node:ident,
+        kind: $Kind:ident,
         children: |$recurse:ident| { $($child:tt)* },
         shared_only: { $($shared_child:tt)* },
         mut_only: { $($mut_child:tt)* },
@@ -712,11 +750,32 @@ macro_rules! define_traversal {
                 Ok(())
             }
         }
+
+        impl TakeRecursiveChildren for $Kind {
+            fn take_recursive_children(&mut self, stack: &mut Vec<Self>) {
+                // See the other arm's identical block for why this is wrapped in `inner`.
+                fn inner(this: &mut $Kind, stack: &mut Vec<$Kind>) -> Recursion<Infallible, Infallible> {
+                    let mut $recurse = |child: &mut $Node| -> Recursion<Infallible, Infallible> {
+                        stack.push(std::mem::take(child).into_node());
+                        ControlFlow::Continue(())
+                    };
+
+                    match this {
+                        $($child)*
+                        $($mut_child)*
+                    }
+
+                    ControlFlow::Continue(())
+                }
+                let _ = inner(self, stack);
+            }
+        }
     };
 }
 
 define_traversal! {
     node: SortExpression,
+    kind: SortExpressionKind,
     children: |recurse| {
         SortExpressionKind::Product { lhs, rhs } => {
             recurse(lhs)?;
@@ -753,6 +812,7 @@ define_traversal! {
 
 define_traversal! {
     node: DataExpr,
+    kind: DataExprKind,
     children: |recurse| {
         DataExprKind::Application { function, arguments } => {
             recurse(function)?;
@@ -825,6 +885,7 @@ define_traversal! {
 
 define_traversal! {
     node: ProcessExpr,
+    kind: ProcessExprKind,
     children: |recurse| {
         ProcessExprKind::Sum { operand, .. }
         | ProcessExprKind::Dist { operand, .. }
@@ -857,6 +918,7 @@ define_traversal! {
 
 define_traversal! {
     node: StateFrm,
+    kind: StateFrmKind,
     children: |recurse| {
         StateFrmKind::Binary { lhs, rhs, .. } => {
             recurse(lhs)?;
@@ -895,6 +957,7 @@ define_traversal! {
 
 define_traversal! {
     node: RegFrm,
+    kind: RegFrmKind,
     children: |recurse| {
         RegFrmKind::Iteration(inner) | RegFrmKind::Plus(inner) => {
             recurse(inner)?;
@@ -916,6 +979,7 @@ define_traversal! {
 
 define_traversal! {
     node: ActFrm,
+    kind: ActFrmKind,
     children: |recurse| {
         ActFrmKind::Negation(inner) => {
             recurse(inner)?;
@@ -936,6 +1000,7 @@ define_traversal! {
 
 define_traversal! {
     node: PbesExpr,
+    kind: PbesExprKind,
     children: |recurse| {
         PbesExprKind::Quantifier { body, .. } => {
             recurse(body)?;
@@ -956,6 +1021,7 @@ define_traversal! {
 
 define_traversal! {
     node: PresExpr,
+    kind: PresExprKind,
     children: |recurse| {
         PresExprKind::RightConstantMultiply { expr, .. }
         | PresExprKind::LeftConstantMultiply { expr, .. }
@@ -1023,7 +1089,7 @@ mod tests {
     /// Parses a regular formula by putting it inside a modality, for example `a . b*`.
     fn regular_formula(input: &str) -> RegFrm {
         let formula = state_formula(&format!("[{input}]true"));
-        match formula.node {
+        match formula.into_node() {
             StateFrmKind::Modality { formula, .. } => formula,
             _ => panic!("expected a modality"),
         }
@@ -1031,7 +1097,7 @@ mod tests {
 
     /// Parses an action formula, for example `a && b`.
     fn action_formula(input: &str) -> ActFrm {
-        match regular_formula(input).node {
+        match regular_formula(input).into_node() {
             RegFrmKind::Action(act_frm) => act_frm,
             _ => panic!("expected an action formula"),
         }
@@ -1450,9 +1516,15 @@ mod stack_depth_probe {
     //! everything built on them) walk with an explicit heap stack, not native recursion, so their
     //! depth is bounded by available memory rather than the call stack. The tree here is built
     //! directly, bypassing the parser (which has its own, unrelated recursion limit), at a depth
-    //! an order of magnitude past what any native-recursive walk over this codebase's own ASTs
-    //! survives (see e.g. `merc_typecheck::modal::check::stack_depth_probe`, which SIGABRTs at a
-    //! tenth of this depth for exactly that reason).
+    //! an order of magnitude past what any native-recursive walk over this codebase's own ASTs used
+    //! to survive (see e.g. `merc_typecheck::modal::check::stack_depth_probe`, migrated onto this
+    //! trait rather than its own recursive-descent walk for exactly that reason).
+    //!
+    //! Each test here also lets its million-deep tree actually drop, rather than leaking it: that
+    //! exercises a *second*, separate bug the traversal fix alone does not touch -- the compiler's
+    //! own default field-by-field drop glue recursing through the same `Box`-chain, one node at a
+    //! time, on the way down. See [TakeRecursiveChildren]'s and [Spanned]'s own `Drop` impl's doc
+    //! comments, and `review/stack-overflow-recursion.md`, for that fix.
     use merc_utilities::Span;
 
     use super::*;
@@ -1481,12 +1553,12 @@ mod stack_depth_probe {
         });
         assert_eq!(count, 1_000_001); // the million `Unary` nodes, plus the `True` at the bottom.
 
-        // Dropping a million-deep `Box` chain recurses through the default drop glue one `Box` at
-        // a time and overflows the stack on its own, completely independent of (and not fixed by)
-        // the traversal above -- a known, separate gap (see
-        // `review/stack-overflow-recursion.md`). Leak it so *this* test only exercises what it
-        // means to.
-        std::mem::forget(formula);
+        // Dropping a million-deep `Box` chain used to recurse through the default drop glue one
+        // `Box` at a time and overflow the stack on its own, completely independent of (and not
+        // fixed by) the traversal above -- a separate bug from the one this module's own doc
+        // comment covers, now fixed by `TakeRecursiveChildren`/`Spanned`'s own `Drop` impl (see
+        // `review/stack-overflow-recursion.md`). Letting `formula` actually drop here, instead of
+        // leaking it, is this test's proof that fix holds at the same depth.
     }
 
     #[test]
@@ -1501,8 +1573,8 @@ mod stack_depth_probe {
         assert!(result.is_ok());
         assert_eq!(count, 1_000_001);
 
-        // See the comment in the `visit` test above: recursive `Drop` is a separate, un-fixed gap.
-        std::mem::forget(formula);
+        // See the comment in the `visit` test above: `formula` dropping here, rather than being
+        // leaked, is the proof that the separate recursive-`Drop` bug is also fixed.
     }
 
     /// [Traverse::visit_scoped] is a second, independent stack-based loop (`enter`/`exit` frames
@@ -1528,7 +1600,7 @@ mod stack_depth_probe {
         assert_eq!(max_depth, 1_000_001);
         assert_eq!(depth, 0); // every `enter` was matched by an `exit`.
 
-        std::mem::forget(formula);
+        // `formula` drops here -- see `visit_a_million_deep_negation_does_not_overflow_the_stack`.
     }
 
     /// [Traverse::visit_mixed] is a third, independent stack-based loop (over [MixedNode] rather
@@ -1547,6 +1619,6 @@ mod stack_depth_probe {
         });
         assert_eq!(count, 1_000_001);
 
-        std::mem::forget(formula);
+        // `formula` drops here -- see `visit_a_million_deep_negation_does_not_overflow_the_stack`.
     }
 }
