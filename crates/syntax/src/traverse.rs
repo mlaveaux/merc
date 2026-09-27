@@ -113,27 +113,32 @@ fn mixed_push_children<'a>(node: MixedNode<'a>, stack: &mut Vec<MixedNode<'a>>) 
 /// pathologically deep tree.
 ///
 /// None of the above crosses into a *different* node type on its own: a [StateFrm] traversal does
-/// not, by itself, descend into the [RegFrm] of a `Modality` or the [ActFrm] inside that. Two more
+/// not, by itself, descend into the [RegFrm] of a `Modality` or the [ActFrm] inside that. Three more
 /// pieces close gaps that used to force a caller to work around this trait rather than through it:
 ///
 /// - [Traverse::visit_mixed]/[Traverse::try_visit_mixed] *do* cross that boundary, visiting every
 ///   node of every type reachable from `self` (see [MixedNode]) in one walk, for callbacks that
 ///   need to see a whole formula regardless of which node type each part of it lives in without
 ///   hand-rolling one recursive function per type and wiring the crossings between them, the way
-///   e.g. `crates/typecheck`'s `modal::check::{collect_scope, collect_scope_regfrm,
-///   collect_scope_actfrm}` currently do.
+///   `crates/typecheck`'s `modal::check::collect_scope` does today.
 /// - [Traverse::visit_subtree_scoped]/[Traverse::visit_scoped] add the enter-*and*-exit hook that
-///   [Visit]'s single pre-order callback cannot express, for a caller that pushes genuinely scoped
-///   mutable state on entering a node (e.g. `check_state_formula`'s `state_vars`, pushed for a
-///   `mu`/`nu` binder's body) and needs it popped again once that node's subtree, not just the
-///   node itself, is done being visited.
+///   [Visit]'s single pre-order callback cannot express, for a read-only caller that pushes
+///   genuinely scoped mutable state on entering a node (e.g. `check_state_formula`'s `state_vars`,
+///   pushed for a `mu`/`nu` binder's body) and needs it popped again once that node's subtree, not
+///   just the node itself, is done being visited.
+/// - [Traverse::apply_subtree_scoped]/[Traverse::apply_scoped] are the same enter/exit hook for a
+///   caller that must *rewrite* nodes rather than only read them (e.g.
+///   `resolve_in_state_frm`'s `scope`, extended for a bound variable and truncated again once its
+///   body is fully resolved) -- see that method's own doc comment for why its `exit` cannot be
+///   handed the node the way [Traverse::visit_scoped]'s can.
 ///
-/// Neither of these migrates the hand-written checkers named above -- doing so is real, separate
-/// follow-up work, since they thread several more parameters than a `Traverse` callback's `context`
-/// slot has room for -- they only remove the two capability gaps that were blocking it; see
-/// `review/stack-overflow-recursion.md`. A single-type traversal still does not cross node types on
-/// its own outside of `visit_mixed`, and everywhere but the one node currently wired for it,
-/// nesting a traversal explicitly at the point it's needed is still exactly how to do it.
+/// None of these three migrates every hand-written checker or resolution pass that could use them --
+/// `crates/typecheck`'s `process::check`/`pres::check` and `resolution::variable_resolution` (its
+/// `resolve_in_state_frm`, built on the third addition, is the one part of it migrated so far) show
+/// what doing so for a given caller takes; see `review/stack-overflow-recursion.md`. A single-type
+/// traversal still does not cross node types on its own outside of `visit_mixed`, and everywhere but
+/// the crossings it's already wired for, nesting a traversal explicitly at the point it's needed is
+/// still exactly how to do it.
 pub trait Traverse: Sized {
     /// Appends each direct child of this node to `stack`, paired with `context`, in the order in
     /// which they are written. Always returns `ControlFlow::Continue(())`; the return type only
@@ -317,6 +322,106 @@ pub trait Traverse: Sized {
         G: FnMut(&Self, C, &mut S),
     {
         match self.visit_subtree_scoped(context, state, &mut enter, &mut exit) {
+            ControlFlow::Break(Ok(value)) => Ok(Some(value)),
+            ControlFlow::Break(Err(error)) => Err(error),
+            ControlFlow::Continue(()) => Ok(None),
+        }
+    }
+
+    /// See [Traverse::apply_subtree]/[Traverse::visit_subtree_scoped]: the mutating counterpart of
+    /// the latter, for a caller that must rewrite nodes in place *and* needs the enter/exit split
+    /// [Traverse::visit_subtree_scoped]'s own doc comment explains (genuinely scoped mutable state
+    /// pushed on entering a node, popped once that node's whole subtree, not just the node itself,
+    /// is done) -- e.g. `resolution::variable_resolution::resolve_in_state_frm`'s `scope`, extended
+    /// for a `Quantifier`/`Bound`/`FixedPoint`'s own bound variables and truncated again once its
+    /// body is fully resolved.
+    ///
+    /// `exit` does not receive the node it is un-scoping, unlike [Traverse::visit_subtree_scoped]'s
+    /// own `exit`: holding any reference to a node here, across the window where its children are
+    /// then reached through a *fresh* `&mut` borrow of that same node, is exactly the aliasing this
+    /// trait's other mutating methods avoid by construction (an [Self::apply_subtree]-style walk
+    /// never needs to hold a node past the one `&mut` borrow it hands to its own step function; a
+    /// scoped walk's `exit` runs *after* that borrow was already used to reach every child, so a
+    /// second, overlapping one is not available to hand it) -- there is no `unsafe` way around this
+    /// in a `#![forbid(unsafe_code)]` crate. `exit` gets only `context` (the same value `enter` was
+    /// called with for that node) and `state`. A caller whose `exit` needs to know *what kind* of
+    /// node it is un-scoping -- the way [Traverse::visit_scoped]'s callers re-match `node.node`, since
+    /// its `exit` still has the node -- instead has `enter` push that decision onto `state` itself
+    /// (once per node, even a no-op for the common case, keeping every `enter` paired with exactly
+    /// one `exit`), for `exit` to pop and apply from there; see
+    /// `resolution::variable_resolution::resolve_in_state_frm`'s local `Undo` enum for the pattern.
+    fn apply_subtree_scoped<C, S, T, E, F, G>(
+        &mut self,
+        context: C,
+        state: &mut S,
+        enter: &mut F,
+        exit: &mut G,
+    ) -> Recursion<T, E>
+    where
+        C: Copy,
+        F: FnMut(&mut Self, C, &mut S) -> Visit<Infallible, C, T, E>,
+        G: FnMut(C, &mut S),
+    {
+        enum Frame<'a, N, C> {
+            Enter(&'a mut N, C),
+            Exit(C),
+        }
+
+        fn unwind<N, C, S>(stack: Vec<Frame<'_, N, C>>, state: &mut S, exit: &mut impl FnMut(C, &mut S)) {
+            for frame in stack.into_iter().rev() {
+                if let Frame::Exit(context) = frame {
+                    exit(context, state);
+                }
+            }
+        }
+
+        let mut stack = vec![Frame::Enter(self, context)];
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Exit(context) => exit(context, state),
+                Frame::Enter(node, context) => match enter(node, context, state) {
+                    Err(error) => {
+                        unwind(stack, state, exit);
+                        return ControlFlow::Break(Err(error));
+                    }
+                    Ok(ControlFlow::Break(value)) => {
+                        unwind(stack, state, exit);
+                        return ControlFlow::Break(Ok(value));
+                    }
+                    Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
+                    Ok(ControlFlow::Continue(Step::Prune)) => exit(context, state),
+                    Ok(ControlFlow::Continue(Step::Into(child_context))) => {
+                        stack.push(Frame::Exit(context));
+                        let mut children = Vec::new();
+                        let _ = node.push_children_mut(child_context, &mut children);
+                        stack.extend(
+                            children
+                                .into_iter()
+                                .rev()
+                                .map(|(child, context)| Frame::Enter(child, context)),
+                        );
+                    }
+                },
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// See [Traverse::apply_subtree_scoped]; the ergonomic top-level entry point, mirroring
+    /// [Traverse::visit_scoped]/[Traverse::apply_with].
+    fn apply_scoped<C, S, T, E, F, G>(
+        &mut self,
+        context: C,
+        state: &mut S,
+        mut enter: F,
+        mut exit: G,
+    ) -> Result<Option<T>, E>
+    where
+        C: Copy,
+        F: FnMut(&mut Self, C, &mut S) -> Visit<Infallible, C, T, E>,
+        G: FnMut(C, &mut S),
+    {
+        match self.apply_subtree_scoped(context, state, &mut enter, &mut exit) {
             ControlFlow::Break(Ok(value)) => Ok(Some(value)),
             ControlFlow::Break(Err(error)) => Err(error),
             ControlFlow::Continue(()) => Ok(None),
@@ -1595,6 +1700,36 @@ mod stack_depth_probe {
                 Ok(ControlFlow::Continue(Step::Into(context)))
             },
             |_, _, depth| *depth -= 1,
+        );
+        assert_eq!(result, Ok(None));
+        assert_eq!(max_depth, 1_000_001);
+        assert_eq!(depth, 0); // every `enter` was matched by an `exit`.
+
+        // `formula` drops here -- see `visit_a_million_deep_negation_does_not_overflow_the_stack`.
+    }
+
+    /// [Traverse::apply_scoped] is the mutating counterpart of `visit_scoped` (added for
+    /// `resolution::variable_resolution::resolve_in_state_frm`'s migration); it gets its own probe
+    /// for the same reason `visit_scoped` does, and also exercises that `enter` really does get a
+    /// mutable reference this deep by rewriting every node's own operator field in place.
+    #[test]
+    fn apply_scoped_a_million_deep_negation_does_not_overflow_the_stack() {
+        let mut formula = deep_negation(1_000_000);
+
+        let mut depth = 0usize;
+        let mut max_depth = 0usize;
+        let result: Result<Option<Infallible>, Infallible> = formula.apply_scoped(
+            (),
+            &mut depth,
+            |formula, context, depth| {
+                if let StateFrmKind::Unary { op, .. } = &mut formula.node {
+                    *op = StateFrmUnaryOp::Negation;
+                }
+                *depth += 1;
+                max_depth = max_depth.max(*depth);
+                Ok(ControlFlow::Continue(Step::Into(context)))
+            },
+            |_, depth| *depth -= 1,
         );
         assert_eq!(result, Ok(None));
         assert_eq!(max_depth, 1_000_001);

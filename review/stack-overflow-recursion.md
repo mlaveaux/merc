@@ -169,7 +169,7 @@ variable anywhere. None of these block `collect_scope`'s own migration (it doesn
 recurse into any of them either), so wiring them was left for whichever future migration actually
 needs a given one, rather than guessed at speculatively here.
 
-## `modal::check`, `process::check` and `pres::check` are now migrated; variable resolution is not
+## Every hand-written checker and variable resolution are now migrated onto `Traverse`
 
 `modal::check::collect_scope`/`collect_scope_regfrm`/`collect_scope_actfrm` are now one function
 (`collect_scope`) built on `try_visit_mixed`, and `check_state_formula`/`check_fixed_point` are now
@@ -208,21 +208,45 @@ at all before this — the original finding's own framing called this checker's 
 the same pattern (untested)" — so one was added alongside the migration rather than left
 retroactively unverified.
 
-What is still not migrated: `resolution::variable_resolution::resolve_in_state_frm` (and its
-`resolve_in_reg_frm`/`resolve_in_act_frm` cousins) is the one piece left. It is genuinely harder
-than the three checkers above, not just unstarted: it needs *two* independent scoped stacks pushed
-and popped at *two different node types* in the same walk — `StateFrm`'s own `scope`/`state_vars`
-(around `Quantifier`/`Bound`/`FixedPoint`, the same shape `check_state_formula`'s `state_vars`
-needed) *and*, separately, `ActFrm`'s own `scope` push/pop around its *own* `Quantifier` binder,
-reached by crossing through `RegFrm` from inside a `Modality`. `visit_mixed` (the mechanism for that
-crossing) and `visit_scoped` (the mechanism for that scoping) are orthogonal — neither offers the
-other — so this doesn't reduce to picking one of the two additions the way `modal::check` did:
-`check_state_formula` never needed `ActFrm`-level scoping since checking never mutates `scope`, only
-reads it, but `resolve_in_state_frm` does, exactly at the same crossing point `check_reg_formula`
-was a plain nested call for. The route that would work is nesting two separate `visit_scoped` calls
-(one over `StateFrm`, a second over `ActFrm`, invoked from the first's `Modality` arm the same way
-`check_reg_formula` is today) rather than a single mechanical swap — real, separate follow-up work,
-not fundamentally blocked by anything left in `Traverse`, just not attempted here.
+`resolution::variable_resolution::resolve_in_state_frm` (and its `resolve_in_act_frm` cousin) — the
+fourth and last of the originally-flagged SIGABRT instances — is migrated too, closing the gap this
+section used to describe as unattempted. It needed a genuinely different addition from the three
+checkers above, not just the same mechanical swap, because unlike a checker it *rewrites* the tree
+(`Id` → `Resolved`) rather than only reading it: `visit_scoped` (the checkers' scoping mechanism) is
+read-only (`&self`), and there was no mutating counterpart. `Traverse::apply_subtree_scoped`/
+`apply_scoped` (`crates/syntax/src/traverse.rs`) are that counterpart, and their own doc comments
+cover the one real design wrinkle this needed: `exit` cannot be handed the node it is un-scoping the
+way `visit_subtree_scoped`'s can, since holding a reference to it across the window where its
+children are then reached through a *fresh* `&mut` borrow of that same node is exactly the aliasing
+this trait's other mutating methods avoid by construction, and there is no `unsafe` way around it in
+a `#![forbid(unsafe_code)]` crate. `resolve_in_state_frm`'s local `Undo` enum, pushed onto `state`
+once per node by `enter` and popped by `exit`, is the pattern this forces on a caller whose `exit`
+needs to know what it's undoing.
+
+The other piece this section used to flag — two independent scoped stacks needed at two different
+node types in the same walk (`StateFrm`'s own `scope`/`state_vars`, and separately `ActFrm`'s own
+`scope` around its *own* `Quantifier`, reached by crossing through `RegFrm` from inside a
+`Modality`) — turned out not to need two *nested traversal calls* wired together after all: `scope`
+is a plain `&mut Scope`/borrowed field either way, so `resolve_in_act_frm`'s own `apply_scoped` call
+simply borrows the *same* `Scope` the outer `resolve_in_state_frm` walk owns (passed down through
+the untouched, plain-recursive `resolve_in_reg_frm`, exactly the way `check_reg_formula` already
+threads `scope` through unchanged) rather than needing a separate one — two independent walks
+sharing one piece of mutable state through an ordinary borrow, not one gap needing a new mechanism.
+`resolve_in_reg_frm` itself stays a small hand-written recursive dispatch: `RegFrm` carries no
+binder and its own nesting (`.`/`+`/`*` chains within a single modality) was never part of the
+original SIGABRT finding, unlike `StateFrm`'s and `ActFrm`'s own potentially-pathological nesting.
+
+Two new regression tests (`test_action_formula_quantifier_resolves_to_its_own_binder_and_can_see_an_
+outer_state_formula_binder`, `test_action_formula_quantifier_shadows_an_outer_state_formula_binder_
+of_the_same_name`) cover what no existing test did: an `ActFrm`'s own `Quantifier` binder correctly
+seeing an enclosing `StateFrm` binder, and correctly shadowing one of the same name. A
+`stack_depth_probe` test (100,000-deep, matching the other three checkers') is new too — this was
+the one of the four original instances that never had one — and, like the others', proves the
+separate recursive-`Drop` bug is fixed at the same time by letting its tree drop normally. The full
+`merc_syntax`/`merc_typecheck` suites (1395/1395) and, since this pass sits ahead of every modal
+formula real-world `.mcf` files exercise, `tools/mcrl2`'s `merc_pbes` test suite (137/137, including
+several real academic-example `.mcf` files with quantifiers and fixpoints run through the full
+LTS→PBES pipeline) all pass.
 
 ## The recursive-`Drop` fix
 
