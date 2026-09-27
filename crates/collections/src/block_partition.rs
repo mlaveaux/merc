@@ -275,6 +275,80 @@ impl Iterator for BlockIter<'_> {
 
 impl ExactSizeIterator for BlockIter<'_> {}
 
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// Small, fixed-size element domain the harness below explores
+    /// exhaustively (`kani::any` enumerates every one of the `2^N` possible
+    /// predicate masks, not just a random sample of them).
+    const N: usize = 5;
+
+    /// Proves `split_block`'s core partition-refinement invariant, for every
+    /// one of the `2^N` possible predicates over a single-block partition of
+    /// `N` elements:
+    ///
+    /// - if the predicate holds for all or none of the elements, no split
+    ///   occurs and the partition is unchanged (matching the doc comment);
+    /// - otherwise, every element left in the original block satisfies the
+    ///   predicate, every element moved to the new block does not, and the
+    ///   in-place swap that achieves this is a genuine partition: each of the
+    ///   `N` original elements appears in exactly one of the two blocks
+    ///   afterwards (never lost, never duplicated).
+    #[kani::proof]
+    #[kani::unwind(8)]
+    fn split_block_refines_correctly_and_preserves_elements() {
+        let mut partition: BlockPartition<()> = BlockPartition::new(N);
+        let block_index = BlockIndex::new(0);
+
+        // `mask[e]` is the predicate's verdict for element `e`; elements are
+        // identity-numbered 0..N at this point, so this doubles as a lookup
+        // table indexed directly by element value.
+        let mask: [bool; N] = kani::any();
+        let predicate = |element: usize| mask[element];
+
+        let true_count = mask.iter().filter(|&&matched| matched).count();
+
+        let result = partition.split_block(block_index, predicate);
+
+        if true_count == 0 || true_count == N {
+            assert!(
+                result.is_none(),
+                "a predicate matching all or none of the elements must not split"
+            );
+            assert_eq!(partition.num_of_blocks(), 1);
+            assert_eq!(partition.block(block_index).len(), N);
+        } else {
+            let new_block = result.expect("a predicate matching some but not all elements must split");
+            assert_eq!(partition.num_of_blocks(), 2);
+            assert_eq!(partition.block(block_index).len(), true_count);
+            assert_eq!(partition.block(new_block).len(), N - true_count);
+
+            // Every element now in the original block satisfies the predicate...
+            for element in partition.iter_block(block_index) {
+                assert!(mask[element], "element {element} in the matching block fails the predicate");
+            }
+            // ...and every element in the new block does not.
+            for element in partition.iter_block(new_block) {
+                assert!(!mask[element], "element {element} in the non-matching block satisfies the predicate");
+            }
+
+            // The swap-based partition is a genuine permutation of 0..N:
+            // every original element still appears, and appears exactly once,
+            // across the two blocks combined.
+            let mut seen = [false; N];
+            for element in partition.iter_block(block_index).chain(partition.iter_block(new_block)) {
+                assert!(!seen[element], "element {element} appears more than once after split_block");
+                seen[element] = true;
+            }
+            assert!(
+                seen.iter().all(|&was_seen| was_seen),
+                "an element was lost by split_block's in-place swap"
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use log::trace;
