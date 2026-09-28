@@ -178,7 +178,6 @@ mod verification {
             );
         }
     }
-
 }
 
 /// Reorders the blocks of the given partition according to the given permutation.

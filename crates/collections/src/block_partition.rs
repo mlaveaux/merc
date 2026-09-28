@@ -326,11 +326,17 @@ mod verification {
 
             // Every element now in the original block satisfies the predicate...
             for element in partition.iter_block(block_index) {
-                assert!(mask[element], "element {element} in the matching block fails the predicate");
+                assert!(
+                    mask[element],
+                    "element {element} in the matching block fails the predicate"
+                );
             }
             // ...and every element in the new block does not.
             for element in partition.iter_block(new_block) {
-                assert!(!mask[element], "element {element} in the non-matching block satisfies the predicate");
+                assert!(
+                    !mask[element],
+                    "element {element} in the non-matching block satisfies the predicate"
+                );
             }
 
             // The swap-based partition is a genuine permutation of 0..N:
@@ -338,7 +344,10 @@ mod verification {
             // across the two blocks combined.
             let mut seen = [false; N];
             for element in partition.iter_block(block_index).chain(partition.iter_block(new_block)) {
-                assert!(!seen[element], "element {element} appears more than once after split_block");
+                assert!(
+                    !seen[element],
+                    "element {element} appears more than once after split_block"
+                );
                 seen[element] = true;
             }
             assert!(
