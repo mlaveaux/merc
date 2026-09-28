@@ -105,6 +105,26 @@ Covered: `crates/sharedmutex`, `crates/unsafety`, `crates/aterm`,
   live handle), but this was a genuine latent soundness gap in a *safe*
   public function, not merely a stale doc claim — the Miri reproduction above
   confirms it was reachable, not just plausible.
+- **Full verification** (completed after the fix landed, once container
+  resource contention that blocked it earlier had cleared): `cargo check -p
+  merc_unsafety -p merc_aterm -p merc_sabre-compiling -p merc_sabre-ffi
+  --all-targets` clean; `cargo test -p merc_unsafety --lib` 30/30 pass;
+  `cargo test -p merc_aterm --lib` 23/23 pass; the new `trybuild` regression
+  test (`cargo test -p merc_unsafety --test build_tests`) generated and
+  confirmed its golden `.stderr` matches exactly the intended
+  `error[E0133]: call to unsafe function` StablePointer::<T>::ptr` is unsafe
+  and requires unsafe block`; `cargo clippy` clean for every touched file;
+  `cargo +nightly fmt --all -- --check` clean; `MIRIFLAGS="-Zmiri-disable-isolation"
+  cargo +nightly miri test -p merc_unsafety` — 20/20 pass, 0 failed; `cd
+  crates/aterm && cargo kani` — 6/6 harnesses verified, 0 failures (covers
+  the edited `#[cfg(kani)]` proof-module `unsafe` wraps). The two
+  `merc_sabre-compiling` test failures seen when run in combination with
+  the other three crates (`test_sabre_compiling_example`,
+  `test_sabre_compiling_survives_garbage_collection_between_calls`) were
+  confirmed to be a pre-existing test-isolation issue (both tests shell out
+  to `cargo build` into the same `./tmp` directory and stomp on each other
+  under parallel execution) — both pass individually and under
+  `--test-threads=1`, unrelated to this fix.
 
 ### 4. `Debug for GlobalTermPool` races with a concurrent `write_exclusive` — upgraded from PLAUSIBLE to CONFIRMED
 
