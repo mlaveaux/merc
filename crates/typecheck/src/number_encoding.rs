@@ -16,15 +16,14 @@
 pub enum NumberEncoding {
     /// The recursive binary encoding of mCRL2's Appendix B: a `Pos` is the
     /// bit chain `@c1` / `@cDub(bit, p)` (denoting `2*p + bit`).
-    #[default]
     Binary,
 
     /// The 64-bit machine-word encoding: a `Pos` is a base-`2^64` digit chain
     /// `@most_significant_digit(w)` / `@concat_digit(p, w)` (denoting
     /// `2^64 * p + w`).
     ///
-    /// Arithmetic on the digits is performed by the native `@word` operations
-    /// (see `merc_number::machine_word`).
+    /// Arithmetic on the digits is performed by the native `machine_word` operations
+    #[default]
     MachineWord,
 }
 

@@ -295,15 +295,15 @@ impl Summand for ExploreSummand {
                 }
 
                 let mut actions = merc_collections::VecBag::new();
-                // let mut offset = 0;
-                // for (label, &count) in self.action_labels.iter().zip(self.action_arg_counts.iter()) {
-                //     let arguments = self.action_args[offset..offset + count]
-                //         .iter()
-                //         .map(|arg| rewriter.rewrite_with(arg, &solution_sigma))
-                //         .collect();
-                //     offset += count;
-                //     actions.insert(LtsAction::new(label.clone(), arguments));
-                // }
+                let mut offset = 0;
+                for (label, &count) in self.action_labels.iter().zip(self.action_arg_counts.iter()) {
+                    let arguments = self.action_args[offset..offset + count]
+                        .iter()
+                        .map(|arg| rewriter.rewrite_with(arg, &solution_sigma))
+                        .collect();
+                    offset += count;
+                    actions.insert(LtsAction::new(label.clone(), arguments));
+                }
                 let label = LtsMultiAction::new(actions);
 
                 match report(&label, next_state_buf) {
@@ -379,7 +379,7 @@ impl LPS for ExploreLinearProcessSpecification {
                     .flat_map(|summand| summand.summation_variables.iter()),
             )
             .map(|v| v.name().to_string());
-        let generator = FreshVariableGenerator::new(used_names);
+        let generator = FreshVariableGenerator::new("v", used_names);
 
         ExploreContext {
             rewriter,

@@ -1036,10 +1036,9 @@ dependencies = [
 
 [[package]]
 name = "merc_enumerate"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "ahash",
- "bumpalo",
  "log",
  "merc_aterm",
  "merc_data",
@@ -1091,7 +1090,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "delegate",
- "itertools 0.15.0",
+ "itertools",
  "log",
  "merc_aterm",
  "merc_collections",
@@ -1256,7 +1255,7 @@ dependencies = [
  "ahash",
  "env_logger",
  "html-escape",
- "itertools 0.15.0",
+ "itertools",
  "log",
  "merc_aterm",
  "merc_data",

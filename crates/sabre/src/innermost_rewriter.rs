@@ -1,5 +1,3 @@
-use log::info;
-
 use merc_aterm::storage::THREAD_TERM_POOL;
 use merc_aterm::storage::ThreadTermPool;
 use merc_data::DataApplication;

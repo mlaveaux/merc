@@ -66,6 +66,37 @@ impl Mcrl2DataSpecification {
     pub fn equations(&self) -> &[DataEquation] {
         &self.equations
     }
+
+    /// Returns a new specification holding `self`'s sections followed by
+    /// `other`'s, section by section (sorts, then aliases, constructors,
+    /// mappings, equations). Neither side is deduplicated against the
+    /// other, so callers merging two specifications that may already share
+    /// declarations (e.g. both derived from the same standard prelude) are
+    /// responsible for avoiding that overlap themselves.
+    pub fn merge(&self, other: &Mcrl2DataSpecification) -> Mcrl2DataSpecification {
+        let mut sorts = self.sorts.clone();
+        sorts.extend(other.sorts.iter().cloned());
+
+        let mut aliases = self.aliases.clone();
+        aliases.extend(other.aliases.iter().cloned());
+
+        let mut constructors = self.constructors.clone();
+        constructors.extend(other.constructors.iter().cloned());
+
+        let mut mappings = self.mappings.clone();
+        mappings.extend(other.mappings.iter().cloned());
+
+        let mut equations = self.equations.clone();
+        equations.extend(other.equations.iter().cloned());
+
+        Mcrl2DataSpecification {
+            sorts,
+            aliases,
+            constructors,
+            mappings,
+            equations,
+        }
+    }
 }
 
 impl ATermStreamable for Mcrl2DataSpecification {
