@@ -9,48 +9,102 @@ Covered: `crates/sharedmutex`, `crates/unsafety`, `crates/aterm`,
 
 ## Findings surfaced during the pass (not blindly trimmed)
 
-### 1. `Send for ThreadLocalAllocState` cites a false property — PLAUSIBLE, comment not trimmed
+### 1. `Send for ThreadLocalAllocState` cites a false property — FIXED (comment corrected)
 
-- **Location**: `crates/unsafety/src/block_allocator.rs:461-477`.
+- **Location**: `crates/unsafety/src/block_allocator.rs:461-477` (now
+  `458-485` after the rewrite).
 - **Claim checked**: the comment asserts `FreeList<Entry<T>>` is `Send` for
   `T: Send` "see `FreeList`'s own `unsafe impl Send`". False: `Entry<T>`'s
   `next: ManuallyDrop<*mut Entry<T>>` field is a raw pointer that blocks the
   auto-trait unconditionally, and no `unsafe impl Send for Entry<T>` exists.
   Confirmed with a throwaway `fn probe<T: Send>() { probe::<FreeList<Entry<u32>>>() }`
-  under `cargo check --tests` (fails with the expected `Send` bound error).
-- **Status**: the outer manual `unsafe impl Send for ThreadLocalAllocState` may
-  still be sound on other grounds (thread-affinity via `ThreadLocal::get_or`,
-  a no-op `Drop` path), but its stated justification does not type-check.
-  Left untrimmed rather than compressed on a false premise.
+  under `cargo check --tests` (fails with `E0277`, the expected `Send` bound
+  error — `Entry<T>`'s `ManuallyDrop<*mut Entry<T>>` is what's unsatisfied).
+- **Status**: FIXED. The outer manual `unsafe impl Send for ThreadLocalAllocState`
+  *is* sound — traced independently of the false citation, on the grounds the
+  comment already gestured at: `ThreadLocal::get_or` gives thread-affine access
+  to `current_block`/`bump_offset`/`free` for `allocate_object`/
+  `deallocate_object`, the one exception being `remove_free_blocks` (via
+  `alloc_state.iter_mut()`, `&mut self`), which reads/clears another thread's
+  `free` list but is fenced by that method's own "must not run concurrently
+  with allocation/deallocation" contract; and the value's own final drop
+  (from whichever thread drops the owning `ThreadLocal`) dereferences none of
+  `current_block`/`free`'s pointers. The comment now states this real
+  argument instead of the false `FreeList`-auto-Send citation, and explicitly
+  says the field is blocked from auto-`Send` unconditionally (like
+  `current_block`), so the impl below is a fully manual claim, not one
+  inherited from any field.
 
-### 2. `Send`/`Sync` for `BlockAllocator` cites the same false pattern — PLAUSIBLE, comment not trimmed
+### 2. `Send`/`Sync` for `BlockAllocator` cites the same false pattern — FIXED (comment corrected)
 
-- **Location**: `crates/unsafety/src/block_allocator.rs:503-510`.
+- **Location**: `crates/unsafety/src/block_allocator.rs:503-510` (now
+  `~517-533` after the rewrite).
 - **Claim checked**: asserts `Mutex<BlockList<T, N>>` is `Send`/`Sync`
   automatically given `T: Send`. False for the same reason:
   `BlockList<T, N>`'s `head_block: Option<NonNull<Block<T,N>>>` and
   `free_chunks: Vec<NonNull<Entry<T>>>` block auto-`Send` unconditionally, and
   no manual `Send` impl for `BlockList` exists. Confirmed the same way
   (`cargo check --tests` on `Mutex<BlockList<u32, 4>>: Send`).
-- **Status**: plausibly still sound (every access is behind the mutex), stated
-  justification wrong. Left untrimmed.
+- **Status**: FIXED. The outer manual `unsafe impl Send/Sync for BlockAllocator`
+  is sound on the grounds the comment already partly stated: every access to
+  `head_block`/`free_chunks` happens while the mutex is held (mutual
+  exclusion), and `T: Send` is what licenses the `T` values those blocks/
+  entries own to be safely read, written or dropped by whichever thread
+  currently holds the lock, regardless of which thread allocated them — not
+  because `Mutex<BlockList<T,N>>` is itself auto-`Send`/`Sync` (it never is,
+  with or without `T: Send`). The comment now states this and explicitly
+  flags that `Mutex<X>`'s conditional impls never actually fire for this
+  field, so the outer impl is a fully manual claim.
 
-### 3. `StablePointer::ptr()` reads the pointee without an `unsafe` marker — PLAUSIBLE, new finding
+### 3. `StablePointer::ptr()` reads the pointee without an `unsafe` marker — FIXED (now `unsafe fn`)
 
-- **Location**: `crates/unsafety/src/stable_pointer_set.rs:137-148` (the
-  `Send`/`Sync` comment and the type's own doc, both claiming only the
-  `unsafe fn deref` reads the pointee).
-- **Scenario**: `StablePointer::ptr()` is a **safe** method, but for any `T`
-  whose `Erasable::unerase` reads memory to reconstruct wide-pointer metadata
-  it also reads the pointee — exactly what `SharedTerm::unerase`
-  (`crates/aterm/src/storage/shared_term.rs:68-78`) does, via a `ptr::read` to
-  recover `symbol.arity()`. `ptr()`'s own doc already says so ("reconstructs
-  the wide pointer from the pointee, so it reads the header").
-- **Impact**: does not by itself break the `Send`/`Sync` impls (moves are
-  inert, concurrent reads-only access stays sound), but `ptr()` can read
-  freed/dangling memory for such a `T` without being marked `unsafe`.
-- **Status**: PLAUSIBLE, not fixed — flagged for a future pass; the comment
-  whose premise this contradicts was left as-is rather than trimmed.
+- **Location**: `crates/unsafety/src/stable_pointer_set.rs:106-124` (the
+  `ptr()` method), `:153-167` (the `Send`/`Sync` comment), and
+  `crates/unsafety/src/erasable.rs:47-68` (`Thin::as_nonnull`, the actual root
+  cause `ptr()` delegates to).
+- **Scenario confirmed real, not just a doc gap**: added a throwaway test type
+  (`HeaderDst`, a `SliceDst`+`Erasable` DST mirroring `SharedTerm`'s pattern —
+  length stored in the pointee's own header) plus a test that allocates one,
+  wraps it in a `StablePointer`, deallocates the backing memory, then calls
+  the then-*safe* `.ptr()` with **no** `unsafe` at the call site. Under Miri:
+  ```
+  MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test -p merc_unsafety \
+    ptr_reads_freed_pointee_without_an_unsafe_marker
+  ```
+  ```
+  error: Undefined Behavior: memory access failed: alloc56912 has been freed, so this pointer is dangling
+     --> crates/unsafety/src/stable_pointer_set.rs:813:27
+      |
+  813 |                 let len = std::ptr::read(this.as_ptr().cast::<usize>());
+      |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Undefined Behavior occurred here
+  stack backtrace:
+    0: <HeaderDst as Erasable>::unerase
+    1: Thin::<HeaderDst>::as_nonnull
+    2: StablePointer::<HeaderDst>::ptr        <-- reached via a completely safe call site
+    3: ptr_reads_freed_pointee_without_an_unsafe_marker
+  ```
+  This is exactly `SharedTerm::unerase`'s own pattern
+  (`crates/aterm/src/storage/shared_term.rs`, `ptr::read` to recover
+  `symbol.arity()`), so the same use-after-free is reachable through
+  `ATermIndex::ptr()` for a `StablePointer<SharedTerm>` that has been removed
+  from its owning set. (This throwaway test/type was used only to gather this
+  evidence and was not committed — the compile-fail test below is the
+  permanent regression artifact.)
+- **Fix**: `Thin::as_nonnull` (the root cause) and `StablePointer::ptr` are now
+  both `unsafe fn`, with a `# Safety` contract identical in spirit to
+  `deref`'s ("the element must still be present in its owning set"). Every
+  call site across `crates/unsafety`, `crates/aterm`, `crates/sabre_compiling`
+  and `crates/sabre_compiling/sabre_ffi` was updated with an explicit
+  `unsafe` block and a `SAFETY` comment justifying why the pointee is live at
+  that call (all were already operating on live data — no behavior changed,
+  only the API's safety marker). A new `trybuild` compile-fail regression
+  test (`crates/unsafety/tests/build_tests.rs` +
+  `tests/input/stable_pointer_ptr_requires_unsafe.rs`) proves `ptr()` can no
+  longer be called without `unsafe`.
+- **Impact reassessed**: no live exploit existed (every caller already held a
+  live handle), but this was a genuine latent soundness gap in a *safe*
+  public function, not merely a stale doc claim — the Miri reproduction above
+  confirms it was reachable, not just plausible.
 
 ### 4. `Debug for GlobalTermPool` races with a concurrent `write_exclusive` — upgraded from PLAUSIBLE to CONFIRMED
 

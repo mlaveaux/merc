@@ -27,7 +27,12 @@ use crate::Thin;
 /// The handle itself is inert: holding, comparing, hashing and copying it is
 /// always sound. Reading the pointee, however, is only valid while the element
 /// is still in its owning set, which the borrow checker does not track — so
-/// dereferencing goes through the unsafe [`StablePointer::deref`].
+/// every operation that can touch the pointee is `unsafe` and requires the
+/// caller to uphold that liveness invariant: [`StablePointer::deref`] always
+/// reads it, and so does [`StablePointer::ptr`] for a `T` whose
+/// [`Erasable::unerase`] reads pointee metadata to reconstruct a wide
+/// pointer (e.g. a slice DST storing its length in its own header, unlike
+/// the pure-cast blanket impl for `T: Sized`).
 ///
 /// Comparisons are based on the pointer's address, not the value it points to.
 ///
@@ -102,8 +107,19 @@ impl<T: ?Sized + Erasable> StablePointer<T> {
     ///
     /// For a slice DST this reconstructs the wide pointer from the pointee, so
     /// it reads the header; prefer identity operations (eq/hash) that do not.
-    pub fn ptr(&self) -> NonNull<T> {
-        self.ptr.as_nonnull()
+    ///
+    /// # Safety
+    ///
+    /// Same contract as [`StablePointer::deref`]: the element must still be
+    /// present in its owning [`StablePointerSet`] for the duration of this
+    /// call. For a `T: Sized` this reads only the erased pointer itself and
+    /// never the pointee, so the precondition is trivially satisfied; for a
+    /// slice DST whose length lives in the pointee's header (e.g.
+    /// `SharedTerm`), violating it is a use-after-free (confirmed reachable
+    /// under Miri: `# Safety` here is load-bearing, not decorative).
+    pub unsafe fn ptr(&self) -> NonNull<T> {
+        // SAFETY: forwarded from this function's own contract.
+        unsafe { self.ptr.as_nonnull() }
     }
 }
 
@@ -141,11 +157,15 @@ impl<T: ?Sized + Erasable> Hash for StablePointer<T> {
 // Contract discharged by these impls: `StablePointer<T>` is an inert handle — holding, copying,
 // comparing and hashing it never touches the pointee (see the type's own doc comment) — so
 // `Send` needs only that the *handle* is safe to move to another thread, which holds
-// unconditionally since moving it performs no access. `unsafe fn deref(&self) -> &T` is the one
-// operation that reads the pointee, and its own `# Safety` contract already requires the caller
-// to prove the element is still live in its owning set; given that, sharing `&StablePointer<T>`
-// across threads to call `deref` concurrently is sound exactly when `T: Sync` licenses sharing
-// the resulting `&T`. `T: Erasable` is required structurally (by `Thin<T>`), not for either bound.
+// unconditionally since moving it performs no access. `unsafe fn deref(&self) -> &T` and
+// `unsafe fn ptr(&self) -> NonNull<T>` are the two operations that may read the pointee — `deref`
+// always does, `ptr` only for a `T` whose `Erasable::unerase` reads pointee metadata to
+// reconstruct a wide pointer (today, only `SharedTerm`; every `T: Sized` uses the pure-cast
+// blanket impl and never touches it) — and both are `unsafe`, with a `# Safety` contract already
+// requiring the caller to prove the element is still live in its owning set; given that, sharing
+// `&StablePointer<T>` across threads to call either concurrently is sound exactly when `T: Sync`
+// licenses sharing the resulting `&T`/`NonNull<T>`. `T: Erasable` is required structurally (by
+// `Thin<T>`), not for either bound.
 unsafe impl<T: ?Sized + Erasable + Send> Send for StablePointer<T> {}
 unsafe impl<T: ?Sized + Erasable + Sync> Sync for StablePointer<T> {}
 
@@ -657,15 +677,19 @@ where
         // First add to storage, then to index
         let inserted = self.index.insert(entry);
         if !inserted {
-            let entry = Entry::new(ptr.ptr());
+            // SAFETY: `ptr` was created moments ago from an allocation this call still
+            // exclusively owns (insertion into the index just failed, so nothing else could
+            // have removed it); `T: Sized` here, so `ptr()` never actually reads the pointee.
+            let raw_ptr = unsafe { ptr.ptr() };
+            let entry = Entry::new(raw_ptr);
             let element = self
                 .index
                 .get(&entry)
                 .expect("Insertion failed, so entry must be in the set");
 
             // Drop and deallocate the allocation we created since it was not inserted.
-            unsafe { std::ptr::drop_in_place(ptr.ptr().as_ptr()) };
-            unsafe { self.allocator.deallocate(ptr.ptr().cast(), Layout::new::<T>()) };
+            unsafe { std::ptr::drop_in_place(raw_ptr.as_ptr()) };
+            unsafe { self.allocator.deallocate(raw_ptr.cast(), Layout::new::<T>()) };
 
             return (StablePointer::from_entry(&element), false);
         }

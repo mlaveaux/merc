@@ -393,11 +393,18 @@ fn generate_rewrite_term_stack_impl(
                 let len = virtual_stack.len();
                 let arg_indices: Vec<usize> = virtual_stack.drain(len - arity..).collect();
 
+                // SAFETY: per this function's own "Safety contract of the emitted code" doc
+                // comment above, `symbol` is reachable from the `RewriteSpecification` this
+                // rewriter keeps alive for as long as the generated code can run, so its
+                // `SharedSymbol` pointee stays live for this read (and, being `Sized`, `ptr()`
+                // does not read it at all).
+                let symbol_addr = unsafe { symbol.shared().ptr() }.as_ptr() as *mut () as usize;
+
                 if *arity > 0 {
                     writeln!(
                         formatter,
                         "let {prefix}var_{stack_index} = match_term(&DataExpressionFFI::create(unsafe {{ DataExpressionRefFFI::from_ptr({:?}) }}, &[{}]).copy());",
-                        symbol.shared().ptr().as_ptr() as *mut () as usize,
+                        symbol_addr,
                         arg_indices
                             .iter()
                             .map(|i| format!("{prefix}var_{i}.copy()"))
@@ -407,15 +414,20 @@ fn generate_rewrite_term_stack_impl(
                     writeln!(
                         formatter,
                         "let {prefix}var_{stack_index} = match_term(&DataExpressionFFI::constant(unsafe {{ DataExpressionRefFFI::from_ptr({:?}) }}).copy());",
-                        symbol.shared().ptr().as_ptr() as *mut () as usize,
+                        symbol_addr,
                     )?;
                 }
             }
             Config::Term(data_expression_ref, index) => {
+                // SAFETY: per this function's own "Safety contract of the emitted code" doc
+                // comment above, `data_expression_ref` is reachable from the
+                // `RewriteSpecification` this rewriter keeps alive for as long as the generated
+                // code can run, so its `SharedTerm` pointee stays live for this read.
+                let term_addr = unsafe { data_expression_ref.shared().ptr() }.as_ptr() as *mut () as usize;
                 writeln!(
                     formatter,
                     "let {prefix}var_{index} = match_term(&unsafe {{ DataExpressionRefFFI::from_ptr({:?}) }});",
-                    data_expression_ref.shared().ptr().as_ptr() as *mut () as usize,
+                    term_addr,
                 )?;
             }
             Config::Rewrite(_) | Config::Return() => {

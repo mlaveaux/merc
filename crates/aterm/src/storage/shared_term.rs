@@ -317,8 +317,17 @@ mod verification {
         let term: &SharedTerm = unsafe { ptr.as_ref() };
 
         assert_eq!(term.arguments().len(), 1);
-        assert_eq!(term.arguments()[0].shared().ptr(), arg.shared().ptr());
-        assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+        // SAFETY: `term` and `arg` are both live for the duration of this bounded proof (`term`
+        // via `ptr`, allocated above and never freed; `arg` via `build_leaf_ref`'s leaked
+        // allocation).
+        unsafe {
+            assert_eq!(term.arguments()[0].shared().ptr(), arg.shared().ptr());
+        }
+        // SAFETY: `symbol_index` is Sized (`SharedSymbol`), so `ptr()` never reads the pointee;
+        // both handles are live for this proof regardless.
+        unsafe {
+            assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+        }
     }
 
     /// The one-argument harness above cannot distinguish a correct per-index offset
@@ -354,9 +363,18 @@ mod verification {
         let term: &SharedTerm = unsafe { ptr.as_ref() };
 
         assert_eq!(term.arguments().len(), 2);
-        assert_eq!(term.arguments()[0].shared().ptr(), arg0.shared().ptr());
-        assert_eq!(term.arguments()[1].shared().ptr(), arg1.shared().ptr());
-        assert_ne!(term.arguments()[0].shared().ptr(), term.arguments()[1].shared().ptr());
-        assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+        // SAFETY: `term`, `arg0` and `arg1` are all live for the duration of this bounded proof
+        // (`term` via `ptr`, allocated above and never freed; `arg0`/`arg1` via
+        // `build_leaf_ref`'s leaked allocations).
+        unsafe {
+            assert_eq!(term.arguments()[0].shared().ptr(), arg0.shared().ptr());
+            assert_eq!(term.arguments()[1].shared().ptr(), arg1.shared().ptr());
+            assert_ne!(term.arguments()[0].shared().ptr(), term.arguments()[1].shared().ptr());
+        }
+        // SAFETY: `symbol_index` is Sized (`SharedSymbol`), so `ptr()` never reads the pointee;
+        // both handles are live for this proof regardless.
+        unsafe {
+            assert_eq!(term.symbol().shared().ptr(), symbol_index.ptr());
+        }
     }
 }

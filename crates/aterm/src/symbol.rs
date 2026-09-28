@@ -305,7 +305,11 @@ mod verification {
         // for that whole scope.
         let symbol_ref: SymbolRef<'_> = unsafe { SymbolRef::from_index(&index) };
 
-        assert_eq!(symbol_ref.shared().ptr(), index.ptr());
+        // SAFETY: `SharedSymbol` is `Sized`, so `ptr()` never reads the pointee; `index` is
+        // live for this proof regardless.
+        unsafe {
+            assert_eq!(symbol_ref.shared().ptr(), index.ptr());
+        }
         assert_eq!(symbol_ref.arity(), arity);
         assert_eq!(symbol_ref.name(), "s");
     }

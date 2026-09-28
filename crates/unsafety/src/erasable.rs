@@ -44,9 +44,26 @@ impl<T: ?Sized + Erasable> Thin<T> {
         self.ptr
     }
 
-    pub fn as_nonnull(&self) -> NonNull<T> {
-        // SAFETY: `self.ptr` was produced by `T::erase` in `Thin::new`, the only
-        // way to construct a `Thin<T>`, so it satisfies `unerase`'s precondition.
+    /// Reconstructs the (possibly wide) pointer.
+    ///
+    /// For a `T` whose [`Erasable::unerase`] reads pointee metadata to
+    /// reconstruct wide-pointer length (e.g. a slice DST whose length lives
+    /// in its own header, unlike the pure-cast blanket impl for `T: Sized`),
+    /// this reads through the pointer, so the pointee must currently be
+    /// valid for reads.
+    ///
+    /// # Safety
+    ///
+    /// `self.ptr` was produced by `T::erase` in `Thin::new`, the only way to
+    /// construct a `Thin<T>`, so it always satisfies `unerase`'s
+    /// erase/unerase-pairing precondition. In addition, the caller must
+    /// ensure the pointee is currently valid for reads, exactly as
+    /// [`Thin::as_ref`] requires -- `unerase` may read it.
+    pub unsafe fn as_nonnull(&self) -> NonNull<T> {
+        // SAFETY: caller guarantees the pointee is valid for reads (or, for a
+        // `T: Sized`, `unerase` never reads it at all); `self.ptr` was
+        // produced by `T::erase` in `Thin::new`, satisfying the other half of
+        // `unerase`'s precondition.
         unsafe { T::unerase(self.ptr) }
     }
 
@@ -145,6 +162,7 @@ mod verification {
         let ptr = NonNull::from(&mut value);
 
         let thin = Thin::new(ptr);
-        assert_eq!(thin.as_nonnull(), ptr);
+        // SAFETY: `value` is a live local for the duration of this proof.
+        assert_eq!(unsafe { thin.as_nonnull() }, ptr);
     }
 }

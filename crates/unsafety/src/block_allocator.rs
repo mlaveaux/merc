@@ -455,23 +455,37 @@ impl<T, const N: usize> ThreadLocalAllocState<T, N> {
     }
 }
 
-// SAFETY: `current_block: Cell<*mut Block<T, N>>` (a raw pointer) is what blocks
-// auto-`Send`/auto-`Sync`; `bump_offset: Cell<usize>` is `Send` but not `Sync` regardless of
-// `T` (any `Cell` is `!Sync`), and `free: FreeList<Entry<T>>` is `Send` for `T: Send` (see
-// `FreeList`'s own `unsafe impl Send`) and likewise never `Sync`.
+// SAFETY: `current_block: Cell<*mut Block<T, N>>` and `free: FreeList<Entry<T>>` (whose head is
+// itself a raw `*mut Entry<T>`) are what block auto-`Send`/auto-`Sync` here; `bump_offset:
+// Cell<usize>` is `Send` but not `Sync` regardless of `T` (any `Cell` is `!Sync`).
+//
+// Correction: `free: FreeList<Entry<T>>` is *not* actually covered by `FreeList`'s own
+// conditional `unsafe impl<T: FreeListEntry + Send> Send for FreeList<T>`. Applied here, that
+// impl needs `Entry<T>: Send` -- and `Entry<T>` (a union whose `next` variant is
+// `ManuallyDrop<*mut Entry<T>>`) is never `Send`, unconditionally, regardless of the outer `T`;
+// no manual `Send` impl for `Entry<T>` exists anywhere in this crate (confirmed by
+// `fn probe<X: Send>() { probe::<FreeList<Entry<u32>>>() }` failing to compile under
+// `cargo check`). So this field is blocked from auto-`Send` exactly like `current_block` is, and
+// the `Send` impl below is a fully manual claim about the whole struct, not one inherited from
+// any field's own (non-existent) `Send`-ness.
 //
 // Contract discharged by this impl (`Send` only — no `Sync` impl exists or is needed, since
 // `ThreadLocal<X>` only requires `X: Send` to itself be `Send + Sync`, exposing each thread's
 // slot only to that same thread): `ThreadLocal::get_or` guarantees a given
-// `ThreadLocalAllocState` instance is created by, and every subsequent `current_block`/
-// `bump_offset`/`free` access (`allocate_object`, `deallocate_object`) is performed by, only the
-// thread that owns that `ThreadLocal` slot — never concurrently by two threads. `Send` is
-// needed only because the whole `ThreadLocal<..>` collection (and thus every thread's
-// `ThreadLocalAllocState`) may be dropped from a different thread than created it (e.g.
-// alongside `BlockAllocator` itself); that drop path performs no dereference of `current_block`
-// (`FreeList::drop`/`Cell::drop` are pure memory reclamation of the `Cell`/`FreeList` structure,
-// not of the pointee), so no thread-affinity requirement is violated by the value's final drop
-// running elsewhere. `T: Send` is required transitively by `free: FreeList<Entry<T>>`.
+// `ThreadLocalAllocState` instance is created by, and every `allocate_object`/`deallocate_object`
+// access to `current_block`/`bump_offset`/`free` is performed by, only the thread that owns that
+// `ThreadLocal` slot. The one exception is `BlockAllocator::remove_free_blocks`, which (via
+// `alloc_state.iter_mut()`) reads and clears every thread's `free` list from whichever thread
+// calls it; this is sound only because that method's own doc contract requires it never run
+// concurrently with allocation/deallocation on any thread, so nothing else is touching a given
+// slot's `free` list while it runs. `Send` is needed for two reasons: this cross-thread
+// `remove_free_blocks` access itself, and because the whole `ThreadLocal<..>` collection (and
+// thus every thread's `ThreadLocalAllocState`) may be dropped from a different thread than
+// created it (e.g. alongside `BlockAllocator` itself); that drop path performs no dereference of
+// `current_block`/`free`'s pointers (`FreeList::drop`/`Cell::drop` are pure memory reclamation of
+// the `Cell`/`FreeList` structure, not of the pointee), so no thread-affinity requirement is
+// violated by the value's final drop running elsewhere. `T: Send` is required transitively by
+// `free: FreeList<Entry<T>>` reaching `Entry<T>`'s `data: ManuallyDrop<T>` variant.
 unsafe impl<T: Send, const N: usize> Send for ThreadLocalAllocState<T, N> {}
 
 /// Implementing this trait for a type `T` asserts that the special sentinel
@@ -497,14 +511,24 @@ pub unsafe trait BlockAllocatorSafe {}
 const NONEXISTING_VALUE: usize = usize::MAX;
 
 /// The [BlockAllocator] is thread-safe.
-// SAFETY: `blocks: Mutex<BlockList<T, N>>` holds the only `NonNull` pointers
-// (`head_block`, `free_chunks`), and every access to them happens while the
-// mutex is held, giving exclusive access from whichever thread holds the
-// lock; `Mutex<X>` is itself `Send`/`Sync` given `X: Send`, which holds here
-// since `T: Send`. `alloc_state: ThreadLocal<ThreadLocalAllocState<T, N>>` is
-// `Send`/`Sync` under the same `T: Send` bound (see the impl above). So both
-// fields are safe to share/move across threads, making `BlockAllocator`
-// itself sound to mark `Send`/`Sync`.
+// SAFETY: `blocks: Mutex<BlockList<T, N>>` holds the only `NonNull` pointers (`head_block`,
+// `free_chunks`).
+//
+// Correction: `BlockList<T, N>` is never auto-`Send`/`Sync` -- its `NonNull` fields block that
+// unconditionally, regardless of `T`, and no manual `Send`/`Sync` impl for `BlockList` exists --
+// so `std::sync::Mutex`'s own conditional impls (`Mutex<X>: Send` given `X: Send`; `Mutex<X>:
+// Sync` given `X: Send`) never actually fire for this field. `Mutex<BlockList<T, N>>`'s
+// contribution to `BlockAllocator: Send`/`Sync` is, like the outer impls themselves, a fully
+// manual claim, not one derived from the field being auto- or otherwise-`Send`.
+//
+// What actually makes it sound: every access to `head_block`/`free_chunks` happens while the
+// mutex is held, so at most one thread touches them at a time; the blocks/entries they point to
+// own `T` values, and `T: Send` is exactly what licenses those values to be safely read, written
+// or dropped by whichever thread currently holds the lock, regardless of which thread allocated
+// them. `alloc_state: ThreadLocal<ThreadLocalAllocState<T, N>>` is `Send`/`Sync` under the same
+// `T: Send` bound (see the impl above, and `thread_local`'s own
+// `unsafe impl<T: Send> Sync for ThreadLocal<T>`). So both fields are safe to share/move across
+// threads, making `BlockAllocator` itself sound to mark `Send`/`Sync`.
 unsafe impl<T: Send, const N: usize> Send for BlockAllocator<T, N> {}
 unsafe impl<T: Send, const N: usize> Sync for BlockAllocator<T, N> {}
 
