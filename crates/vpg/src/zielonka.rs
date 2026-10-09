@@ -137,11 +137,19 @@ impl<G: PG, S: Strat> ZielonkaSolver<'_, G, S> {
         let alpha = Player::from_priority(highest_prio);
         let not_alpha = alpha.opponent();
 
-        // Collect the set U of vertices with the highest priority in V
+        // Collect the set U of vertices in V whose priority lies in the top block
+        // of alpha's parity, i.e. above the highest priority of the opponent's
+        // parity occurring in V.
         let mut U = bitvec![usize, Lsb0; 0; self.game.num_of_vertices()];
-        for &v in self.priority_vertices[highest_prio].iter() {
-            if V[*v] {
-                U.set(*v, true);
+        for prio in (0..=*highest_prio).rev() {
+            if Player::from_priority(Priority::new(prio)) == alpha {
+                for &v in &self.priority_vertices[prio] {
+                    if V[*v] {
+                        U.set(*v, true);
+                    }
+                }
+            } else if self.priority_vertices[prio].iter().any(|v| V[**v]) {
+                break;
             }
         }
 
