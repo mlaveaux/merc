@@ -8,6 +8,8 @@ pub enum Solver {
     Zielonka,
     /// Priority promotion algorithm.
     PriorityPromotion,
+    /// Experimental two-sided progress-measure lifting over instance-derived trees.
+    TwoSidedLifting,
 }
 
 /// Variant of the parity game algorithm to use.
@@ -27,6 +29,7 @@ impl fmt::Display for Solver {
         match self {
             Self::Zielonka => write!(f, "zielonka"),
             Self::PriorityPromotion => write!(f, "priority-promotion"),
+            Self::TwoSidedLifting => write!(f, "two-sided-lifting"),
         }
     }
 }
