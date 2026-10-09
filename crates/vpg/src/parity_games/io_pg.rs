@@ -19,6 +19,8 @@ use crate::ParityGame;
 use crate::ParityGameBuilder;
 use crate::Player;
 use crate::Priority;
+use crate::Set;
+use crate::Strategy;
 use crate::VertexIndex;
 
 #[derive(Error, Debug)]
@@ -145,16 +147,52 @@ pub fn write_pg<W: Write, G: PG>(writer: W, game: &G) -> Result<(), MercError> {
     Ok(())
 }
 
+/// Writes a solution in the PGSolver solution format, as produced by
+/// `pgsolver --printsolonly`: a header `paritysol <highest index>;` followed by
+/// `<vertex> <winner> [<successor>];` for every vertex. The successor is the
+/// winner's strategy and is only written for vertices owned by their winner
+/// when a strategy is given.
+pub fn write_pg_solution<W: Write, G: PG>(
+    writer: W,
+    game: &G,
+    solution: &[Set; 2],
+    strategy: Option<&[Strategy; 2]>,
+) -> Result<(), MercError> {
+    let mut writer = BufWriter::new(writer);
+
+    writeln!(writer, "paritysol {};", game.num_of_vertices().saturating_sub(1))?;
+    for v in game.iter_vertices() {
+        let winner = if solution[Player::Even.to_index()][*v] {
+            Player::Even
+        } else {
+            Player::Odd
+        };
+        write!(writer, "{} {}", v.value(), winner.to_index())?;
+        if game.owner(v) == winner
+            && let Some(successor) = strategy.and_then(|strategy| strategy[winner.to_index()].get(v))
+        {
+            write!(writer, " {}", successor.value())?;
+        }
+        writeln!(writer, ";")?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use merc_utilities::random_test;
 
+    use crate::Player;
+    use crate::VertexIndex;
     use crate::random_parity_game;
+    use crate::solve_zielonka;
 
     use super::Itertools;
     use super::PG;
     use super::read_pg;
     use super::write_pg;
+    use super::write_pg_solution;
 
     #[test]
     #[cfg_attr(miri, ignore)]
@@ -185,6 +223,45 @@ mod tests {
                     original_successors.into_iter().sorted().collect::<Vec<_>>(),
                     read_successors.into_iter().sorted().collect::<Vec<_>>()
                 );
+            }
+        });
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_random_write_pg_solution() {
+        random_test(50, |rng| {
+            let game = random_parity_game(rng, true, 30, 6, 3);
+            let (solution, strategy) = solve_zielonka(&game, true);
+
+            let mut buffer = Vec::new();
+            write_pg_solution(&mut buffer, &game, &solution, strategy.as_ref()).unwrap();
+            let text = String::from_utf8(buffer).unwrap();
+
+            let mut lines = text.lines();
+            assert_eq!(
+                lines.next(),
+                Some(format!("paritysol {};", game.num_of_vertices() - 1).as_str())
+            );
+            for (line, v) in lines.zip(game.iter_vertices()) {
+                let fields: Vec<usize> = line
+                    .trim_end_matches(';')
+                    .split_whitespace()
+                    .map(|field| field.parse().unwrap())
+                    .collect();
+                assert_eq!(fields[0], v.value());
+                let winner = Player::from_index(fields[1] as u8);
+                assert!(
+                    solution[winner.to_index()][*v],
+                    "winner of {v} does not match the solution"
+                );
+                if let Some(&successor) = fields.get(2) {
+                    assert_eq!(game.owner(v), winner);
+                    assert!(
+                        game.outgoing_edges(v)
+                            .any(|edge| edge.to() == VertexIndex::new(successor))
+                    );
+                }
             }
         });
     }
