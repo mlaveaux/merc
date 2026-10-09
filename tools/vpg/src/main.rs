@@ -28,6 +28,7 @@ use merc_vpg::VertexIndex;
 use merc_vpg::project_feature_transition_system_iter;
 use merc_vpg::solve_priority_promotion;
 use merc_vpg::solve_strategy_improvement;
+use merc_vpg::solve_two_sided_lifting;
 use merc_vpg::verify_solution;
 use oxidd::BooleanFunction;
 
@@ -62,6 +63,7 @@ use merc_vpg::translate;
 use merc_vpg::translate_vpg;
 use merc_vpg::verify_variability_product_zielonka_solution;
 use merc_vpg::write_pg;
+use merc_vpg::write_pg_solution;
 use merc_vpg::write_vpg;
 
 /// Default node capacity for the Oxidd decision diagram manager. The choice
@@ -149,6 +151,10 @@ struct SolveArgs {
     /// statistics (L-rounds, N_x, N^I_x, epoch lengths).
     #[arg(long, default_value_t = false)]
     decisive_statistics: bool,
+
+    /// Write the solution of a parity game in the PGSolver solution format to this file.
+    #[arg(long)]
+    solution_output: Option<PathBuf>,
 }
 
 /// Reads an initial strategy profile for strategy improvement: every vertex
@@ -340,10 +346,14 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         // Read and solve a standard parity game.
         let game = timing.measure("read_pg", || read_pg(&mut file))?;
 
+        let compute_strategy = args.verify_solution || args.solution_output.is_some();
         let (solution, strategy) = match args.solver {
-            Solver::Zielonka => timing.measure("solve_zielonka", || solve_zielonka(&game, args.verify_solution)),
+            Solver::Zielonka => timing.measure("solve_zielonka", || solve_zielonka(&game, compute_strategy)),
             Solver::PriorityPromotion => timing.measure("solve_priority_promotion", || {
-                solve_priority_promotion(&game, args.verify_solution)
+                solve_priority_promotion(&game, compute_strategy)
+            }),
+            Solver::TwoSidedLifting => timing.measure("solve_two_sided_lifting", || {
+                solve_two_sided_lifting(&game, compute_strategy)
             }),
             Solver::HybridSi | Solver::VjSi => {
                 let algorithm = if args.solver == Solver::HybridSi {
@@ -360,12 +370,15 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
                 }
 
                 let result = timing.measure("solve_strategy_improvement", || {
-                    solve_strategy_improvement(&game, &options, args.verify_solution)
+                    solve_strategy_improvement(&game, &options, compute_strategy)
                 })?;
                 info!("Strategy improvement ({}): {}", args.solver, result.statistics);
                 (result.solution, result.strategy)
             }
         };
+        if let Some(output) = &args.solution_output {
+            write_pg_solution(File::create(output)?, &game, &solution, strategy.as_ref())?;
+        }
         if args.full_solution {
             for (index, player_set) in solution.iter().enumerate() {
                 println!("W{index}: {}", player_set.iter_ones().format(", "));
