@@ -69,6 +69,7 @@ use merc_vpg::Solver;
 use merc_vpg::VertexIndex;
 use merc_vpg::convert_symbolic_parity_game;
 use merc_vpg::solve_priority_promotion;
+use merc_vpg::solve_two_sided_lifting;
 use merc_vpg::solve_symbolic_zielonka;
 use merc_vpg::solve_zielonka;
 use merc_vpg::verify_solution;
@@ -912,6 +913,7 @@ fn handle_solve(args: &SolveArgs, timing: &Timing, preprocess: bool) -> Result<(
     let (solution, strategy) = timing.measure("solve", || match args.solver {
         Solver::Zielonka => solve_zielonka(&game, args.verify_solution),
         Solver::PriorityPromotion => solve_priority_promotion(&game, args.verify_solution),
+        Solver::TwoSidedLifting => solve_two_sided_lifting(&game, args.verify_solution),
     });
 
     if let Some(strategy) = strategy

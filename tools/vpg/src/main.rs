@@ -21,6 +21,7 @@ use merc_vpg::ProjectedLts;
 use merc_vpg::Solver;
 use merc_vpg::project_feature_transition_system_iter;
 use merc_vpg::solve_priority_promotion;
+use merc_vpg::solve_two_sided_lifting;
 use merc_vpg::verify_solution;
 use oxidd::BooleanFunction;
 
@@ -55,6 +56,7 @@ use merc_vpg::translate;
 use merc_vpg::translate_vpg;
 use merc_vpg::verify_variability_product_zielonka_solution;
 use merc_vpg::write_pg;
+use merc_vpg::write_pg_solution;
 use merc_vpg::write_vpg;
 
 /// Default node capacity for the Oxidd decision diagram manager. The choice
@@ -122,6 +124,10 @@ struct SolveArgs {
     /// Whether to verify the solution after computing it
     #[arg(long, default_value_t = false)]
     verify_solution: bool,
+
+    /// Write the solution of a parity game in the PGSolver solution format to this file.
+    #[arg(long)]
+    solution_output: Option<PathBuf>,
 }
 
 /// Compute the reachable part of a parity game
@@ -282,10 +288,15 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         // Read and solve a standard parity game.
         let game = timing.measure("read_pg", || read_pg(&mut file))?;
 
+        let compute_strategy = args.verify_solution || args.solution_output.is_some();
         let (solution, strategy) = timing.measure("solve_zielonka", || match args.solver {
-            Solver::Zielonka => solve_zielonka(&game, args.verify_solution),
-            Solver::PriorityPromotion => solve_priority_promotion(&game, args.verify_solution),
+            Solver::Zielonka => solve_zielonka(&game, compute_strategy),
+            Solver::PriorityPromotion => solve_priority_promotion(&game, compute_strategy),
+            Solver::TwoSidedLifting => solve_two_sided_lifting(&game, compute_strategy),
         });
+        if let Some(output) = &args.solution_output {
+            write_pg_solution(File::create(output)?, &game, &solution, strategy.as_ref())?;
+        }
         if args.full_solution {
             for (index, player_set) in solution.iter().enumerate() {
                 println!("W{index}: {}", player_set.iter_ones().format(", "));
