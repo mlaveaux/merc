@@ -41,6 +41,7 @@ use crate::compute_reachable;
 use crate::project_variability_parity_games_iter;
 use crate::solve_priority_promotion;
 use crate::solve_strategy_improvement_default;
+use crate::solve_two_sided_lifting;
 use crate::solve_zielonka;
 use crate::x_and_not_x;
 
@@ -122,6 +123,7 @@ pub fn solve_variability_product_zielonka<'a>(
                         StrategyImprovementAlgorithm::VogeJurdzinski,
                         false,
                     ),
+                    Solver::TwoSidedLifting => solve_two_sided_lifting(&reachable_pg, false),
                 };
                 let mut new_solution = [
                     bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],

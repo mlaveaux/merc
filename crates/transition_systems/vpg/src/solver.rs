@@ -12,6 +12,8 @@ pub enum Solver {
     HybridSi,
     /// Switch-all strategy improvement of Vöge and Jurdziński.
     VjSi,
+    /// Experimental two-sided progress-measure lifting over instance-derived trees.
+    TwoSidedLifting,
 }
 
 /// Variant of the parity game algorithm to use.
@@ -33,6 +35,7 @@ impl fmt::Display for Solver {
             Self::PriorityPromotion => write!(f, "priority-promotion"),
             Self::HybridSi => write!(f, "hybrid-si"),
             Self::VjSi => write!(f, "vj-si"),
+            Self::TwoSidedLifting => write!(f, "two-sided-lifting"),
         }
     }
 }
