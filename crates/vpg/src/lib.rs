@@ -47,6 +47,7 @@ pub use parity_games::read_pg;
 pub use parity_games::read_vpg;
 pub use parity_games::write_pg;
 pub use parity_games::write_vpg;
+pub use parity_games::write_pg_solution;
 pub use priority_promotion::solve_priority_promotion;
 pub use project_fts::ProjectedLts;
 pub use project_fts::project_feature_transition_system_iter;
