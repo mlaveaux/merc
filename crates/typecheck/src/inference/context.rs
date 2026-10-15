@@ -7,7 +7,6 @@ use merc_syntax::EqnSpecId;
 use merc_syntax::EquationId;
 use merc_syntax::MapId;
 use merc_syntax::SortId;
-use merc_syntax::Span;
 use merc_syntax::UntypedDataSpecification;
 use merc_syntax::VarId;
 
@@ -19,7 +18,6 @@ use crate::Signature;
 use crate::SortInterner;
 use crate::TemplateCheck;
 use crate::TemplateId;
-use crate::TypingInfo;
 
 /// The context shared by all type-checking queries.
 ///
@@ -30,6 +28,8 @@ use crate::TypingInfo;
 pub(crate) struct TypeCheckContext {
     pub(crate) sorts: SortInterner,
 
+    /// The memoized resolved sort of each sort declaration (an alias's resolved body), keyed by
+    /// [SortId]. Populated lazily by `query_sort_of_def`.
     pub(crate) sort_of_def: HashMap<SortId, ResolvedSortId>,
     /// The memoized resolved sort of each constructor declaration, keyed by
     /// [ConstructorId]. Populated lazily by `query_sort_of_constructor`.
@@ -43,10 +43,8 @@ pub(crate) struct TypeCheckContext {
 
     /// The signature of the specification
     pub(crate) signature: Option<Arc<Signature>>,
-    /// `(name, resolved sort) -> declaration span` for every system-defined constructor/mapping.
-    pub(crate) system_symbol_spans: HashMap<(String, ResolvedSortId), Span>,
 
-    /// The memoized results of `query_equation_typing`, keyed by the id of the
+    /// The memoized results of [`infer_equation_typing`](crate::infer_equation_typing), keyed by the id of the
     /// enclosing equation specification block and the equation's own id
     /// within it.
     pub(crate) equation_typing: HashMap<(EqnSpecId, EquationId), Result<Arc<EquationTyping>, InferenceError>>,
@@ -54,13 +52,8 @@ pub(crate) struct TypeCheckContext {
     pub(crate) system_equation_typing: HashMap<(EqnSpecId, EquationId), Result<Arc<EquationTyping>, InferenceError>>,
     /// The proven typing of each Appendix-B container/function-update
     /// template's own equations, checked once with its type variable(s) held
-    /// rigid by `check_template_equations`.
+    /// rigid by `typecheck_template_equations`.
     pub(crate) template_typings: HashMap<TemplateId, TemplateCheck>,
-
-    /// The memoized result of the public TypingInfo for every equation.
-    pub(crate) equation_typing_info: HashMap<(EqnSpecId, EquationId), Arc<TypingInfo>>,
-    /// The typing info for the whole set of equations.
-    pub(crate) whole_typing_info: Option<Arc<TypingInfo>>,
 }
 
 impl TypeCheckContext {
@@ -72,12 +65,9 @@ impl TypeCheckContext {
             sort_of_map: HashMap::new(),
             sort_of_equation_var: HashMap::new(),
             signature: None,
-            system_symbol_spans: HashMap::new(),
             equation_typing: HashMap::new(),
             system_equation_typing: HashMap::new(),
             template_typings: HashMap::new(),
-            equation_typing_info: HashMap::new(),
-            whole_typing_info: None,
         }
     }
 }

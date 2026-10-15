@@ -80,7 +80,7 @@ pub(crate) fn lower_data_expr(mut expr: DataExpr) -> DataExpr {
 
 /// Returns true when the expression contains none of the nodes that
 /// [lower_data_expr] rewrites; the postcondition of lowering and the
-/// precondition of Phase-3 sort inference.
+/// precondition of sort inference.
 pub(crate) fn is_lowered(expr: &DataExpr) -> bool {
     expr.visit(|expr| match &expr.node {
         DataExprKind::Binary { .. }

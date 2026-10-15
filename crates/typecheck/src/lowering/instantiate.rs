@@ -3,7 +3,7 @@
 // content by substituting into the template's own already-proven, rigid typing — never by
 // inferring it again. See `TemplateInstantiation`'s own doc comment for why substitution is what
 // makes two instantiations of the same template (`Bag(Nat)`, `Bag(D)`) sound without re-checking
-// either one, and `crate::check_system_equations`'s doc comment for the one kind of system
+// either one, and `crate::typecheck_system_equations`'s doc comment for the one kind of system
 // equation this does *not* cover (`system`'s own basics/desugared-struct equations, which are
 // genuinely inferred, once).
 //
@@ -14,7 +14,6 @@
 // once, rigidly, with no concrete sort in sight (`check_container_templates`/
 // `check_comparison_template`/`check_function_update_template`).
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
@@ -86,12 +85,11 @@ pub(crate) enum SortCollectionMode {
 }
 
 /// Drains `worklist` to a fixpoint like [expand_sorts], merging each popped
-/// sort's generated batch into `result` directly. Unlike an earlier version
-/// of this function, batches are no longer partitioned by element sort before
-/// merging: the container/function-update/comparison operations are looked up
-/// as schemes in one pooled signature regardless of which concrete
-/// instantiation an equation came from, so there is nothing left for two
-/// instantiations' equations to collide over. Records a [TemplateInstantiation]
+/// sort's generated batch into `result` directly. Batches are not partitioned
+/// by element sort before merging: the container/function-update/comparison
+/// operations are looked up as schemes in one pooled signature regardless of
+/// which concrete instantiation an equation came from, so two instantiations'
+/// equations cannot collide. Records a [TemplateInstantiation]
 /// for each batch, so its equations can be specialized from the template's
 /// own proven typing rather than re-checked.
 fn merge_generated(
@@ -469,7 +467,7 @@ fn expand_sorts<T>(
 
 /// Extends `system` with the Appendix-B declarations of every container sort
 /// and comparison-operator instantiation that is discovered only through
-/// Phase-3 inference rather than appearing in the textual declarations: the
+/// sort inference rather than appearing in the textual declarations: the
 /// element sort of a `List`/`Set`/`Bag` enumeration literal (`[1, 2]`,
 /// `{1, 2}`, `{1: 2}`), or of a bare numeral, is not written down anywhere —
 /// it is entirely a product of its elements' inferred sorts (see
@@ -611,7 +609,7 @@ fn resolved_sort_to_syntax(
 ) -> Option<SortExpression> {
     match ctx.sorts.get(id) {
         // Never a data sort, like `Unit`: a bound type variable is always
-        // instantiated to a fresh unification variable before Phase-3
+        // instantiated to a fresh unification variable before sort
         // solving produces a node's final ResolvedSortId, so this case does
         // not happen for a sort inference actually produced either.
         ResolvedSort::TypeVar(_) => None,
@@ -814,14 +812,7 @@ pub(crate) fn specialize_template_typing(
         })
         .collect();
 
-    EquationTyping {
-        sorts,
-        spans: Vec::new(),
-        names,
-        identifier_names: HashMap::new(),
-        declarations: HashMap::new(),
-        node_ids: HashMap::new(),
-    }
+    EquationTyping { sorts, names }
 }
 
 /// Populates `ctx.system_equation_typing` for every equation of `generated`.
@@ -1062,8 +1053,8 @@ mod tests {
     /// Whether the *lowered* spec of `text` declares the function-update
     /// operators, checked through the full `from_untyped`/`lower_data_specification`
     /// path: that's where a container/function-update instantiation is
-    /// generated at all — `system_defined_specification()` itself no longer
-    /// carries one.
+    /// generated at all — `system_defined_specification()` itself does not
+    /// carry one.
     fn has_function_update(text: &str) -> bool {
         let spec = DataSpecification::from_untyped(UntypedDataSpecification::parse(text).unwrap()).unwrap();
         spec.lower_data_specification()
@@ -1118,7 +1109,7 @@ mod tests {
 
     /// As [spec_has_comparison_equations_for], but over the *lowered* spec,
     /// checked through the full `from_untyped`/`lower_data_specification` path
-    /// (which flattens function sorts, desugars structs, drives Phase-3
+    /// (which flattens function sorts, desugars structs, drives sort
     /// inference, and — since the monomorphization-to-lowering milestone — is
     /// also where a comparison-operator instantiation is generated at all).
     ///

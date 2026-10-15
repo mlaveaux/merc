@@ -1,5 +1,5 @@
-// The scoped walk over the state formula, checking each `val(...)` expression, action instance and
-// fixpoint-variable reference. See `ValSort` for what a state-level `val`'s declared sort allows.
+//! The scoped walk over the state formula, checking each `val(...)` expression, action instance and
+//! fixpoint-variable reference. See `ValSort` for what a state-level `val`'s declared sort allows.
 
 use std::convert::Infallible;
 use std::ops::ControlFlow;
@@ -25,6 +25,7 @@ use crate::TypingInfo;
 use crate::checking::Scope;
 use crate::checking::check_expression_against;
 use crate::checking::collect_binder_sorts;
+use crate::checking::declare_variables;
 use crate::checking::resolve_single_candidate;
 use crate::declared_span;
 use crate::typing_info;
@@ -57,18 +58,13 @@ pub(super) fn check_modal_specification(
         let equation = tables.equation_system.equation(index);
         let params = &tables.equation_params[index];
 
-        for (argument, &(_, sort)) in equation.variable().arguments.iter().zip(params) {
-            typing_info::collect_sort_name_references(&argument.sort, &mut sort_references);
-            typing_info::push_binder_declaration(
-                data,
-                &mut typing,
-                argument.identifier.span.clone(),
-                argument.identifier.node.clone(),
-                sort,
-            );
-            let var_id = argument.id.expect("resolve_modal_variables ran before checking");
-            scope.push((var_id, sort, argument.identifier.span.clone()));
+        let arguments = &equation.variable().arguments;
+        for argument in arguments {
+            typing_info::collect_sort_name_references(&argument.decl.sort, &mut sort_references);
         }
+        let declarations = arguments.iter().map(|argument| &argument.decl);
+        let sorts = params.iter().map(|&(_, sort)| sort);
+        declare_variables(data, &mut scope, &mut typing, declarations, sorts);
 
         collect_scope(data, equation.body(), &mut scope, &mut sort_references, &mut typing)?;
     }
@@ -94,7 +90,7 @@ pub(super) fn check_modal_specification(
 fn collect_scope(
     data: &mut DataSpecification,
     formula: &StateFrm,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), ModalError> {

@@ -1,6 +1,6 @@
 //! Shared building blocks for a `TypingInfo`-accumulating walk over an
 //! expression tree that lives *outside* the data specification proper — a
-//! process body (`crate::process::check`), a PBES equation, or a PRES equation.
+//! process body (`crate::process::check`), a PBES/PRES equation, or a modal formula.
 
 use std::collections::HashMap;
 
@@ -14,17 +14,21 @@ use merc_syntax::VarId;
 use crate::DataSpecification;
 use crate::InferenceError;
 use crate::ResolvedSortId;
+use crate::Roots;
 use crate::TypingInfo;
-use crate::VariableSpans;
 use crate::WellTypedError;
 use crate::infer_expression_in_scope;
 use crate::lower_data_expr;
 use crate::typing_info;
 
-/// Every declaration reachable from the `proc` body/PBES equation currently being checked —
-/// global variables, that declaration's own parameters, and every `sum`/`dist`/quantifier binder
-/// anywhere in it — keyed by each declaration's own [VarId].
-pub(crate) type Scope = [(VarId, ResolvedSortId, Span)];
+/// Every declaration reachable from the `proc` body/PBES/PRES equation/modal formula currently
+/// being checked — global variables, that declaration's own parameters, and every
+/// `sum`/`dist`/quantifier binder anywhere in it — keyed by each declaration's own [VarId].
+///
+/// A flat list suffices rather than a stack of nested scopes: variable resolution already tied
+/// every occurrence to its binder's unique [VarId], so a binder can only ever be found by the
+/// occurrences it actually scopes over.
+pub(crate) type Scope = [(VarId, ResolvedSortId)];
 
 /// Prepares a raw expression for inference: resolves its embedded binder sorts (see
 /// [`DataSpecification::resolve_expression_binder_sorts`]) and lowers it, exactly as
@@ -55,26 +59,47 @@ where
     E: From<WellTypedError> + From<InferenceError>,
 {
     let lowered = prepare_expression::<E>(data, expr)?;
-    // `infer_expression_in_scope` only needs each binder's sort, not its span.
-    let declared_scope: Vec<(VarId, ResolvedSortId)> = scope.iter().map(|&(id, sort, _)| (id, sort)).collect();
     let (ctx, spec) = data.context_and_specs_mut();
-    let equation_typing = infer_expression_in_scope(ctx, spec, &lowered, &declared_scope, Some(expected))?;
-    // `scope` covers every binder declared *outside* `expr` (see `Scope`'s doc comment); `expr`
-    // may also introduce its own `lambda`/quantifier/comprehension/`whr` binders, not part of
-    // `scope` at all, so those are collected separately, straight off `expr`'s own tree.
-    let mut variable_spans: VariableSpans = scope.iter().map(|&(id, _, ref span)| (id, span.clone())).collect();
-    typing_info::collect_data_expr_variable_declarations(expr, &mut variable_spans);
-    typing.merge(typing_info::build(data, &equation_typing, &variable_spans));
+    let equation_typing = infer_expression_in_scope(ctx, spec, &lowered, scope, Some(expected))?;
+    typing.merge(typing_info::build(
+        data,
+        Roots::ExpressionAgainst {
+            expr: &lowered,
+            expected,
+        },
+        &equation_typing,
+    ));
     Ok(())
 }
 
-/// Collects the sorts of the given binder variables, extending the current
-/// scope and recording sort references, and records each variable's own declaration occurrence so
-/// it can be hovered/go-to-definition'd the same as a use of it (see
-/// [`typing_info::push_binder_declaration`]).
+/// Brings `variables`, whose sorts are already resolved to `sorts`, into `scope`, and records each
+/// variable's own declaration occurrence in `typing` so it can be hovered/go-to-definition'd the
+/// same as a use of it (see [`typing_info::push_binder_declaration`]).
+pub(crate) fn declare_variables<'a>(
+    data: &DataSpecification,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
+    typing: &mut TypingInfo,
+    variables: impl IntoIterator<Item = &'a IdDecl>,
+    sorts: impl IntoIterator<Item = ResolvedSortId>,
+) {
+    for (var, sort) in variables.into_iter().zip(sorts) {
+        typing_info::push_binder_declaration(
+            data,
+            typing,
+            var.identifier.span.clone(),
+            var.identifier.node.clone(),
+            sort,
+        );
+        let var_id = var.var_id.expect("variable resolution ran before checking");
+        scope.push((var_id, sort));
+    }
+}
+
+/// Resolves the sorts of the given binder variables with `resolve`, recording their sort
+/// references, and declares them (see [`declare_variables`]).
 pub(crate) fn collect_binder_sorts<E, F>(
     data: &mut DataSpecification,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
     variables: &[IdDecl],
@@ -83,21 +108,12 @@ pub(crate) fn collect_binder_sorts<E, F>(
 where
     F: FnMut(&mut DataSpecification, &SortExpression) -> Result<ResolvedSortId, E>,
 {
+    let mut sorts = Vec::with_capacity(variables.len());
     for var in variables {
         typing_info::collect_sort_name_references(&var.sort, sort_references);
-        let sort = resolve(data, &var.sort)?;
-        typing_info::push_binder_declaration(
-            data,
-            typing,
-            var.identifier.span.clone(),
-            var.identifier.node.clone(),
-            sort,
-        );
-        let var_id = var
-            .var_id
-            .expect("resolve_process_variables/resolve_pbes_variables/... ran before checking");
-        scope.push((var_id, sort, var.identifier.span.clone()));
+        sorts.push(resolve(data, &var.sort)?);
     }
+    declare_variables(data, scope, typing, variables, sorts);
     Ok(())
 }
 
@@ -181,8 +197,8 @@ impl ActionTable {
 
 /// Tries every candidate in `candidates`, each checked into its own scratch `TypingInfo` via
 /// `check_candidate`, and requires exactly one to succeed — an mCRL2 overload set, the way
-/// `crate::process::check::check_action_or_process` and `crate::modal::check::check_action` both
-/// use this. A failed or ambiguous candidate's typing must never reach the caller's own
+/// `crate::process::check::check_action_or_process`/`check_instantiation` and
+/// `crate::modal::check::check_action` use this. A failed or ambiguous candidate's typing must never reach the caller's own
 /// `TypingInfo`, so each candidate gets a fresh scratch one, returned to the caller only for the
 /// single match.
 ///
