@@ -777,7 +777,7 @@ fn extend_relation_edge<'id>(
 /// (potentially) that the block numbers are often small numbers, so the most
 /// significant bits are more likely to be 0 and these will collapse to singular
 /// nodes at the bottom layers.
-fn encode_block<'id>(
+pub(crate) fn encode_block<'id>(
     manager: &<BDDFunction as Function>::Manager<'id>,
     variables: &[BDDFunction],
     block_no: u64,
