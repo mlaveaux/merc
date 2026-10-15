@@ -585,7 +585,7 @@ impl ExplicitLinearProcessSpecification {
 /// worker thread drives its own context.
 pub struct ExplicitContext {
     /// Backend used by mCRL2 to perform the enumeration, staged per source
-    /// state by [`LPS::prepare`] and consumed by [`Summand::enumerate`].
+    /// state.
     context: LearnSuccessorsContext,
 
     /// Reusable scratch buffer holding the `*const _aterm` parameter values
@@ -597,12 +597,6 @@ pub struct ExplicitContext {
     /// enumerated solution. Reset and refilled for every solution.
     next_state_buf: Vec<usize>,
 }
-
-// Deliberately not `Send`: `context: LearnSuccessorsContext` is thread-affine (see
-// `PbesSrfContext` in `explore_srf.rs`), and `crates/merc_lps/tests/
-// explicit_context_send_soundness_test.rs` demonstrated the same cross-thread crash. No call
-// site needs `Send` here either — see the removed `<P::Summand as Summand>::Context: Send`
-// bound in `crates/explore/src/explore.rs`.
 
 /// A single summand of the LPS, prepared for explicit enumeration.
 pub struct ExplicitSummand {

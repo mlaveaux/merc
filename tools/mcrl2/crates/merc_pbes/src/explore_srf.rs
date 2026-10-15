@@ -255,7 +255,7 @@ pub struct PbesSrfSummand {
     read_positions: Vec<usize>,
 
     /// Positions in the state vector that this summand may change; position 0
-    /// (equation index) is always included.
+    /// (equation index) is included iff the target equation differs from the source.
     write_positions: Vec<usize>,
 }
 
@@ -374,9 +374,10 @@ impl PbesSrfLps {
 
                 // Position 0 (equation index) is always read; extend with positions
                 // whose parameter appears free in the condition or a *written* target
-                // argument. Also compute write positions: position 0 is always written;
-                // position k+1 is written iff the k-th target argument is not the
-                // identity (param_k).
+                // argument. Also compute write positions: position 0 is written iff the
+                // target equation differs from the source equation; position k+1 is
+                // written iff the k-th target argument is not the identity (param_k).
+                // This matches mCRL2's `read_write_parameters` in `pbes_summand_group.h`.
                 //
                 // An identity argument contributes neither a write position nor a read
                 // dependency: the effect is [`StateEffect::Positions`], so a position
@@ -388,7 +389,10 @@ impl PbesSrfLps {
                 // parameter vector, which turns each parameter an equation merely passes
                 // through into exactly such an identity argument.
                 let mut read_positions = vec![0usize];
-                let mut write_positions = vec![0usize];
+                let mut write_positions = Vec::new();
+                if target_eq_idx != eq_idx {
+                    write_positions.push(0);
+                }
                 for (k, (param, arg)) in params_vec.iter().zip(target_pvi.arguments().iter()).enumerate() {
                     if Into::<DataExpressionRef<'_>>::into(param.copy()) == arg.copy()
                         && !summation_vars.contains(param)
@@ -399,7 +403,9 @@ impl PbesSrfLps {
                     write_positions.push(k + 1);
                 }
                 for (i, param) in params_vec.iter().enumerate() {
-                    if read_vars.contains(param) {
+                    // A summation variable that shares a parameter's name is bound by
+                    // the summand, so its free occurrences do not read the parameter.
+                    if read_vars.contains(param) && !summation_vars.contains(param) {
                         read_positions.push(i + 1);
                     }
                 }

@@ -42,6 +42,7 @@ use mcrl2_sys::pbes::ffi::mcrl2_srf_equations_summands;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_data_specification;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equation_variable;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_equations;
+use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_resolve_summand_variable_name_clashes;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_to_pbes;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_pbes_unify_parameters;
 use mcrl2_sys::pbes::ffi::mcrl2_srf_summand_parameters;
@@ -210,14 +211,12 @@ impl Pbes {
     ///
     /// Returns an error when a global variable cannot be instantiated.
     pub fn preprocess_symbolic(&mut self, timing: &Timing) -> Result<(), MercError> {
-        fn normalize_step(p: &mut Pbes) -> Result<(), MercError> {
-            p.normalize();
-            Ok(())
-        }
-
         let steps: [(&str, fn(&mut Pbes) -> Result<(), MercError>); 3] = [
             ("instantiate global variables", Pbes::instantiate_global_variables),
-            ("normalize", normalize_step),
+            ("normalize", |p| {
+                p.normalize();
+                Ok(())
+            }),
             ("one point rule", Pbes::one_point_rule),
         ];
 
@@ -690,12 +689,20 @@ impl SrfPbes {
         })
     }
 
-    /// Unify all parameters of the equations.
+    /// Unify all parameters of the equations, and rename the summation variables
+    /// that clash with a parameter name.
+    ///
+    /// Unification can give an equation a parameter that shares its name with a
+    /// summation variable of one of its summands. During enumeration the value of
+    /// that parameter would then be substituted for the bound variable, which can
+    /// make the enumeration of an infinite sort non-terminating. mCRL2's
+    /// `pbesreach` performs the same renaming after unifying the parameters.
     ///
     /// After unification the C++ `srf_pbes` object is updated in-place, so the
     /// Rust-side equation snapshot must be refreshed to stay consistent.
     pub fn unify_parameters(&mut self, ignore_ce_equations: bool, reset: bool) -> Result<(), MercError> {
         mcrl2_srf_pbes_unify_parameters(self.srf_pbes.pin_mut(), ignore_ce_equations, reset)?;
+        mcrl2_srf_pbes_resolve_summand_variable_name_clashes(self.srf_pbes.pin_mut())?;
 
         // Refresh the equations snapshot from the now-unified C++ object.
         let mut ffi_equations = CxxVector::new();
