@@ -2,6 +2,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use log::debug;
+use log::info;
 
 use merc_explore::validate_permutation;
 use merc_utilities::MercError;
@@ -64,6 +65,9 @@ impl VariableOrder {
                     .filter(|position| !order.contains(position))
                     .collect();
                 order.extend(missing);
+
+                // Printed in the `--reorder` syntax, so that the order can be reused without MINCE.
+                info!("Variable order computed by MINCE: '{}'", Order::Explicit(order.clone()));
                 order
             }
             VariableOrder::Explicit(order) => order.clone(),
