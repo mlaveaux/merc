@@ -41,7 +41,6 @@ use crate::build_system_defined_specification;
 use crate::extend_system_with_inferred_sorts;
 use crate::instantiate_system_equations;
 use crate::is_system_generated_name;
-use crate::number_expr_nodes;
 use crate::resolve_data_specification_variables;
 use crate::unreachable_not_a_value_sort;
 
@@ -373,9 +372,9 @@ pub(crate) struct LoweredEquation {
 }
 
 /// Re-walks one equation's condition/left/right-hand sides alongside its
-/// [`EquationTyping`] side tables — looking each node's sort/name up by its own [`ExprId`], via
-/// [`number_expr_nodes`] (see its doc comment, and [`crate::ExprId`]'s, for why this and generation
-/// need not recurse in the same order) — building `merc_data::DataExpression`s bottom-up.
+/// [`EquationTyping`] — in the same canonical order inference numbered the nodes in (see
+/// [`crate::for_each_expr_child`]), so each node's sort/name is found by its [`ExprId`] —
+/// building `merc_data::DataExpression`s bottom-up.
 ///
 /// Lowers variables, declared-op and builtin-op applications (including the
 /// polymorphic comparison/`if` operators), numeric/boolean literals, container
@@ -394,20 +393,14 @@ pub(crate) fn lower_equation(
     rhs: &DataExpr,
     encoding: NumberEncoding,
 ) -> Option<LoweredEquation> {
-    let EquationTyping { sorts, names, .. } = typing;
-
-    let mut roots = Vec::with_capacity(3);
-    roots.extend(condition);
-    roots.push(lhs);
-    roots.push(rhs);
-    let expr_id_of = number_expr_nodes(roots);
+    let EquationTyping { sorts, names } = typing;
 
     let mut walker = Lowering {
         ctx,
         spec,
         sorts,
         names,
-        expr_id_of,
+        next_id: 0,
         encoding,
         literals: HashMap::new(),
     };
@@ -421,9 +414,9 @@ pub(crate) fn lower_equation(
     // parameter (see `Lowering::lower_application`): capture each side's own
     // id before coercing it, so the narrower side is coerced up to the wider
     // one rather than silently producing an ill-sorted equation.
-    let lhs_id = walker.id_of(lhs);
+    let lhs_id = walker.peek_id();
     let lhs = walker.lower(lhs)?;
-    let rhs_id = walker.id_of(rhs);
+    let rhs_id = walker.peek_id();
     let rhs = walker.lower(rhs)?;
     let lhs_sort = sorts[*lhs_id];
     let rhs_sort = sorts[*rhs_id];
@@ -446,14 +439,14 @@ pub(crate) fn lower_expression(
     expr: &DataExpr,
     encoding: NumberEncoding,
 ) -> Option<DataExpression> {
-    let EquationTyping { sorts, names, .. } = typing;
+    let EquationTyping { sorts, names } = typing;
 
     Lowering {
         ctx,
         spec,
         sorts,
         names,
-        expr_id_of: number_expr_nodes([expr]),
+        next_id: 0,
         encoding,
         literals: HashMap::new(),
     }
@@ -465,12 +458,9 @@ struct Lowering<'a> {
     spec: &'a UntypedDataSpecification,
     sorts: &'a [ResolvedSortId],
     names: &'a HashMap<ExprId, NameTarget>,
-    /// Every node's own [ExprId], keyed by its address — computed once, by
-    /// [`number_expr_nodes`], over the same condition/lhs/rhs (or standalone expression) that
-    /// produced `sorts`/`names`; see [`crate::ExprId`]'s own doc comment for why looking a node's
-    /// id up here, rather than re-deriving it from the order `lower` recurses in, is what lets a
-    /// monomorphized template instantiation's own lowering agree with the template's typing.
-    expr_id_of: HashMap<usize, ExprId>,
+    /// The [ExprId] of the next node [Self::lower] visits; every `lower` call recurses in
+    /// [`crate::for_each_expr_child`]'s order, so this counter reproduces inference's numbering.
+    next_id: usize,
     /// How numeric literals and numeric coercions are represented.
     encoding: NumberEncoding,
     /// The decimal text of every bare `Number` node walked so far, keyed by its
@@ -480,25 +470,23 @@ struct Lowering<'a> {
 }
 
 impl Lowering<'_> {
-    /// The precomputed [ExprId] of `expr`, looked up by its own address.
-    fn id_of(&self, expr: &DataExpr) -> ExprId {
-        *self
-            .expr_id_of
-            .get(&(expr as *const DataExpr as usize))
-            .expect("number_expr_nodes numbered every node of this same tree")
+    /// The [ExprId] the next [Self::lower] call assigns to its expression.
+    fn peek_id(&self) -> ExprId {
+        ExprId::new(self.next_id)
     }
 
     /// Lowers `expr`, or `None` the moment an unsupported construct is reached (see
     /// [lower_equation]).
     fn lower(&mut self, expr: &DataExpr) -> Option<DataExpression> {
-        let id = self.id_of(expr);
+        let id = self.peek_id();
+        self.next_id += 1;
         let sort = self.sorts[*id];
 
         match &expr.node {
             // `Resolved` occurs only in a process/PBES-body expression, never in a data
             // specification's own equations (this lowering's only input), but is grouped with
             // `Id` for exhaustiveness.
-            DataExprKind::Id(name) | DataExprKind::Resolved(name, _) => self.lower_id(id, name, sort),
+            DataExprKind::Id(name) | DataExprKind::Resolved(name, _, _) => self.lower_id(id, name, sort),
             DataExprKind::Number(value) => {
                 self.literals.insert(id, value.clone());
                 self.lower_number(sort, value)
@@ -628,12 +616,12 @@ impl Lowering<'_> {
         let mut argument_sorts = Vec::with_capacity(arguments.len());
         let mut argument_ids = Vec::with_capacity(arguments.len());
         for argument in arguments {
-            let argument_id = self.id_of(argument);
+            let argument_id = self.peek_id();
             argument_ids.push(argument_id);
             argument_sorts.push(self.sorts[*argument_id]);
             argument_terms.push(self.lower(argument)?);
         }
-        let function_sort = self.sorts[*self.id_of(function)];
+        let function_sort = self.sorts[*self.peek_id()];
         let function_term = self.lower(function)?;
 
         let ResolvedSort::Function { domain, range } = self.ctx.sorts.get(function_sort) else {
@@ -697,7 +685,7 @@ impl Lowering<'_> {
         let empty: DataExpression = DataFunctionSymbol::with_sort("{}", fset.copy()).into();
         let mut lowered = Vec::with_capacity(members.len());
         for member in members {
-            let member_id = self.id_of(member);
+            let member_id = self.peek_id();
             let member_sort = self.sorts[*member_id];
             let member_term = self.lower(member)?;
             lowered.push((member_id, member_term, member_sort));
@@ -732,10 +720,10 @@ impl Lowering<'_> {
         let empty: DataExpression = DataFunctionSymbol::with_sort("{:}", fbag.copy()).into();
         let mut lowered = Vec::with_capacity(members.len());
         for member in members {
-            let elem_id = self.id_of(&member.expr);
+            let elem_id = self.peek_id();
             let elem_sort = self.sorts[*elem_id];
             let elem_term = self.lower(&member.expr)?;
-            let mult_id = self.id_of(&member.multiplicity);
+            let mult_id = self.peek_id();
             let mult_sort = self.sorts[*mult_id];
             let mult_term = self.lower(&member.multiplicity)?;
             lowered.push((elem_id, elem_term, elem_sort, mult_id, mult_term, mult_sort));
@@ -759,7 +747,7 @@ impl Lowering<'_> {
             .iter()
             .map(|v| DataVariable::with_sort(v.identifier.as_str(), lower_syntax_sort(&v.sort).copy()))
             .collect();
-        let body_id = self.id_of(body);
+        let body_id = self.peek_id();
         let body_sort = self.sorts[*body_id];
         let body_term = self.lower(body)?;
         // The lambda's own range may be wider than the body's inferred sort
@@ -821,7 +809,7 @@ impl Lowering<'_> {
         let element = lower_sort(self.ctx, self.spec, element_id);
         let var = DataVariable::with_sort(variable.identifier.as_str(), element.copy());
 
-        let body_id = self.id_of(predicate);
+        let body_id = self.peek_id();
         let body_sort = self.sorts[*body_id];
         let body = self.lower(predicate)?;
 
@@ -867,7 +855,7 @@ impl Lowering<'_> {
     fn lower_whr(&mut self, expr: &DataExpr, assignments: &[merc_syntax::Assignment]) -> Option<DataExpression> {
         let mut whr_decls = Vec::with_capacity(assignments.len());
         for assignment in assignments {
-            let assignment_sort = self.sorts[*self.id_of(&assignment.expr)];
+            let assignment_sort = self.sorts[*self.peek_id()];
             let assignment_term = self.lower(&assignment.expr)?;
             let var = DataVariable::with_sort(
                 assignment.identifier.as_str(),
@@ -944,7 +932,7 @@ fn flatten_product_domain(sort: &SortExpression, domain: &mut Vec<DataSortExpres
 /// - **constructors / mappings** — user declarations lowered via the interned
 ///   sort lattice, followed by system declarations lowered directly from their
 ///   syntax sorts (the system spec is deliberately left unresolved).
-/// - **equations** — user equations, lowered via their Phase-3
+/// - **equations** — user equations, lowered via their
 ///   [`EquationTyping`] and [`lower_equation`], followed by system-defined
 ///   equations lowered the same way from `ctx.system_equation_typing`.
 pub(crate) fn lower_data_specification(
@@ -1041,13 +1029,11 @@ pub(crate) fn lower_data_specification(
                 .expect("equation typings are all resolved during from_untyped")
                 .as_ref()
                 .expect("a well-typed specification has no equation inference errors");
-            // Phase-3 already accepted this equation, so `None` means `Lowering`
+            // Sort inference already accepted this equation, so `None` means `Lowering`
             // is missing a construct it supports: an internal bug, and a hard
             // failure rather than a silently dropped rewrite rule.
             let lowered = lower_equation(ctx, spec, typing, eqn.condition.as_ref(), &eqn.lhs, &eqn.rhs, encoding)
-                .unwrap_or_else(|| {
-                    panic!("user equation '{eqn}' passed Phase-3 inference but failed Phase-4 lowering")
-                });
+                .unwrap_or_else(|| panic!("user equation '{eqn}' passed sort inference but failed lowering"));
             equations.push(DataEquation::new(&vars, lowered.condition, lowered.lhs, lowered.rhs));
         }
     }
@@ -1070,9 +1056,7 @@ pub(crate) fn lower_data_specification(
                 .as_ref()
                 .expect("a well-typed specification has no system equation inference errors");
             let lowered = lower_equation(ctx, spec, typing, eqn.condition.as_ref(), &eqn.lhs, &eqn.rhs, encoding)
-                .unwrap_or_else(|| {
-                    panic!("system equation '{eqn}' passed Phase-3 inference but failed Phase-4 lowering")
-                });
+                .unwrap_or_else(|| panic!("system equation '{eqn}' passed sort inference but failed lowering"));
             equations.push(DataEquation::new(&vars, lowered.condition, lowered.lhs, lowered.rhs));
         }
     }
@@ -1161,9 +1145,7 @@ pub(crate) fn lower_data_specification(
                 &eqn.rhs,
                 encoding,
             )
-            .unwrap_or_else(|| {
-                panic!("generated equation '{eqn}' passed Phase-3 inference but failed Phase-4 lowering")
-            });
+            .unwrap_or_else(|| panic!("generated equation '{eqn}' passed sort inference but failed lowering"));
             equations.push(DataEquation::new(&vars, lowered.condition, lowered.lhs, lowered.rhs));
         }
     }
