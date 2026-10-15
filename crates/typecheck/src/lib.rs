@@ -47,5 +47,4 @@ pub use signature::WellTypedError;
 pub use typing_info::ResolvedName;
 pub use typing_info::TypedNode;
 pub use typing_info::TypingInfo;
-pub(crate) use typing_info::VariableSpans;
 pub(crate) use typing_info::declared_span;

@@ -1,12 +1,12 @@
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
+
+use rustc_hash::FxHashMap;
 
 use merc_syntax::ComplexSort;
 use merc_syntax::ConstructorId;
 use merc_syntax::DataExpr;
 use merc_syntax::DataExprKind;
-use merc_syntax::EqnSpec;
 use merc_syntax::MapId;
 use merc_syntax::SortDecl;
 use merc_syntax::SortExpression;
@@ -15,38 +15,18 @@ use merc_syntax::SortId;
 use merc_syntax::Span;
 use merc_syntax::Traverse;
 use merc_syntax::UntypedDataSpecification;
-use merc_syntax::VarId;
 
 use crate::DataSpecification;
 use crate::EquationTyping;
-use crate::ExprId;
 use crate::NameTarget;
 use crate::ResolvedSort;
 use crate::ResolvedSortId;
+use crate::Roots;
 use crate::TypeCheckContext;
+use crate::for_each_expr_node;
 use crate::is_system_generated_name;
+use crate::resolve_sort;
 use crate::unreachable_not_a_value_sort;
-
-/// A `VarId -> declaration span` lookup, covering exactly the binders one [`TypingInfo`] query
-/// needs to resolve a [`ResolvedName::Variable`] occurrence.
-#[derive(Default)]
-pub(crate) struct VariableSpans(HashMap<VarId, Span>);
-
-impl VariableSpans {
-    pub(crate) fn insert(&mut self, var_id: VarId, span: Span) {
-        self.0.insert(var_id, span);
-    }
-
-    pub(crate) fn get(&self, var_id: &VarId) -> Option<&Span> {
-        self.0.get(var_id)
-    }
-}
-
-impl FromIterator<(VarId, Span)> for VariableSpans {
-    fn from_iter<T: IntoIterator<Item = (VarId, Span)>>(iter: T) -> Self {
-        VariableSpans(iter.into_iter().collect())
-    }
-}
 
 /// The typing of a document's data specification (or of one expression): one
 /// [`TypedNode`] per checked expression node, in generation order, keyed by
@@ -94,7 +74,7 @@ pub enum ResolvedName {
     /// An equation variable, a process/PBES/PRES parameter, or a `sum`/`dist`/quantifier binder.
     Variable {
         name: String,
-        /// Resolved via the `VariableSpans` map in scope where this node was built.
+        /// The declaring binder's span, carried by the `Resolved` occurrence itself.
         declaration: Option<Span>,
     },
     /// A user-declared constructor.
@@ -195,145 +175,162 @@ impl TypingInfo {
             name: Some(name),
         });
     }
+}
 
-    /// As [`Self::push`], but also records a sort, used for binders.
-    pub(crate) fn push_typed(&mut self, span: Span, sort: Option<SortExpression>, name: ResolvedName) {
-        self.nodes.push(TypedNode {
-            span,
-            sort,
-            name: Some(name),
+/// Builds the [`TypingInfo`] of `roots` from `typing`, the already-computed sort-inference result of
+/// exactly those roots: walks them in [`ExprId`](crate::ExprId) order, reading each node's span, identifier and
+/// declaration off the node itself.
+///
+/// A synthesized node (the desugared `Id("+")` of `x + y`, a list literal's cons chain, …)
+/// carries the span of the whole surface expression it was lowered from.
+pub(crate) fn build(spec: &DataSpecification, roots: Roots<'_>, typing: &EquationTyping) -> TypingInfo {
+    let mut info = TypingInfo::default();
+    for_each_expr_node(roots.exprs(), |id, expr| {
+        let name = typing.names.get(&id).map(|&target| {
+            let (name, declaration) = match &expr.node {
+                DataExprKind::Id(name) => (name, None),
+                DataExprKind::Resolved(name, _, declaration) => (name, Some(declaration.clone())),
+                _ => unreachable!("only an identifier has a name target"),
+            };
+            resolved_name(spec, target, name.clone(), declaration)
         });
-    }
+        info.nodes.push(TypedNode {
+            span: expr.span.clone(),
+            sort: Some(sort_expression(
+                spec.context(),
+                spec.data_specification(),
+                typing.sorts[*id],
+            )),
+            name,
+        });
+    });
+    info
 }
 
-/// Builds the [`TypingInfo`] for `typing`, the already-computed Phase-3 result of one equation or
-/// standalone expression. `typing.spans`/`typing.identifier_names` must be filled — true for
-/// every `EquationTyping` this crate ever hands to a public caller, since both are only ever
-/// omitted for `EquationRole::System`, which never reaches here.
-pub(crate) fn build(spec: &DataSpecification, typing: &EquationTyping, variable_spans: &VariableSpans) -> TypingInfo {
-    debug_assert_eq!(
-        typing.spans.len(),
-        typing.sorts.len(),
-        "typing_info::build requires an EquationTyping built for EquationRole::User"
-    );
-
-    let index = DeclarationIndex::build(spec);
-    let ctx = spec.context();
-    let user_spec = spec.data_specification();
-
-    let nodes = typing
-        .spans
-        .iter()
-        .zip(&typing.sorts)
-        .enumerate()
-        .map(|(i, (span, &sort))| {
-            let id = ExprId::new(i);
-            let name = typing.names.get(&id).map(|&target| {
-                let name = typing
-                    .identifier_names
-                    .get(&id)
-                    .cloned()
-                    .unwrap_or_else(|| unreachable!("every named node has a recorded identifier"));
-                let declaration = typing.declarations.get(&id).cloned();
-                resolved_name(&index, variable_spans, target, name, declaration)
-            });
-            TypedNode {
-                span: span.clone(),
-                sort: Some(sort_expression(ctx, user_spec, sort)),
-                name,
-            }
-        })
-        .collect();
-
-    TypingInfo { nodes }
-}
-
+/// What an identifier occurrence named `name`, resolved to `target`, refers to. `declaration` is
+/// the declaring binder's span for a `Resolved` variable occurrence.
 fn resolved_name(
-    index: &DeclarationIndex<'_>,
-    variable_spans: &VariableSpans,
+    spec: &DataSpecification,
     target: NameTarget,
     name: String,
-    declaration: Option<VarId>,
+    declaration: Option<Span>,
 ) -> ResolvedName {
     match target {
-        NameTarget::Variable => {
-            let declaration = declaration.and_then(|var_id| {
-                let span = variable_spans.get(&var_id).cloned();
-                debug_assert!(
-                    span.is_some(),
-                    "VariableSpans has no entry for {var_id:?} ({name:?}), which resolved as \
-                     NameTarget::Variable — the variable-resolution pre-pass that builds both \
-                     tables has gone out of sync"
-                );
-                span
-            });
-            ResolvedName::Variable { name, declaration }
-        }
+        NameTarget::Variable => ResolvedName::Variable { name, declaration },
         NameTarget::Builtin => ResolvedName::Builtin { name },
-        NameTarget::Op { sort } => {
-            let constructor = index.constructors.get(&(name.as_str(), sort)).cloned();
-            let mapping = index.mappings.get(&(name.as_str(), sort)).cloned();
-
-            if let Some((id, declaration)) = constructor {
-                ResolvedName::Constructor { name, id, declaration }
-            } else if let Some((id, declaration)) = mapping {
-                ResolvedName::Mapping { name, id, declaration }
-            } else {
-                // Declared only on the system-defined specification: no ConstructorId/MapId of
-                // the *user* spec names it, and the system spec's own ids aren't meaningful to an
-                // outside caller — but its declaration span (real since Milestone 3, see
-                // `docs/spec-includes.md`) is, so look it up in `TypeCheckContext::system_symbol_spans`.
-                let declaration = index.system_symbol_spans.get(&(name.clone(), sort)).cloned();
-                ResolvedName::SystemDefined { name, declaration }
-            }
-        }
+        NameTarget::Op { sort } => spec.declaration_index().operation(name, sort),
     }
 }
 
-/// A `(name, resolved sort) -> declaration` reverse lookup, built once per [`build`] call from
-/// the user specification's own declaration lists. `(name, ResolvedSortId)` uniquely identifies a
-/// symbol; the residual case of two literally duplicated declarations (legal: `map f: Nat; f:
-/// Nat;`) resolves to the first, via `HashMap::entry(..).or_insert(..)` below.
-struct DeclarationIndex<'a> {
-    constructors: HashMap<(&'a str, ResolvedSortId), (ConstructorId, Option<Span>)>,
-    mappings: HashMap<(&'a str, ResolvedSortId), (MapId, Option<Span>)>,
-    /// `(name, resolved sort) -> declaration span` for every system-defined constructor/mapping,
-    /// borrowed from `TypeCheckContext::system_symbol_spans`.
-    system_symbol_spans: &'a HashMap<(String, ResolvedSortId), Span>,
+/// The reverse lookup from a name occurrence to its declaration, built once at the end of
+/// [`DataSpecification::from_untyped`], covering the user's and the system-defined
+/// specification's constructors, mappings and sorts.
+///
+/// `(name, ResolvedSortId)` uniquely identifies an operation; the residual case of two literally
+/// duplicated declarations (legal: `map f: Nat; f: Nat;`) resolves to the first. Keyed by name
+/// first so a lookup can borrow the `&str` rather than allocate a key; the overloads of one name
+/// are few, so the sort is matched linearly.
+#[derive(Clone)]
+pub(crate) struct DeclarationIndex {
+    operations: FxHashMap<String, Vec<(ResolvedSortId, Operation)>>,
+    /// The [`SortId`] of every user sort declaration, by name (first wins).
+    sorts: FxHashMap<String, SortId>,
+    /// The declaration span of every system-defined sort declaration, by name (first wins).
+    system_sorts: FxHashMap<String, Option<Span>>,
 }
 
-impl<'a> DeclarationIndex<'a> {
-    fn build(spec: &'a DataSpecification) -> Self {
-        let mut constructors = HashMap::new();
-        for decl in &spec.data_specification().constructor_declarations {
-            let Some(id) = decl.id else {
-                // Every declaration is assigned an id during `from_untyped`; a `DataSpecification`
-                // that exists at all has already been through it.
-                continue;
-            };
-            let sort = spec.sort_of_constructor(id);
-            let declaration = declared_span(&decl.identifier.span);
-            constructors
-                .entry((decl.identifier.as_str(), sort))
-                .or_insert((id, declaration));
+/// A declared constructor or mapping, see [`DeclarationIndex`].
+#[derive(Clone)]
+enum Operation {
+    Constructor(ConstructorId, Option<Span>),
+    Mapping(MapId, Option<Span>),
+    /// Declared only on the system-defined specification, whose own ids aren't meaningful to an
+    /// outside caller — but whose declaration span is.
+    System(Option<Span>),
+}
+
+impl DeclarationIndex {
+    /// Requires every user constructor/mapping sort to be resolved in `ctx`.
+    pub(crate) fn build(
+        ctx: &mut TypeCheckContext,
+        spec: &UntypedDataSpecification,
+        system: &UntypedDataSpecification,
+    ) -> Self {
+        let mut index = DeclarationIndex {
+            operations: FxHashMap::default(),
+            sorts: FxHashMap::default(),
+            system_sorts: FxHashMap::default(),
+        };
+
+        // Inserted user constructors first, then user mappings, then the system-defined ones, so
+        // the first one wins in that order.
+        for decl in &spec.constructor_declarations {
+            let id = decl.id.expect("assign_declaration_ids ran during from_untyped");
+            let sort = ctx.sort_of_constructor[&id];
+            let operation = Operation::Constructor(id, declared_span(&decl.identifier.span));
+            index.insert_operation(&decl.identifier, sort, operation);
         }
 
-        let mut mappings = HashMap::new();
-        for decl in &spec.data_specification().map_declarations {
-            let Some(id) = decl.id else {
-                continue;
-            };
-            let sort = spec.sort_of_map(id);
-            let declaration = declared_span(&decl.identifier.span);
-            mappings
-                .entry((decl.identifier.as_str(), sort))
-                .or_insert((id, declaration));
+        for decl in &spec.map_declarations {
+            let id = decl.id.expect("assign_declaration_ids ran during from_untyped");
+            let sort = ctx.sort_of_map[&id];
+            let operation = Operation::Mapping(id, declared_span(&decl.identifier.span));
+            index.insert_operation(&decl.identifier, sort, operation);
         }
 
-        DeclarationIndex {
-            constructors,
-            mappings,
-            system_symbol_spans: &spec.context().system_symbol_spans,
+        let system_operations = system
+            .constructor_declarations
+            .iter()
+            .map(|decl| (&decl.identifier, &decl.sort))
+            .chain(
+                system
+                    .map_declarations
+                    .iter()
+                    .map(|decl| (&decl.identifier, &decl.sort)),
+            );
+        for (identifier, sort) in system_operations {
+            let sort = resolve_sort(ctx, spec, sort);
+            index.insert_operation(identifier, sort, Operation::System(Some(identifier.span.clone())));
+        }
+
+        for (i, decl) in spec.sort_declarations.iter().enumerate() {
+            index.sorts.entry(decl.identifier.clone()).or_insert(SortId::new(i));
+        }
+
+        for decl in &system.sort_declarations {
+            index
+                .system_sorts
+                .entry(decl.identifier.clone())
+                .or_insert_with(|| declared_span(&decl.span));
+        }
+
+        index
+    }
+
+    /// Records `operation` unless `(name, sort)` is already present (first one wins).
+    fn insert_operation(&mut self, name: &str, sort: ResolvedSortId, operation: Operation) {
+        let overloads = self.operations.entry(name.to_string()).or_default();
+        if !overloads.iter().any(|(existing, _)| *existing == sort) {
+            overloads.push((sort, operation));
+        }
+    }
+
+    /// What the constructor or mapping `name` with overload `sort` resolves to.
+    fn operation(&self, name: String, sort: ResolvedSortId) -> ResolvedName {
+        let operation = self
+            .operations
+            .get(&name)
+            .and_then(|overloads| overloads.iter().find(|(candidate, _)| *candidate == sort))
+            .map(|(_, operation)| operation.clone());
+
+        match operation {
+            Some(Operation::Constructor(id, declaration)) => ResolvedName::Constructor { name, id, declaration },
+            Some(Operation::Mapping(id, declaration)) => ResolvedName::Mapping { name, id, declaration },
+            Some(Operation::System(declaration)) => ResolvedName::SystemDefined { name, declaration },
+            None => ResolvedName::SystemDefined {
+                name,
+                declaration: None,
+            },
         }
     }
 }
@@ -446,58 +443,6 @@ pub(crate) fn collect_data_specification_sort_references(spec: &UntypedDataSpeci
     out
 }
 
-/// Every variable a `(EqnSpecId, EquationId)` typing can reference.
-pub(crate) fn collect_equation_variable_declarations(eqn_spec: &EqnSpec) -> VariableSpans {
-    let mut spans = VariableSpans::default();
-    for var in &eqn_spec.node.variables {
-        let var_id = var
-            .var_id
-            .expect("resolve_data_specification_variables ran before typing_info");
-        spans.insert(var_id, var.identifier.span.clone());
-    }
-    for equation in &eqn_spec.node.equations {
-        if let Some(condition) = &equation.condition {
-            collect_data_expr_variable_declarations(condition, &mut spans);
-        }
-        collect_data_expr_variable_declarations(&equation.lhs, &mut spans);
-        collect_data_expr_variable_declarations(&equation.rhs, &mut spans);
-    }
-    spans
-}
-
-/// Every `lambda`/quantifier/comprehension/`whr` binder's own [`VarId`] and declaring span inside
-/// `expr`, inserted into `out` — the binders a checked `DataExpr` can introduce *itself*, as
-/// opposed to a `sum`/`dist`/PBES-PRES-modal-quantifier binder declared *outside* it, which
-/// `checking::Scope` already carries a span for.
-pub(crate) fn collect_data_expr_variable_declarations(expr: &DataExpr, out: &mut VariableSpans) {
-    expr.visit::<Infallible, _>(|node| {
-        match &node.node {
-            DataExprKind::Lambda { variables, .. } | DataExprKind::Quantifier { variables, .. } => {
-                for var in variables {
-                    let var_id = var.var_id.expect("resolve_data_expr_variables/... ran before checking");
-                    out.insert(var_id, var.identifier.span.clone());
-                }
-            }
-            DataExprKind::SetBagComp { variable, .. } => {
-                let var_id = variable
-                    .var_id
-                    .expect("resolve_data_expr_variables/... ran before checking");
-                out.insert(var_id, variable.identifier.span.clone());
-            }
-            DataExprKind::Whr { assignments, .. } => {
-                for assignment in assignments {
-                    let var_id = assignment
-                        .id
-                        .expect("resolve_data_expr_variables/... ran before checking");
-                    out.insert(var_id, assignment.span.clone());
-                }
-            }
-            _ => {}
-        }
-        ControlFlow::Continue(())
-    });
-}
-
 /// Every `lambda`/quantifier/comprehension binder's declared sort inside `expr`, appended to
 /// `out`. `Traverse` recurses into `expr`'s own `DataExpr` children for free; only the binder's
 /// own `sort` (an `IdDecl`, a different node type) needs handling at each matching node.
@@ -529,23 +474,15 @@ fn sort_declaration_by_id(spec: &UntypedDataSpecification, id: SortId) -> Option
 ///
 /// An occurrence with a real [`SortId`] resolves via [`sort_declaration_by_id`], either from its
 /// own [`SortReference::id`] or, for an unresolved [`SortExpressionKind::Reference`], by name via
-/// `name_to_id`. Two shapes carry no [`SortId`]: a container-sort keyword (`List`, `Set`, …),
+/// the [`DeclarationIndex`]. Two shapes carry no [`SortId`]: a container-sort keyword (`List`, `Set`, …),
 /// which has no declaration site, and a primitive basic-sort name (`Bool`, `Nat`, …), which still
 /// has a real declaration span in `system`'s own textual re-declaration of it (`sort Nat;` in
 /// `nat.mcrl2`), found by name instead.
 pub(crate) fn push_sort_references(spec: &DataSpecification, references: &[SortReference], typing: &mut TypingInfo) {
-    if references.is_empty() {
-        return;
-    }
-
-    let mut name_to_id: HashMap<&str, SortId> = HashMap::new();
-    for (i, decl) in spec.data_specification().sort_declarations.iter().enumerate() {
-        name_to_id.entry(decl.identifier.as_str()).or_insert(SortId::new(i));
-    }
-
+    let index = spec.declaration_index();
     for reference in references {
         let name = &reference.name;
-        let id = reference.id.or_else(|| name_to_id.get(name.as_str()).copied());
+        let id = reference.id.or_else(|| index.sorts.get(name).copied());
 
         if let Some(id) = id
             && let Some((decl, is_system)) = sort_declaration_by_id(spec.data_specification(), id)
@@ -575,17 +512,12 @@ pub(crate) fn push_sort_references(spec: &DataSpecification, references: &[SortR
                     declaration: None,
                 },
             );
-        } else if let Some(decl) = spec
-            .system_defined_specification()
-            .sort_declarations
-            .iter()
-            .find(|decl| decl.identifier == *name)
-        {
+        } else if let Some(declaration) = index.system_sorts.get(name) {
             typing.push(
                 reference.span.clone(),
                 ResolvedName::SystemDefined {
                     name: name.clone(),
-                    declaration: declared_span(&decl.span),
+                    declaration: declaration.clone(),
                 },
             );
         }
@@ -601,14 +533,14 @@ pub(crate) fn push_binder_declaration(
     sort: ResolvedSortId,
 ) {
     let sort = sort_expression(data.context(), data.data_specification(), sort);
-    typing.push_typed(
-        span.clone(),
-        Some(sort),
-        ResolvedName::Variable {
+    typing.nodes.push(TypedNode {
+        span: span.clone(),
+        sort: Some(sort),
+        name: Some(ResolvedName::Variable {
             name,
             declaration: Some(span),
-        },
-    );
+        }),
+    });
 }
 
 /// Rebuilds `id` as a [`SortExpression`], so it can be displayed via its existing

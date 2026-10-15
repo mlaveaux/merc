@@ -13,6 +13,7 @@ version.workspace = true
 ena.workspace = true
 indoc.workspace = true
 log.workspace = true
+rustc-hash.workspace = true
 thiserror.workspace = true
 
 merc_aterm.workspace = true
