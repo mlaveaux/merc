@@ -92,8 +92,11 @@ impl ProcessSpecification {
         self.spec.init.as_ref()
     }
 
-    /// Every checked expression's typing across the *whole* specification.
-    pub fn typing_info(&mut self) -> TypingInfo {
+    /// Every checked expression's typing across the *whole* specification: every data equation
+    /// (see [`DataSpecification::typing_info`]) plus every expression checked outside the data
+    /// specification, span-keyed so hover/go-to-definition can look up a sub-expression by source
+    /// position anywhere in the document (see [`TypingInfo::at_offset`]).
+    pub fn typing_info(&self) -> TypingInfo {
         let mut info = self.data.typing_info();
         info.merge(self.typing.clone());
         info

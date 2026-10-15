@@ -75,13 +75,16 @@ where
 /// Brings `variables`, whose sorts are already resolved to `sorts`, into `scope`, and records each
 /// variable's own declaration occurrence in `typing` so it can be hovered/go-to-definition'd the
 /// same as a use of it (see [`typing_info::push_binder_declaration`]).
-pub(crate) fn declare_variables<'a>(
+pub(crate) fn declare_variables<'a, V, S>(
     data: &DataSpecification,
     scope: &mut Vec<(VarId, ResolvedSortId)>,
     typing: &mut TypingInfo,
-    variables: impl IntoIterator<Item = &'a IdDecl>,
-    sorts: impl IntoIterator<Item = ResolvedSortId>,
-) {
+    variables: V,
+    sorts: S,
+) where
+    V: IntoIterator<Item = &'a IdDecl>,
+    S: IntoIterator<Item = ResolvedSortId>,
+{
     for (var, sort) in variables.into_iter().zip(sorts) {
         typing_info::push_binder_declaration(
             data,

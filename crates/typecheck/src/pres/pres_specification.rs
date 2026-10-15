@@ -13,7 +13,7 @@ use crate::DataSpecification;
 use crate::NumberEncoding;
 use crate::ResolvedSortId;
 use crate::TypingInfo;
-use crate::find_anonymous_struct;
+use crate::checking;
 
 use super::PresError;
 use super::check;
@@ -81,8 +81,11 @@ impl PresSpecification {
         &self.spec.init
     }
 
-    /// Every checked expression's typing across the *whole* specification.
-    pub fn typing_info(&mut self) -> TypingInfo {
+    /// Every checked expression's typing across the *whole* specification: every data equation
+    /// (see [`DataSpecification::typing_info`]) plus every expression checked outside the data
+    /// specification, span-keyed so hover/go-to-definition can look up a sub-expression by source
+    /// position anywhere in the document (see [`TypingInfo::at_offset`]).
+    pub fn typing_info(&self) -> TypingInfo {
         let mut info = self.data.typing_info();
         info.merge(self.typing.clone());
         info
@@ -157,16 +160,11 @@ impl DeclarationTables {
     }
 }
 
-/// Resolves a sort expression occurring in a `glob`/PRES-equation-parameter declaration: rejects
-/// an anonymous `struct` (never legal here), then defers to
-/// [`DataSpecification::resolve_declared_sort`] for the rest.
+/// Resolves a sort expression occurring in a `glob`/PRES-equation-parameter declaration, see
+/// [`checking::resolve_declared_sort`].
 pub(super) fn resolve_declared_sort(
     data: &mut DataSpecification,
     sort: &SortExpression,
 ) -> Result<ResolvedSortId, PresError> {
-    if let Some(span) = find_anonymous_struct(sort) {
-        return Err(PresError::AnonymousStructInDeclaration { span });
-    }
-
-    Ok(data.resolve_declared_sort(sort)?)
+    checking::resolve_declared_sort(data, sort, |span| PresError::AnonymousStructInDeclaration { span })
 }

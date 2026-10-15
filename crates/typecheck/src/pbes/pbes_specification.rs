@@ -23,7 +23,7 @@ use crate::DataSpecification;
 use crate::NumberEncoding;
 use crate::ResolvedSortId;
 use crate::TypingInfo;
-use crate::find_anonymous_struct;
+use crate::checking;
 
 use super::PbesError;
 use super::check;
@@ -89,18 +89,11 @@ impl PbesSpecification {
         &self.spec.init
     }
 
-    /// Every checked expression's typing across the *whole* specification — every `eqn` (via
-    /// [`DataSpecification::typing_info`]) plus every PBES expression (a `val(...)` expression, a
-    /// `PropVarInst` argument, …), span-keyed so hover/go-to-definition can look up a
-    /// sub-expression by source position anywhere in the document (see [`TypingInfo::at_offset`])
-    /// without caring which half of the grammar it came from.
-    ///
-    /// The PBES-expression half needs no separate memoization: it was already computed once,
-    /// during the construction walk `from_untyped_with` runs anyway, and is just cloned out of the
-    /// stored value here. The `eqn` half *is* memoized, one level down — see
-    /// [`DataSpecification::typing_info`] — so a repeated call is cheap either way. Mirrors
-    /// [`crate::ProcessSpecification::typing_info`].
-    pub fn typing_info(&mut self) -> TypingInfo {
+    /// Every checked expression's typing across the *whole* specification: every data equation
+    /// (see [`DataSpecification::typing_info`]) plus every expression checked outside the data
+    /// specification, span-keyed so hover/go-to-definition can look up a sub-expression by source
+    /// position anywhere in the document (see [`TypingInfo::at_offset`]).
+    pub fn typing_info(&self) -> TypingInfo {
         let mut info = self.data.typing_info();
         info.merge(self.typing.clone());
         info
@@ -177,16 +170,11 @@ impl DeclarationTables {
     }
 }
 
-/// Resolves a sort expression occurring in a `glob`/PBES-equation-parameter declaration: rejects
-/// an anonymous `struct` (never legal here), then defers to
-/// [`DataSpecification::resolve_declared_sort`] for the rest. Mirrors
-/// `crate::process::process_specification::resolve_declared_sort`.
+/// Resolves a sort expression occurring in a `glob`/PBES-equation-parameter declaration, see
+/// [`checking::resolve_declared_sort`].
 pub(super) fn resolve_declared_sort(
     data: &mut DataSpecification,
     sort: &SortExpression,
 ) -> Result<ResolvedSortId, PbesError> {
-    if let Some(span) = find_anonymous_struct(sort) {
-        return Err(PbesError::AnonymousStructInDeclaration { span });
-    }
-    Ok(data.resolve_declared_sort(sort)?)
+    checking::resolve_declared_sort(data, sort, |span| PbesError::AnonymousStructInDeclaration { span })
 }

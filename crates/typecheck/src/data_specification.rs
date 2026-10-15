@@ -1,17 +1,14 @@
 use std::convert::Infallible;
 use std::fmt;
-use std::sync::Arc;
 
 use log::debug;
 
 use merc_collections::IndexedSet;
 use merc_data::DataExpression;
 use merc_data::Mcrl2DataSpecification;
-use merc_syntax::ConstructorId;
 use merc_syntax::DataExpr;
 use merc_syntax::EqnSpecId;
 use merc_syntax::EquationId;
-use merc_syntax::MapId;
 use merc_syntax::SortExpression;
 use merc_syntax::SortExpressionKind;
 use merc_syntax::SortId;
@@ -25,12 +22,12 @@ use crate::AliasError;
 use crate::EquationTyping;
 use crate::InferenceError;
 use crate::NumberEncoding;
+use crate::Roots;
 #[cfg(test)]
 use crate::Signature;
 use crate::TypeCheckContext;
-use crate::TypedEquation;
+use crate::TypedRoots;
 use crate::TypingInfo;
-use crate::VariableSpans;
 use crate::WellTypedError;
 use crate::apply_sorts_in_data_expr;
 use crate::apply_sorts_in_spec;
@@ -41,7 +38,6 @@ use crate::check_aliases;
 use crate::check_equation_well_formedness;
 use crate::check_no_system_function_redeclaration;
 use crate::check_products_within_domains;
-use crate::check_system_equations;
 use crate::check_system_specification;
 use crate::desugar_structured_sorts;
 use crate::function_update_arities;
@@ -64,6 +60,7 @@ use crate::resolve_type_variables;
 use crate::structured_sort_equations;
 use crate::typecheck_equations;
 use crate::typecheck_function_update_template;
+use crate::typecheck_system_equations;
 use crate::typecheck_templates;
 use crate::typing_info;
 
@@ -82,6 +79,8 @@ pub struct DataSpecification {
     encoding: NumberEncoding,
     /// Every sort-name reference in `spec`'s own declarations.
     sort_references: Vec<typing_info::SortReference>,
+    /// The reverse lookup from a name occurrence to its declaration.
+    declaration_index: typing_info::DeclarationIndex,
 }
 
 impl DataSpecification {
@@ -280,8 +279,10 @@ impl DataSpecification {
 
         // `system` at this point holds only `basics` and the desugared
         // structs' own equations).
-        check_system_equations(&mut context, &spec, &system)?;
+        typecheck_system_equations(&mut context, &spec, &system)?;
         debug!("system-equation inference finished; the system specification is well-typed");
+
+        let declaration_index = typing_info::DeclarationIndex::build(&mut context, &spec, &system);
 
         Ok(Self {
             spec,
@@ -290,6 +291,7 @@ impl DataSpecification {
             context,
             encoding,
             sort_references,
+            declaration_index,
         })
     }
 
@@ -319,6 +321,11 @@ impl DataSpecification {
     /// The query context holding the sorts interned during type checking,
     /// backing the declaration-sort accessors below.
     // Currently exercised by tests only.
+    /// The reverse lookup from a name occurrence to its declaration.
+    pub(crate) fn declaration_index(&self) -> &typing_info::DeclarationIndex {
+        &self.declaration_index
+    }
+
     pub(crate) fn context(&self) -> &TypeCheckContext {
         &self.context
     }
@@ -329,9 +336,9 @@ impl DataSpecification {
     ///
     /// Only ever safe for a *user* declaration's id: every one of those has its sort resolved
     /// unconditionally during `from_untyped`, whether or not anything actually references it. A
-    /// system-defined declaration's id is not resolved this way at all — see
-    /// [`TypeCheckContext::system_symbol_spans`]'s doc comment for where that comes from instead.
-    pub(crate) fn sort_of_constructor(&self, id: ConstructorId) -> crate::ResolvedSortId {
+    /// system-defined declaration's id is not resolved this way at all.
+    #[cfg(test)]
+    pub(crate) fn sort_of_constructor(&self, id: merc_syntax::ConstructorId) -> crate::ResolvedSortId {
         self.context
             .sort_of_constructor
             .get(&id)
@@ -344,7 +351,8 @@ impl DataSpecification {
     /// called before `from_untyped` has completed.
     ///
     /// See [`Self::sort_of_constructor`]'s doc comment: safe only for a *user* declaration's id.
-    pub(crate) fn sort_of_map(&self, id: MapId) -> crate::ResolvedSortId {
+    #[cfg(test)]
+    pub(crate) fn sort_of_map(&self, id: merc_syntax::MapId) -> crate::ResolvedSortId {
         self.context
             .sort_of_map
             .get(&id)
@@ -423,15 +431,9 @@ impl DataSpecification {
         &mut self,
         expr: &DataExpr,
     ) -> Result<(DataExpression, TypingInfo), InferenceError> {
-        // Ties every local binder this.
+        // Ties every occurrence of one of `expr`'s own binders to it.
         let mut expr = expr.clone();
         resolve_data_expr_variables(&mut expr);
-
-        // `expr`'s own binders (a `lambda`/`forall`/`exists`/comprehension/`whr`) each already
-        // carry their own `VarId` and declaring span after resolution above; collected here, from
-        // `expr` itself, before `lower_data_expr` below consumes it.
-        let mut variable_spans = VariableSpans::default();
-        typing_info::collect_data_expr_variable_declarations(&expr, &mut variable_spans);
 
         // The built-in operator nodes (`x + y`, `[x, y]`, `f[x -> y]`) become
         // applications first, exactly as `from_untyped_with` does for the
@@ -439,7 +441,7 @@ impl DataSpecification {
         let lowered_expr = lower_data_expr(expr);
 
         let typing = infer_expression(&mut self.context, &self.spec, &lowered_expr)?;
-        let info = typing_info::build(self, &typing, &variable_spans);
+        let info = typing_info::build(self, Roots::Expression(&lowered_expr), &typing);
 
         let lowered = lower_expression(&self.context, &self.spec, &typing, &lowered_expr, self.encoding)
             .unwrap_or_else(|| panic!("expression '{lowered_expr}' passed inference but failed lowering"));
@@ -453,18 +455,10 @@ impl DataSpecification {
     ///
     /// `key` must index an equation of this specification (the `EqnSpecId`/`EquationId` on
     /// [`Self::data_specification`]); panics otherwise.
-    pub fn equation_typing_info(&mut self, key: (EqnSpecId, EquationId)) -> TypingInfo {
-        if let Some(cached) = self.context.equation_typing_info.get(&key) {
-            return (**cached).clone();
-        }
-
-        let (eqn_spec_id, _) = key;
-        let variable_spans =
-            typing_info::collect_equation_variable_declarations(&self.spec.equation_declarations[*eqn_spec_id]);
-        let info = Arc::new(typing_info::build(self, self.equation_typing(key), &variable_spans));
-        self.context.equation_typing_info.insert(key, Arc::clone(&info));
-
-        (*info).clone()
+    pub fn equation_typing_info(&self, key: (EqnSpecId, EquationId)) -> TypingInfo {
+        let (eqn_spec_id, equation_id) = key;
+        let equation = &self.spec.equation_declarations[*eqn_spec_id].equations[*equation_id];
+        typing_info::build(self, Roots::equation(equation), self.equation_typing(key))
     }
 
     /// Every user equation's typing, merged into one table, in declaration order, plus a
@@ -474,37 +468,18 @@ impl DataSpecification {
     /// equation version, which does *not* include these: a sort declaration isn't scoped to any
     /// one equation, so there is nothing meaningful to slice per `key` the way the rest of this
     /// method's result is.
-    ///
-    /// Memoized as `self.context`'s `whole_typing_info` singleton: a second call reuses the
-    /// cached `Arc` instead of re-merging every equation's typing.
-    pub fn typing_info(&mut self) -> TypingInfo {
-        if let Some(cached) = &self.context.whole_typing_info {
-            return (**cached).clone();
-        }
-
-        // Collected up front so the loop below can call `self.equation_typing_info` (`&mut self`)
-        // without also holding a borrow of `self.spec.equation_declarations`.
-        let keys: Vec<(EqnSpecId, EquationId)> = self
-            .spec
-            .equation_declarations
-            .iter()
-            .flat_map(|eqn_spec| {
-                let eqn_spec_id = eqn_spec.id.expect("assign_declaration_ids ran during from_untyped");
-
-                eqn_spec.equations.iter().map(move |equation| {
-                    let equation_id = equation.id.expect("assign_declaration_ids ran during from_untyped");
-                    (eqn_spec_id, equation_id)
-                })
-            })
-            .collect();
-
+    pub fn typing_info(&self) -> TypingInfo {
         let mut info = TypingInfo::default();
-        for key in keys {
-            info.merge(self.equation_typing_info(key));
+        for eqn_spec in &self.spec.equation_declarations {
+            let eqn_spec_id = eqn_spec.id.expect("assign_declaration_ids ran during from_untyped");
+            for equation in &eqn_spec.equations {
+                let equation_id = equation.id.expect("assign_declaration_ids ran during from_untyped");
+                let typing = self.equation_typing((eqn_spec_id, equation_id));
+                info.merge(typing_info::build(self, Roots::equation(equation), typing));
+            }
         }
 
         typing_info::push_sort_references(self, &self.sort_references, &mut info);
-        self.context.whole_typing_info = Some(Arc::new(info.clone()));
         info
     }
 
@@ -604,7 +579,7 @@ impl fmt::Display for TypedDataSpecification<'_> {
             for equation in &eqn_spec.node.equations {
                 let equation_id = equation.id.expect("assign_declaration_ids ran during from_untyped");
                 let typing = self.spec.equation_typing((eqn_spec_id, equation_id));
-                let text = TypedEquation::new(equation, &self.spec.context, &self.spec.spec, typing);
+                let text = TypedRoots::new(Roots::equation(equation), &self.spec.context, &self.spec.spec, typing);
                 writeln!(f, "   {text};")?;
             }
         }
@@ -711,54 +686,6 @@ mod tests {
         );
         let again = infer_equation_typing(&mut checked.context, &checked.spec, key).unwrap();
         assert!(Arc::ptr_eq(&first, &again));
-    }
-
-    /// A second `equation_typing_info` call for the same key must reuse the cached `Arc` rather
-    /// than re-deriving the `DeclarationIndex` and every node's sort again.
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_equation_typing_info_is_memoized() {
-        let spec = UntypedDataSpecification::parse("map f: Nat; eqn f = 1;").unwrap();
-        let mut checked = DataSpecification::from_untyped(spec).unwrap();
-        let key = (EqnSpecId::new(0), EquationId::new(0));
-
-        checked.equation_typing_info(key);
-        let first = Arc::clone(
-            checked
-                .context
-                .equation_typing_info
-                .get(&key)
-                .expect("equation_typing_info populated the cache"),
-        );
-        checked.equation_typing_info(key);
-        let again = Arc::clone(checked.context.equation_typing_info.get(&key).expect("still cached"));
-        assert!(
-            Arc::ptr_eq(&first, &again),
-            "a second call must reuse the cached TypingInfo, not rebuild it"
-        );
-    }
-
-    /// As [`test_equation_typing_info_is_memoized`], for the whole-document `typing_info` memo.
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_typing_info_is_memoized() {
-        let spec = UntypedDataSpecification::parse("map f: Nat; eqn f = 1;").unwrap();
-        let mut checked = DataSpecification::from_untyped(spec).unwrap();
-
-        checked.typing_info();
-        let first = Arc::clone(
-            checked
-                .context
-                .whole_typing_info
-                .as_ref()
-                .expect("typing_info populated the cache"),
-        );
-        checked.typing_info();
-        let again = Arc::clone(checked.context.whole_typing_info.as_ref().expect("still cached"));
-        assert!(
-            Arc::ptr_eq(&first, &again),
-            "a second call must reuse the cached TypingInfo, not rebuild it"
-        );
     }
 
     #[test]
