@@ -19,7 +19,7 @@ pub enum PbesError {
     /// sort against it.
     #[error(transparent)]
     WellTyped(#[from] WellTypedError),
-    /// A Phase-3 inference error checking a `val(...)` expression, a `PropVarInst` argument, or a
+    /// A sort-inference error checking a `val(...)` expression, a `PropVarInst` argument, or a
     /// quantifier binder.
     #[error(transparent)]
     Inference(#[from] InferenceError),

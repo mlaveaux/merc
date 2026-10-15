@@ -549,7 +549,7 @@ fn test_constant_mapping_converted_from_pos_to_nat() {
 }
 
 /// Picks either one of the already-declared sorts or a built-in sort.
-fn random_leaf(rng: &mut impl Rng, earlier: &[String]) -> String {
+fn random_leaf<R: Rng>(rng: &mut R, earlier: &[String]) -> String {
     const BASICS: [&str; 5] = ["Bool", "Nat", "Pos", "Int", "Real"];
     if !earlier.is_empty() && rng.random_bool(0.6) {
         earlier[rng.random_range(0..earlier.len())].clone()
@@ -560,7 +560,7 @@ fn random_leaf(rng: &mut impl Rng, earlier: &[String]) -> String {
 
 /// Builds a random (non-structured) sort expression over `earlier` sorts and the
 /// built-in sorts, up to `depth` container/function nestings.
-fn random_sort(rng: &mut impl Rng, earlier: &[String], depth: u32) -> String {
+fn random_sort<R: Rng>(rng: &mut R, earlier: &[String], depth: u32) -> String {
     if depth == 0 || rng.random_bool(0.4) {
         return random_leaf(rng, earlier);
     }

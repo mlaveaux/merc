@@ -17,7 +17,7 @@ pub enum ProcessError {
     /// sort against it.
     #[error(transparent)]
     WellTyped(#[from] WellTypedError),
-    /// A Phase-3 inference error checking an action argument, a process-instantiation argument,
+    /// A sort-inference error checking an action argument, a process-instantiation argument,
     /// or a `sum`/`dist` condition or time bound.
     #[error(transparent)]
     Inference(#[from] InferenceError),

@@ -1,7 +1,7 @@
-//! The scoped walk over every PRES equation's formula and `init`: checks each
-//! data expression embedded via `val(...)` against `Real`, and each
-//! `PropVarInst` against the equation table. Resolves the declared sorts of all
-//! bound variables.
+//! The scoped walk over every PRES equation's formula and `init`: checks each `val(...)`
+//! expression against `Real`, resolves each `PropVarInst` against the equation table (name, arity,
+//! and each argument's sort), and resolves the declared sorts of all bound variables —
+//! accumulating each checked expression's [`TypingInfo`] along the way.
 
 use std::convert::Infallible;
 use std::ops::ControlFlow;
@@ -9,7 +9,6 @@ use std::ops::ControlFlow;
 use merc_syntax::PresExpr;
 use merc_syntax::PresExprKind;
 use merc_syntax::PropVarInst;
-use merc_syntax::Span;
 use merc_syntax::Traverse;
 use merc_syntax::UntypedPres;
 use merc_syntax::VarId;
@@ -21,6 +20,7 @@ use crate::TypingInfo;
 use crate::checking::Scope;
 use crate::checking::check_expression_against;
 use crate::checking::collect_binder_sorts;
+use crate::checking::declare_variables;
 use crate::declared_span;
 use crate::typing_info;
 
@@ -47,47 +47,20 @@ pub(super) fn check_pres_specification(
         }
     }
 
-    let globals: Vec<(VarId, ResolvedSortId, Span)> = spec
-        .global_variables
-        .iter()
-        .zip(&tables.global_sorts)
-        .map(|(decl, &sort)| {
-            (
-                decl.var_id.expect("resolve_pres_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        })
-        .collect();
-    for (decl, &sort) in spec.global_variables.iter().zip(&tables.global_sorts) {
-        typing_info::push_binder_declaration(
-            data,
-            &mut typing,
-            decl.identifier.span.clone(),
-            decl.identifier.node.clone(),
-            sort,
-        );
-    }
+    let mut globals = Vec::new();
+    declare_variables(
+        data,
+        &mut globals,
+        &mut typing,
+        &spec.global_variables,
+        tables.global_sorts.iter().copied(),
+    );
 
     for (eqn, params) in spec.equations.iter().zip(&tables.equation_params) {
-        let mut scope = globals.clone();
         // An equation's own parameters are in scope throughout its formula.
-        scope.extend(eqn.variable.parameters.iter().zip(params).map(|(decl, &(_, sort))| {
-            (
-                decl.var_id.expect("resolve_pres_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        }));
-        for (decl, &(_, sort)) in eqn.variable.parameters.iter().zip(params) {
-            typing_info::push_binder_declaration(
-                data,
-                &mut typing,
-                decl.identifier.span.clone(),
-                decl.identifier.node.clone(),
-                sort,
-            );
-        }
+        let mut scope = globals.clone();
+        let sorts = params.iter().map(|&(_, sort)| sort);
+        declare_variables(data, &mut scope, &mut typing, &eqn.variable.parameters, sorts);
         collect_scope(data, &eqn.formula, &mut scope, &mut sort_references, &mut typing)?;
         check_pres_expr(data, tables, &scope, &eqn.formula, &mut typing)?;
     }
@@ -100,14 +73,11 @@ pub(super) fn check_pres_specification(
     Ok(typing)
 }
 
-/// Collects the scope for a PRES expression, resolving the declared sorts of all `Bound` binders.
-///
-/// A plain [`Traverse::try_visit`] walk replaces the previous hand-written recursive-descent
-/// version.
+/// Resolves the declared sort of every `Bound` binder in `expr`, extending `scope`.
 fn collect_scope(
     data: &mut DataSpecification,
     expr: &PresExpr,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), PresError> {
@@ -122,9 +92,6 @@ fn collect_scope(
 
 /// Type-checks a PRES expression: every `val(...)` against `Real`, every `PropVarInst` against the
 /// equation table, and a constant-multiply's own constant against `Real`.
-///
-/// A plain [`Traverse::try_visit`] walk replaces the previous hand-written recursive-descent
-/// version, the same way [`collect_scope`] does above.
 fn check_pres_expr(
     data: &mut DataSpecification,
     tables: &DeclarationTables,
@@ -165,7 +132,7 @@ fn check_pres_expr(
 /// checks each argument against its parameter's sort. On success, also pushes a
 /// [`ResolvedName::PropositionalVariable`] at `inst.identifier`'s own span (not `inst.span`, the
 /// whole `name(args)` node): unlike an action/process name, a PRES equation is never overloaded,
-/// so the equation table's single match is the answer. Mirrors `crate::pbes::check::check_prop_var_inst`.
+/// so the equation table's single match is the answer.
 fn check_prop_var_inst(
     data: &mut DataSpecification,
     tables: &DeclarationTables,

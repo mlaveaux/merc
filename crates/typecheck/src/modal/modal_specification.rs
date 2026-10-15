@@ -119,7 +119,7 @@ impl ModalSpecification {
     }
 
     /// Every checked expression's typing across the *whole* specification.
-    pub fn typing_info(&mut self) -> TypingInfo {
+    pub fn typing_info(&self) -> TypingInfo {
         let mut info = self.data.typing_info();
         info.merge(self.typing.clone());
         info
@@ -163,12 +163,15 @@ pub(super) struct DeclarationTables {
 }
 
 impl DeclarationTables {
-    fn build(
+    fn build<F>(
         data: &mut DataSpecification,
         action_declarations: &[ActDecl],
         equation_system: ModalEquationSystem,
-        mut resolve_declared_sort: impl FnMut(&mut DataSpecification, &SortExpression) -> Result<ResolvedSortId, ModalError>,
-    ) -> Result<Self, ModalError> {
+        mut resolve_declared_sort: F,
+    ) -> Result<Self, ModalError>
+    where
+        F: FnMut(&mut DataSpecification, &SortExpression) -> Result<ResolvedSortId, ModalError>,
+    {
         let actions = if action_declarations.is_empty() {
             ActionChecking::Simple
         } else {
@@ -188,15 +191,15 @@ impl DeclarationTables {
             let mut params = Vec::with_capacity(variable.arguments.len());
             let mut seen = HashSet::new();
             for argument in &variable.arguments {
-                if !seen.insert(argument.identifier.as_str()) {
+                if !seen.insert(argument.decl.identifier.as_str()) {
                     return Err(ModalError::DuplicateFixedPointParameter {
                         variable: variable.identifier.node.clone(),
-                        name: argument.identifier.node.clone(),
-                        span: argument.identifier.span.clone(),
+                        name: argument.decl.identifier.node.clone(),
+                        span: argument.decl.identifier.span.clone(),
                     });
                 }
-                let sort = resolve_declared_sort(data, &argument.sort)?;
-                params.push((argument.identifier.node.clone(), sort));
+                let sort = resolve_declared_sort(data, &argument.decl.sort)?;
+                params.push((argument.decl.identifier.node.clone(), sort));
             }
 
             // `ModalEquationSystem` itself already guarantees every equation's own `StateVarId`

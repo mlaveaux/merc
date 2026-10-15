@@ -3,10 +3,13 @@
 //! and each argument's sort), and pushes/pops quantifier binders — accumulating each checked
 //! expression's [`TypingInfo`] along the way.
 
+use std::convert::Infallible;
+use std::ops::ControlFlow;
+
 use merc_syntax::PbesExpr;
 use merc_syntax::PbesExprKind;
 use merc_syntax::PropVarInst;
-use merc_syntax::Span;
+use merc_syntax::Traverse;
 use merc_syntax::UntypedPbes;
 use merc_syntax::VarId;
 
@@ -17,6 +20,7 @@ use crate::TypingInfo;
 use crate::checking::Scope;
 use crate::checking::check_expression_against;
 use crate::checking::collect_binder_sorts;
+use crate::checking::declare_variables;
 use crate::declared_span;
 use crate::typing_info;
 
@@ -43,47 +47,20 @@ pub(super) fn check_pbes_specification(
         }
     }
 
-    let globals: Vec<(VarId, ResolvedSortId, Span)> = spec
-        .global_variables
-        .iter()
-        .zip(&tables.global_sorts)
-        .map(|(decl, &sort)| {
-            (
-                decl.var_id.expect("resolve_pbes_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        })
-        .collect();
-    for (decl, &sort) in spec.global_variables.iter().zip(&tables.global_sorts) {
-        typing_info::push_binder_declaration(
-            data,
-            &mut typing,
-            decl.identifier.span.clone(),
-            decl.identifier.node.clone(),
-            sort,
-        );
-    }
+    let mut globals = Vec::new();
+    declare_variables(
+        data,
+        &mut globals,
+        &mut typing,
+        &spec.global_variables,
+        tables.global_sorts.iter().copied(),
+    );
 
     for (eqn, params) in spec.equations.iter().zip(&tables.equation_params) {
-        let mut scope = globals.clone();
         // An equation's own parameters are in scope throughout its formula.
-        scope.extend(eqn.variable.parameters.iter().zip(params).map(|(decl, &(_, sort))| {
-            (
-                decl.var_id.expect("resolve_pbes_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        }));
-        for (decl, &(_, sort)) in eqn.variable.parameters.iter().zip(params) {
-            typing_info::push_binder_declaration(
-                data,
-                &mut typing,
-                decl.identifier.span.clone(),
-                decl.identifier.node.clone(),
-                sort,
-            );
-        }
+        let mut scope = globals.clone();
+        let sorts = params.iter().map(|&(_, sort)| sort);
+        declare_variables(data, &mut scope, &mut typing, &eqn.variable.parameters, sorts);
         collect_scope(data, &eqn.formula, &mut scope, &mut sort_references, &mut typing)?;
         check_pbes_expr(data, tables, &scope, &eqn.formula, &mut typing)?;
     }
@@ -96,30 +73,25 @@ pub(super) fn check_pbes_specification(
     Ok(typing)
 }
 
-/// Resolves the declared sort of every `Quantifier` binder in `expr`.
+/// Resolves the declared sort of every `Quantifier` binder in `expr`, extending `scope`.
 fn collect_scope(
     data: &mut DataSpecification,
     expr: &PbesExpr,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), PbesError> {
-    match &expr.node {
-        PbesExprKind::True | PbesExprKind::False | PbesExprKind::DataValExpr(_) | PbesExprKind::PropVarInst(_) => {
-            Ok(())
-        }
-        PbesExprKind::Negation(inner) => collect_scope(data, inner, scope, sort_references, typing),
-        PbesExprKind::Binary { lhs, rhs, .. } => {
-            collect_scope(data, lhs, scope, sort_references, typing)?;
-            collect_scope(data, rhs, scope, sort_references, typing)
-        }
-        PbesExprKind::Quantifier { variables, body, .. } => {
+    expr.try_visit(|expr| {
+        if let PbesExprKind::Quantifier { variables, .. } = &expr.node {
             collect_binder_sorts(data, scope, sort_references, typing, variables, resolve_declared_sort)?;
-            collect_scope(data, body, scope, sort_references, typing)
         }
-    }
+        Ok(ControlFlow::Continue(()))
+    })
+    .map(|_: Option<Infallible>| ())
 }
 
+/// Type-checks a PBES expression: every `val(...)` against `Bool` and every `PropVarInst` against
+/// the equation table.
 fn check_pbes_expr(
     data: &mut DataSpecification,
     tables: &DeclarationTables,
@@ -127,28 +99,31 @@ fn check_pbes_expr(
     expr: &PbesExpr,
     typing: &mut TypingInfo,
 ) -> Result<(), PbesError> {
-    match &expr.node {
-        PbesExprKind::True | PbesExprKind::False => Ok(()),
+    expr.try_visit(|expr| {
+        match &expr.node {
+            PbesExprKind::True
+            | PbesExprKind::False
+            | PbesExprKind::Negation(_)
+            | PbesExprKind::Binary { .. }
+            | PbesExprKind::Quantifier { .. } => {}
 
-        PbesExprKind::DataValExpr(data_expr) => {
-            let bool_sort = data.context().sorts.bool_sort();
-            check_expression_against::<PbesError>(data, scope, data_expr, bool_sort, typing)
+            PbesExprKind::DataValExpr(data_expr) => {
+                let bool_sort = data.context().sorts.bool_sort();
+                check_expression_against::<PbesError>(data, scope, data_expr, bool_sort, typing)?;
+            }
+
+            PbesExprKind::PropVarInst(inst) => check_prop_var_inst(data, tables, scope, inst, typing)?,
         }
-
-        PbesExprKind::PropVarInst(inst) => check_prop_var_inst(data, tables, scope, inst, typing),
-
-        PbesExprKind::Negation(inner) => check_pbes_expr(data, tables, scope, inner, typing),
-
-        PbesExprKind::Binary { lhs, rhs, .. } => {
-            check_pbes_expr(data, tables, scope, lhs, typing)?;
-            check_pbes_expr(data, tables, scope, rhs, typing)
-        }
-
-        PbesExprKind::Quantifier { body, .. } => check_pbes_expr(data, tables, scope, body, typing),
-    }
+        Ok(ControlFlow::Continue(()))
+    })
+    .map(|_: Option<Infallible>| ())
 }
 
-/// Resolves `inst.identifier` against the equation table.
+/// Resolves `inst.identifier` against the equation table (`UndeclaredPropositionalVariable` if
+/// missing), checks its argument count against the declared parameter count (`ArityMismatch`), and
+/// checks each argument against its parameter's sort. On success, also pushes a
+/// [`ResolvedName::PropositionalVariable`] at `inst.identifier`'s own span: a PBES equation is
+/// never overloaded, so the equation table's single match is the answer.
 fn check_prop_var_inst(
     data: &mut DataSpecification,
     tables: &DeclarationTables,

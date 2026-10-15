@@ -31,8 +31,6 @@ pub(crate) fn resolve_system_signature(
     let mut constants: HashMap<String, ResolvedSortId> = HashMap::new();
     push_declarations(ctx, system, spec, true, &mut signature, &mut constants)?;
 
-    record_system_symbol_spans(ctx, spec, system);
-
     let merged = merge_signatures(
         ctx.signature
             .as_deref()
@@ -41,26 +39,6 @@ pub(crate) fn resolve_system_signature(
     );
     ctx.signature = Some(Arc::new(merged));
     Ok(())
-}
-
-/// Resolves each of `system`'s constructor/mapping declarations' sorts and records its own
-/// declaration span in `ctx.system_symbol_spans`, read back by `TypingInfo` for go-to-definition.
-fn record_system_symbol_spans(
-    ctx: &mut TypeCheckContext,
-    spec: &UntypedDataSpecification,
-    system: &UntypedDataSpecification,
-) {
-    for decl in &system.constructor_declarations {
-        let id = resolve_sort(ctx, spec, &decl.sort);
-        ctx.system_symbol_spans
-            .insert((decl.identifier.node.clone(), id), decl.identifier.span.clone());
-    }
-
-    for decl in &system.map_declarations {
-        let id = resolve_sort(ctx, spec, &decl.sort);
-        ctx.system_symbol_spans
-            .insert((decl.identifier.node.clone(), id), decl.identifier.span.clone());
-    }
 }
 
 /// The union of `a` and `b`'s overload sets, per name — ground overloads
@@ -113,10 +91,13 @@ pub(crate) fn merge_signatures(a: &Signature, b: &Signature) -> Signature {
 /// function-update and the comparison/`if` builtins) — see `build_signature`. Every role
 /// (`User`/`Template`/`System`) resolves a name's polymorphic overloads from this same table; there
 /// is no separate, narrower scheme table for struct-scoped system equations any more.
-pub(crate) fn build_polymorphic_schemes<'a>(
+pub(crate) fn build_polymorphic_schemes<'a, I>(
     ctx: &mut TypeCheckContext,
-    templates: impl IntoIterator<Item = &'a UntypedDataSpecification>,
-) -> HashMap<String, Vec<PolySortScheme>> {
+    templates: I,
+) -> HashMap<String, Vec<PolySortScheme>>
+where
+    I: IntoIterator<Item = &'a UntypedDataSpecification>,
+{
     let mut schemes: HashMap<String, Vec<PolySortScheme>> = HashMap::new();
     for template in templates {
         for (identifier, sort) in template

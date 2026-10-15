@@ -21,6 +21,7 @@ use crate::TypingInfo;
 use crate::checking::Scope;
 use crate::checking::check_expression_against;
 use crate::checking::collect_binder_sorts;
+use crate::checking::declare_variables;
 use crate::checking::resolve_single_candidate;
 use crate::declared_span;
 use crate::typing_info;
@@ -55,49 +56,20 @@ pub(super) fn check_process_specification(
         typing_info::collect_sort_name_references(&decl.sort, &mut sort_references);
     }
 
-    let globals: Vec<(VarId, ResolvedSortId, Span)> = spec
-        .global_variables
-        .iter()
-        .zip(&tables.global_sorts)
-        .map(|(decl, &sort)| {
-            (
-                decl.var_id.expect("resolve_process_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        })
-        .collect();
-
-    for (decl, &sort) in spec.global_variables.iter().zip(&tables.global_sorts) {
-        typing_info::push_binder_declaration(
-            data,
-            &mut typing,
-            decl.identifier.span.clone(),
-            decl.identifier.node.clone(),
-            sort,
-        );
-    }
+    let mut globals = Vec::new();
+    declare_variables(
+        data,
+        &mut globals,
+        &mut typing,
+        &spec.global_variables,
+        tables.global_sorts.iter().copied(),
+    );
 
     for (proc_decl, params) in spec.process_declarations.iter().zip(&tables.process_params) {
-        let mut scope = globals.clone();
         // A process's own parameters are in scope throughout its body.
-        scope.extend(proc_decl.params.iter().zip(params).map(|(decl, &(_, sort))| {
-            (
-                decl.var_id.expect("resolve_process_variables ran before checking"),
-                sort,
-                decl.identifier.span.clone(),
-            )
-        }));
-
-        for (decl, &(_, sort)) in proc_decl.params.iter().zip(params) {
-            typing_info::push_binder_declaration(
-                data,
-                &mut typing,
-                decl.identifier.span.clone(),
-                decl.identifier.node.clone(),
-                sort,
-            );
-        }
+        let mut scope = globals.clone();
+        let sorts = params.iter().map(|&(_, sort)| sort);
+        declare_variables(data, &mut scope, &mut typing, &proc_decl.params, sorts);
 
         collect_scope(data, &proc_decl.body, &mut scope, &mut sort_references, &mut typing)?;
         check_process_expr(data, tables, &scope, &proc_decl.body, &mut typing)?;
@@ -119,7 +91,7 @@ pub(super) fn check_process_specification(
 fn collect_scope(
     data: &mut DataSpecification,
     expr: &ProcessExpr,
-    scope: &mut Vec<(VarId, ResolvedSortId, Span)>,
+    scope: &mut Vec<(VarId, ResolvedSortId)>,
     sort_references: &mut Vec<typing_info::SortReference>,
     typing: &mut TypingInfo,
 ) -> Result<(), ProcessError> {
@@ -344,53 +316,39 @@ fn check_instantiation(
         });
     }
 
-    let mut successes = 0usize;
-    let mut first_error = None;
-    let mut matched: Option<(usize, TypingInfo)> = None;
-    for &index in indices {
-        let mut candidate_typing = TypingInfo::default();
-        match check_one_instantiation(
-            data,
-            scope,
-            &tables.process_params[index],
-            assignments,
-            &name.node,
-            &mut candidate_typing,
-        ) {
-            Ok(()) => {
-                successes += 1;
-                matched = Some((index, candidate_typing));
-            }
-            Err(error) => drop(first_error.get_or_insert(error)),
-        }
-    }
-
-    match successes {
-        0 => Err(ProcessError::NoMatchingOverload {
+    let (&index, mut matched_typing) = resolve_single_candidate(
+        indices,
+        |&index, candidate_typing| {
+            check_one_instantiation(
+                data,
+                scope,
+                &tables.process_params[index],
+                assignments,
+                &name.node,
+                candidate_typing,
+            )
+        },
+        |cause| ProcessError::NoMatchingOverload {
             name: name.node.clone(),
             span: span.clone(),
-            cause: Box::new(
-                first_error.expect("at least one candidate, so at least one recorded error when none succeed"),
-            ),
-        }),
-        1 => {
-            let (index, mut matched_typing) = matched.expect("successes == 1 implies a matched candidate");
-            matched_typing.push(
-                name.span.clone(),
-                ResolvedName::Process {
-                    name: name.node.clone(),
-                    declaration: declared_span(&tables.process_decl_spans[index]),
-                },
-            );
-            typing.merge(matched_typing);
-            Ok(())
-        }
-        count => Err(ProcessError::AmbiguousActionOrProcess {
+            cause: Box::new(cause),
+        },
+        |count| ProcessError::AmbiguousActionOrProcess {
             name: name.node.clone(),
             count,
             span: span.clone(),
-        }),
-    }
+        },
+    )?;
+
+    matched_typing.push(
+        name.span.clone(),
+        ResolvedName::Process {
+            name: name.node.clone(),
+            declaration: declared_span(&tables.process_decl_spans[index]),
+        },
+    );
+    typing.merge(matched_typing);
+    Ok(())
 }
 
 fn check_one_instantiation(

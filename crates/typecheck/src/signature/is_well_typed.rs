@@ -118,7 +118,7 @@ pub enum WellTypedError {
     #[error("Error: '{0}'")]
     Custom(MercError),
 
-    /// A Phase-3 sort inference error in a user equation.
+    /// A sort-inference error in a user equation.
     #[error(transparent)]
     Inference(#[from] InferenceError),
 

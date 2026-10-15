@@ -147,7 +147,7 @@ impl Checker<'_> {
         match &expr.node {
             // `Resolved` never occurs in the system-defined specification's own equations, but is
             // grouped with `Id` for exhaustiveness.
-            DataExprKind::Id(name) | DataExprKind::Resolved(name, _) => {
+            DataExprKind::Id(name) | DataExprKind::Resolved(name, _, _) => {
                 if scope.iter().any(|bound| bound == name) {
                     Ok(())
                 } else if variables.contains(name.as_str()) {
@@ -304,7 +304,7 @@ mod tests {
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_constructor_for_basic_sort_is_allowed() {
         // The system spec declares constructors for basic sorts on purpose
-        // (`@c0: Nat`) — `check_system_specification` no longer runs the
+        // (`@c0: Nat`) — `check_system_specification` does not run the
         // signature-level rules at all (see its module doc comment), so this
         // just confirms the name/scope walk itself has no opinion on it.
         let system = UntypedDataSpecification::parse("cons @c0: Nat;").unwrap();
@@ -319,13 +319,13 @@ mod tests {
         assert!(err.to_string().contains("'g'"), "{err}");
     }
 
-    // Duplicate `var`-block variables are no longer this function's job — see
-    // its doc comment — and are instead covered, on this same system-shaped
-    // equation text, by `is_well_typed.rs`'s
+    // Duplicate `var`-block variables are not this function's job — see its
+    // doc comment — and are covered, on this same system-shaped equation text,
+    // by `is_well_typed.rs`'s
     // `test_system_shaped_duplicate_equation_variable_is_rejected` for the
-    // now-shared `check_equation_well_formedness`. Unbound right-hand-side/
-    // condition variables are not a type-checking concern at all any more —
-    // see `merc_sabre::set_automaton::automaton::variables_occur_in_lhs`.
+    // shared `check_equation_well_formedness`. Unbound right-hand-side/
+    // condition variables are not a type-checking concern at all — see
+    // `merc_sabre::set_automaton::automaton::variables_occur_in_lhs`.
 
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri

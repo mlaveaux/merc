@@ -19,7 +19,7 @@ pub enum PresError {
     /// sort against it.
     #[error(transparent)]
     WellTyped(#[from] WellTypedError),
-    /// A Phase-3 inference error checking a real-valued data expression embedded via `val(...)`, a
+    /// A sort-inference error checking a real-valued data expression embedded via `val(...)`, a
     /// `PropVarInst` argument, or an `inf`/`sup`/`sum` binder.
     #[error(transparent)]
     Inference(#[from] InferenceError),

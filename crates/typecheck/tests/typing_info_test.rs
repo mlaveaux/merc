@@ -13,7 +13,7 @@ use merc_typecheck::TypingInfo;
 #[track_caller]
 fn typing_for(text: &str) -> TypingInfo {
     let spec = UntypedDataSpecification::parse(text).expect("the specification should parse");
-    let mut spec = DataSpecification::from_untyped(spec).expect("the specification should type check");
+    let spec = DataSpecification::from_untyped(spec).expect("the specification should type check");
     spec.typing_info()
 }
 
@@ -256,7 +256,7 @@ fn test_a_built_in_sort_reference_now_resolves_to_its_appendix_b_declaration() {
     let text = "map f: Nat;";
     let untyped = UntypedDataSpecification::parse(text).expect("the specification should parse");
     let mut sources = SourceMap::new();
-    let mut spec = DataSpecification::from_untyped_with(untyped, NumberEncoding::default(), &mut sources)
+    let spec = DataSpecification::from_untyped_with(untyped, NumberEncoding::default(), &mut sources)
         .expect("the specification should type check");
     let typing = spec.typing_info();
 

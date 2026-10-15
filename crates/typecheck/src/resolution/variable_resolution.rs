@@ -26,6 +26,7 @@ use merc_syntax::UntypedPres;
 use merc_syntax::UntypedProcessSpecification;
 use merc_syntax::VarId;
 use merc_syntax::VarIdAllocator;
+use merc_utilities::Span;
 use merc_utilities::Step;
 
 /// Resolves every free variable reference in a standalone expression's
@@ -211,10 +212,8 @@ fn resolve_in_state_frm(formula: &mut StateFrm, ids: &mut VarIdAllocator, state_
                     for argument in &mut variable.arguments {
                         resolve_in_data_expr(&mut argument.expr, &mut state.scope, ids);
                     }
-                    let pushed = variable.arguments.len();
-                    for argument in &mut variable.arguments {
-                        argument.id = Some(state.scope.declare(argument.identifier.node.clone(), ids));
-                    }
+                    let declarations = variable.arguments.iter_mut().map(|argument| &mut argument.decl);
+                    let pushed = state.scope.push_declarations(declarations, ids);
                     // The fixpoint variable's own name is in scope for its body only (it may
                     // itself shadow an outer variable of the same name, `mu X. nu X. ...`).
                     let state_var_id = state_var_ids.alloc();
@@ -266,9 +265,9 @@ struct ActFrmScope<'a> {
 /// Resolves every free variable reference in `formula`, sharing `scope`/`ids` with whichever
 /// `resolve_in_state_frm`/`resolve_in_reg_frm` call reached this `ActFrm` through a `Modality`.
 ///
-/// A single [`Traverse::apply_scoped`] walk replaces the previous hand-written recursive-descent
-/// version, the same way [`resolve_in_state_frm`] does above; only `Quantifier` pushes anything, so
-/// `ActFrmScope::undo` only ever needs `Option<usize>`, not the fuller [`Undo`] enum.
+/// A single [`Traverse::apply_scoped`] walk, like [`resolve_in_state_frm`] above; only `Quantifier`
+/// pushes anything, so `ActFrmScope::undo` only ever needs `Option<usize>`, not the fuller [`Undo`]
+/// enum.
 fn resolve_in_act_frm(formula: &mut ActFrm, scope: &mut Scope, ids: &mut VarIdAllocator) {
     let mut state = ActFrmScope {
         scope,
@@ -321,10 +320,16 @@ fn resolve_in_act_frm(formula: &mut ActFrm, scope: &mut Scope, ids: &mut VarIdAl
 /// pushed) binding for a name wins, and dropping back to an outer scope is a cheap truncate.
 /// Shared by [Scope] (`VarId`-keyed data/action binders) and [FixpointScope] (`StateVarId`-keyed
 /// fixpoint variables) — the two id namespaces variable resolution tracks.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct NameStack<Id>(Vec<(String, Id)>);
 
-impl<Id: Copy> NameStack<Id> {
+impl<Id> Default for NameStack<Id> {
+    fn default() -> Self {
+        NameStack(Vec::new())
+    }
+}
+
+impl<Id: Clone> NameStack<Id> {
     /// Pushes one `(name, id)` binding.
     fn push(&mut self, name: String, id: Id) {
         self.0.push((name, id));
@@ -338,18 +343,25 @@ impl<Id: Copy> NameStack<Id> {
 
     /// The innermost binding named `name`, if one is in scope.
     fn resolve(&self, name: &str) -> Option<Id> {
-        self.0.iter().rev().find(|(bound, _)| bound == name).map(|&(_, id)| id)
+        self.0
+            .iter()
+            .rev()
+            .find(|(bound, _)| bound == name)
+            .map(|(_, id)| id.clone())
     }
 }
 
-/// The binders currently in scope, each paired with its declaration's own [VarId] so two
+/// The binders currently in scope, each paired with its declaration's own [VarId] and span, so two
 /// occurrences of the same binder keep comparing equal once rewritten to
-/// [`DataExprKind::Resolved`].
-type Scope = NameStack<VarId>;
+/// [`DataExprKind::Resolved`], and each occurrence knows where its binder is declared.
+type Scope = NameStack<(VarId, Span)>;
 
 impl Scope {
     /// Builds a scope from a binder's own declarations, assigning each a fresh [VarId].
-    fn from_declarations<Id>(variables: &mut [IdDecl<Id>], ids: &mut VarIdAllocator) -> Self {
+    fn from_declarations<'a, Id: 'a, I>(variables: I, ids: &mut VarIdAllocator) -> Self
+    where
+        I: IntoIterator<Item = &'a mut IdDecl<Id>>,
+    {
         let mut scope = Scope::default();
         scope.push_declarations(variables, ids);
         scope
@@ -357,25 +369,26 @@ impl Scope {
 
     /// Pushes each declaration in `variables` onto the scope, assigning it a fresh [VarId], and
     /// returns how many were pushed so the caller can [`Scope::pop`] them back off once its
-    /// subtree is done.
-    ///
-    /// Each declaration's own identifier span stays on the AST node itself (`variable.identifier`)
-    /// rather than being recorded here: a later, on-demand walk over the resolved tree (see
-    /// `crate::typing_info::VariableSpans`) recovers it straight from the declaration when a
-    /// `TypingInfo` query actually needs it, so resolution itself doesn't need to track it.
-    fn push_declarations<Id>(&mut self, variables: &mut [IdDecl<Id>], ids: &mut VarIdAllocator) -> usize {
-        for variable in variables.iter_mut() {
-            variable.var_id = Some(self.declare(variable.identifier.node.clone(), ids));
+    /// subtree is done. Each binder is declared at its identifier's span.
+    fn push_declarations<'a, Id: 'a, I>(&mut self, variables: I, ids: &mut VarIdAllocator) -> usize
+    where
+        I: IntoIterator<Item = &'a mut IdDecl<Id>>,
+    {
+        let mut pushed = 0;
+        for variable in variables {
+            variable.var_id =
+                Some(self.declare(variable.identifier.node.clone(), variable.identifier.span.clone(), ids));
+            pushed += 1;
         }
-        variables.len()
+        pushed
     }
 
-    /// Declares a single binder: allocates it a fresh [VarId] and pushes `name` onto the scope
-    /// under that id.
-    fn declare(&mut self, name: String, ids: &mut VarIdAllocator) -> VarId {
-        let var_id = ids.alloc();
-        self.push(name, var_id);
-        var_id
+    /// Declares a single binder at `declaration`: allocates it a fresh [VarId] and pushes `name`
+    /// onto the scope under that id.
+    fn declare(&mut self, name: String, declaration: Span, ids: &mut VarIdAllocator) -> VarId {
+        let id = ids.alloc();
+        self.push(name, (id, declaration));
+        id
     }
 }
 
@@ -494,11 +507,11 @@ fn resolve_in_prop_var_inst(inst: &mut PropVarInst, scope: &mut Scope, ids: &mut
 fn resolve_in_data_expr(expr: &mut DataExpr, scope: &mut Scope, ids: &mut VarIdAllocator) {
     match &mut expr.node {
         DataExprKind::Id(name) => {
-            if let Some(declaration) = scope.resolve(name) {
-                expr.node = DataExprKind::Resolved(name.clone(), declaration);
+            if let Some((id, declaration)) = scope.resolve(name) {
+                expr.node = DataExprKind::Resolved(name.clone(), id, declaration);
             }
         }
-        DataExprKind::Resolved(_, _)
+        DataExprKind::Resolved(_, _, _)
         | DataExprKind::Number(_)
         | DataExprKind::Bool(_)
         | DataExprKind::EmptyList
@@ -549,7 +562,7 @@ fn resolve_in_data_expr(expr: &mut DataExpr, scope: &mut Scope, ids: &mut VarIdA
             }
             let pushed = assignments.len();
             for assignment in assignments.iter_mut() {
-                assignment.id = Some(scope.declare(assignment.identifier.clone(), ids));
+                assignment.id = Some(scope.declare(assignment.identifier.clone(), assignment.span.clone(), ids));
             }
             resolve_in_data_expr(expr, scope, ids);
             scope.pop(pushed);
@@ -592,7 +605,7 @@ mod tests {
         };
         assert!(matches!(
             &args[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -611,7 +624,7 @@ mod tests {
         };
         assert!(matches!(
             &args[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == declared
         ));
     }
 
@@ -635,7 +648,7 @@ mod tests {
         };
         assert!(matches!(
             &rhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == declared
         ));
     }
 
@@ -656,7 +669,7 @@ mod tests {
         assert_eq!(assignments[0].identifier, "n");
         assert!(matches!(
             &assignments[0].expr.node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -681,11 +694,11 @@ mod tests {
         };
         assert!(matches!(
             &lhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == x_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == x_declared
         ));
         assert!(matches!(
             &rhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == n_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == n_declared
         ));
         // The process parameter and the nested quantifier binder are distinct binders and must
         // never share an id, even though each is the "first" binder of its own construct.
@@ -723,7 +736,7 @@ mod tests {
         };
         assert!(matches!(
             &inst.arguments[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -745,7 +758,7 @@ mod tests {
         };
         assert!(matches!(
             &lhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -760,7 +773,7 @@ mod tests {
             .expect("the global was assigned a VarId");
         assert!(matches!(
             &pbes.init.arguments[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "g" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "g" && *var_id == declared
         ));
     }
 
@@ -781,7 +794,7 @@ mod tests {
         };
         assert!(matches!(
             &inst.arguments[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -800,7 +813,7 @@ mod tests {
         };
         assert!(matches!(
             &data_expr.node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -818,7 +831,7 @@ mod tests {
         };
         assert!(matches!(
             &constant.node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == declared
         ));
     }
 
@@ -833,7 +846,7 @@ mod tests {
             .expect("the global was assigned a VarId");
         assert!(matches!(
             &pres.init.arguments[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "g" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "g" && *var_id == declared
         ));
     }
 
@@ -850,11 +863,11 @@ mod tests {
         assert!(matches!(
             &equation.lhs.node,
             DataExprKind::Application { arguments, .. }
-                if matches!(&arguments[0].node, DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == declared)
+                if matches!(&arguments[0].node, DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == declared)
         ));
         assert!(matches!(
             &equation.rhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == declared
         ));
     }
 
@@ -871,7 +884,7 @@ mod tests {
         let condition = equation.condition.as_ref().expect("expected a condition");
         assert!(matches!(
             &condition.node,
-            DataExprKind::Resolved(name, var_id) if name == "x" && *var_id == declared
+            DataExprKind::Resolved(name, var_id, _) if name == "x" && *var_id == declared
         ));
     }
 
@@ -893,7 +906,7 @@ mod tests {
         let second = &spec.equation_declarations[1].equations[0];
         assert!(matches!(
             &second.rhs.node,
-            DataExprKind::Resolved(name, var_id) if name == "y" && *var_id == y_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "y" && *var_id == y_declared
         ));
     }
 
@@ -988,11 +1001,11 @@ mod tests {
         };
         assert!(matches!(
             &multi_action.actions[0].args[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "m" && *var_id == m_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "m" && *var_id == m_declared
         ));
         assert!(matches!(
             &multi_action.actions[0].args[1].node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == n_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == n_declared
         ));
     }
 
@@ -1032,7 +1045,7 @@ mod tests {
         };
         assert!(matches!(
             &multi_action.actions[0].args[0].node,
-            DataExprKind::Resolved(name, var_id) if name == "n" && *var_id == inner_declared
+            DataExprKind::Resolved(name, var_id, _) if name == "n" && *var_id == inner_declared
         ));
     }
 }
