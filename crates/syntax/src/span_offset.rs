@@ -167,8 +167,8 @@ fn offset_eqn_decl<F: FnMut(&mut Span)>(equation: &mut EqnDecl, f: &mut F) {
 fn offset_data_expr<F: FnMut(&mut Span)>(expr: &mut DataExpr, f: &mut F) {
     f(&mut expr.span);
     match &mut expr.node {
+        DataExprKind::Resolved(_, _, declaration) => f(declaration),
         DataExprKind::Id(_)
-        | DataExprKind::Resolved(_, _)
         | DataExprKind::Number(_)
         | DataExprKind::Bool(_)
         | DataExprKind::EmptyList
@@ -384,8 +384,7 @@ fn offset_state_var_decl<F: FnMut(&mut Span)>(decl: &mut StateVarDecl, f: &mut F
 }
 
 fn offset_state_var_assignment<F: FnMut(&mut Span)>(assignment: &mut StateVarAssignment, f: &mut F) {
-    f(&mut assignment.identifier.span);
-    offset_sort_expression(&mut assignment.sort, f);
+    offset_id_decl(&mut assignment.decl, f);
     offset_data_expr(&mut assignment.expr, f);
 }
 

@@ -885,7 +885,7 @@ define_traversal! {
             }
         }
         DataExprKind::Id(_)
-        | DataExprKind::Resolved(_, _)
+        | DataExprKind::Resolved(_, _, _)
         | DataExprKind::Number(_)
         | DataExprKind::Bool(_)
         | DataExprKind::EmptyList

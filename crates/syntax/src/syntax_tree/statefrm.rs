@@ -24,10 +24,8 @@ use super::Fixity;
 use super::Operator;
 use super::ParseNode;
 use super::RuleFixity;
-use super::SortExpression;
 use super::StateVarId;
 use super::StateVarName;
-use super::VarId;
 use super::build_pratt_parser;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -72,13 +70,14 @@ impl StateVarDecl {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+/// A fixpoint-variable parameter `x: S = e`: a variable declaration together with its initial
+/// value.
 pub struct StateVarAssignment {
-    /// The parameter's own name.
-    pub identifier: Spanned<String>,
-    pub sort: SortExpression,
+    /// The parameter's own declaration; its [`IdDecl::var_id`] is assigned during variable
+    /// resolution.
+    pub decl: IdDecl,
+    /// The parameter's initial value.
     pub expr: DataExpr,
-    /// Assigned during variable resolution; see [VarId].
-    pub id: Option<VarId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -252,7 +251,7 @@ impl fmt::Display for StateVarDecl {
 
 impl fmt::Display for StateVarAssignment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} : {} = {}", self.identifier.node, self.sort, self.expr)
+        write!(f, "{} : {} = {}", self.decl.identifier.node, self.decl.sort, self.expr)
     }
 }
 
@@ -702,7 +701,15 @@ impl Mcrl2Parser {
     fn StateVarAssignment(input: ParseNode) -> ParseResult<StateVarAssignment> {
         match_nodes!(input.into_children();
             [Id(identifier), SortExpr(sort), DataExpr(expr)] => {
-                Ok(StateVarAssignment { identifier, sort, expr, id: None })
+                Ok(StateVarAssignment {
+                    decl: IdDecl {
+                        identifier,
+                        sort,
+                        id: None,
+                        var_id: None,
+                    },
+                    expr,
+                })
             }
         )
     }

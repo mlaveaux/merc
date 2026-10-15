@@ -59,9 +59,9 @@ pub enum DataExprBinaryOp {
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum DataExprKind {
     Id(String),
-    /// A variable reference paired with its declaring binder's own [VarId]: not this
-    /// occurrence's identity.
-    Resolved(String, VarId),
+    /// A variable reference paired with its declaring binder's own [VarId] and that binder's
+    /// declaration span: not this occurrence's identity.
+    Resolved(String, VarId, Span),
     Number(String), // Is string because the number can be any size.
     Bool(bool),
     Application {
@@ -207,7 +207,7 @@ impl fmt::Display for DataExpr {
                     .format_with(", ", |e, f| f(&format_args!("{}: {}", e.expr, e.multiplicity)))
             ),
             DataExprKind::Set(expressions) => write!(f, "{{ {} }}", expressions.iter().format(", ")),
-            DataExprKind::Id(identifier) | DataExprKind::Resolved(identifier, _) => write!(f, "{identifier}"),
+            DataExprKind::Id(identifier) | DataExprKind::Resolved(identifier, _, _) => write!(f, "{identifier}"),
             DataExprKind::Binary { op, lhs, rhs } => write!(f, "({lhs} {op} {rhs})"),
             DataExprKind::Unary { op, expr } => write!(f, "({op} {expr})"),
             DataExprKind::Bool(value) => write!(f, "{value}"),
@@ -573,7 +573,7 @@ impl Operator for DataExprKind {
             DataExprKind::Unary { .. } => Fixity::Prefix(12),
             DataExprKind::FunctionUpdate { .. } | DataExprKind::Application { .. } => Fixity::Postfix(13),
             DataExprKind::Id(_)
-            | DataExprKind::Resolved(_, _)
+            | DataExprKind::Resolved(_, _, _)
             | DataExprKind::Number(_)
             | DataExprKind::Bool(_)
             | DataExprKind::EmptyList
