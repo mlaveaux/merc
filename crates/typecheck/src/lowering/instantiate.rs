@@ -92,15 +92,19 @@ pub(crate) enum SortCollectionMode {
 /// equations cannot collide. Records a [TemplateInstantiation]
 /// for each batch, so its equations can be specialized from the template's
 /// own proven typing rather than re-checked.
-fn merge_generated(
+fn merge_generated<G, D>(
     sources: &mut SourceMap,
     result: &mut UntypedDataSpecification,
     worklist: Vec<SortExpression>,
     seen: &HashSet<SortExpression>,
     scan_mode: SortCollectionMode,
-    generate: impl FnMut(&mut SourceMap, &SortExpression) -> (UntypedDataSpecification, (TemplateId, Vec<SortExpression>)),
-    extra_dependencies: impl FnMut(&SortExpression) -> Vec<SortExpression>,
-) -> Vec<TemplateInstantiation> {
+    generate: G,
+    extra_dependencies: D,
+) -> Vec<TemplateInstantiation>
+where
+    G: FnMut(&mut SourceMap, &SortExpression) -> (UntypedDataSpecification, (TemplateId, Vec<SortExpression>)),
+    D: FnMut(&SortExpression) -> Vec<SortExpression>,
+{
     let mut seen = seen.clone();
     let mut instantiations = Vec::new();
     expand_sorts(
@@ -444,15 +448,19 @@ fn basic_sort_dependencies(
 /// it passes a closure that always returns empty. A self-reference (`Real`'s
 /// own `min`/`max` use `if` on `Real`) is a no-op, exactly like a container
 /// referencing itself: `seen` already dedupes it.
-fn expand_sorts<T>(
+fn expand_sorts<T, G, D, O>(
     sources: &mut SourceMap,
     mut worklist: Vec<SortExpression>,
     seen: &mut HashSet<SortExpression>,
     scan_mode: SortCollectionMode,
-    mut generate: impl FnMut(&mut SourceMap, &SortExpression) -> (UntypedDataSpecification, T),
-    mut extra_dependencies: impl FnMut(&SortExpression) -> Vec<SortExpression>,
-    mut on_generated: impl FnMut(UntypedDataSpecification, T),
-) {
+    mut generate: G,
+    mut extra_dependencies: D,
+    mut on_generated: O,
+) where
+    G: FnMut(&mut SourceMap, &SortExpression) -> (UntypedDataSpecification, T),
+    D: FnMut(&SortExpression) -> Vec<SortExpression>,
+    O: FnMut(UntypedDataSpecification, T),
+{
     while let Some(sort) = worklist.pop() {
         if !seen.insert(sort.clone()) {
             continue;
