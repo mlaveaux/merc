@@ -16,11 +16,18 @@ use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_aut;
 use merc_lts::write_aut;
 use merc_symbolic::bits_to_bdd;
+use merc_vpg::OddWarmStart;
+use merc_vpg::PG;
+use merc_vpg::ParityGame;
 use merc_vpg::Projected;
 use merc_vpg::ProjectedLts;
 use merc_vpg::Solver;
+use merc_vpg::StrategyImprovementAlgorithm;
+use merc_vpg::StrategyImprovementOptions;
+use merc_vpg::VertexIndex;
 use merc_vpg::project_feature_transition_system_iter;
 use merc_vpg::solve_priority_promotion;
+use merc_vpg::solve_strategy_improvement;
 use merc_vpg::verify_solution;
 use oxidd::BooleanFunction;
 
@@ -122,6 +129,52 @@ struct SolveArgs {
     /// Whether to verify the solution after computing it
     #[arg(long, default_value_t = false)]
     verify_solution: bool,
+
+    /// Strategy improvement only: a file with the initial move of vertices,
+    /// one `<from> <to>` or `<from> <name> <to> <name>` per line. Other
+    /// vertices start with their first outgoing edge.
+    #[arg(long)]
+    initial_strategy: Option<PathBuf>,
+
+    /// Strategy improvement only: from which profile Odd's best response is
+    /// computed in every iteration.
+    #[arg(long, default_value_t = OddWarmStart::Initial)]
+    odd_warm_start: OddWarmStart,
+
+    /// Strategy improvement only: fail after this many iterations.
+    #[arg(long)]
+    max_iterations: Option<usize>,
+}
+
+/// Reads an initial strategy profile for strategy improvement: every vertex
+/// starts with its first outgoing edge, unless the file gives another move.
+fn read_initial_strategy(game: &ParityGame, path: &Path) -> Result<Vec<VertexIndex>, MercError> {
+    let mut profile: Vec<VertexIndex> = game
+        .iter_vertices()
+        .map(|v| {
+            game.outgoing_edges(v)
+                .next()
+                .map(|edge| edge.to())
+                .ok_or_else(|| format!("Vertex {} has no outgoing edge", *v))
+        })
+        .collect::<Result<_, _>>()?;
+
+    for line in read_to_string(path)?.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let (from, to) = match parts.len() {
+            0 => continue,
+            2 | 3 => (parts[0], parts[1]),
+            _ => (parts[0], parts[2]),
+        };
+        let from: usize = from.parse()?;
+        let to: usize = to.parse()?;
+        if from >= profile.len() || to >= profile.len() {
+            return Err(format!("Initial move {from} -> {to} is out of bounds").into());
+        }
+        profile[from] = VertexIndex::new(to);
+    }
+
+    Ok(profile)
 }
 
 /// Compute the reachable part of a parity game
@@ -282,10 +335,31 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         // Read and solve a standard parity game.
         let game = timing.measure("read_pg", || read_pg(&mut file))?;
 
-        let (solution, strategy) = timing.measure("solve_zielonka", || match args.solver {
-            Solver::Zielonka => solve_zielonka(&game, args.verify_solution),
-            Solver::PriorityPromotion => solve_priority_promotion(&game, args.verify_solution),
-        });
+        let (solution, strategy) = match args.solver {
+            Solver::Zielonka => timing.measure("solve_zielonka", || solve_zielonka(&game, args.verify_solution)),
+            Solver::PriorityPromotion => timing.measure("solve_priority_promotion", || {
+                solve_priority_promotion(&game, args.verify_solution)
+            }),
+            Solver::HybridSi | Solver::VjSi => {
+                let algorithm = if args.solver == Solver::HybridSi {
+                    StrategyImprovementAlgorithm::HybridB
+                } else {
+                    StrategyImprovementAlgorithm::VogeJurdzinski
+                };
+                let mut options = StrategyImprovementOptions::new(algorithm);
+                options.odd_warm_start = args.odd_warm_start;
+                options.max_iterations = args.max_iterations;
+                if let Some(path) = &args.initial_strategy {
+                    options.initial_profile = Some(read_initial_strategy(&game, path)?);
+                }
+
+                let result = timing.measure("solve_strategy_improvement", || {
+                    solve_strategy_improvement(&game, &options, args.verify_solution)
+                })?;
+                info!("Strategy improvement ({}): {}", args.solver, result.statistics);
+                (result.solution, result.strategy)
+            }
+        };
         if args.full_solution {
             for (index, player_set) in solution.iter().enumerate() {
                 println!("W{index}: {}", player_set.iter_ones().format(", "));
