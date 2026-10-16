@@ -8,6 +8,10 @@ pub enum Solver {
     Zielonka,
     /// Priority promotion algorithm.
     PriorityPromotion,
+    /// The hybrid strategy improvement algorithm H-B on the Vöge-Jurdziński valuation.
+    HybridSi,
+    /// Switch-all strategy improvement of Vöge and Jurdziński.
+    VjSi,
 }
 
 /// Variant of the parity game algorithm to use.
@@ -27,6 +31,8 @@ impl fmt::Display for Solver {
         match self {
             Self::Zielonka => write!(f, "zielonka"),
             Self::PriorityPromotion => write!(f, "priority-promotion"),
+            Self::HybridSi => write!(f, "hybrid-si"),
+            Self::VjSi => write!(f, "vj-si"),
         }
     }
 }

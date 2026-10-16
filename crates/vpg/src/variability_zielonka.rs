@@ -30,6 +30,7 @@ use crate::Projected;
 use crate::Repeat;
 use crate::Set;
 use crate::Solver;
+use crate::StrategyImprovementAlgorithm;
 use crate::Submap;
 use crate::VariabilityParityGame;
 use crate::VariabilityPredecessors;
@@ -39,6 +40,7 @@ use crate::combine;
 use crate::compute_reachable;
 use crate::project_variability_parity_games_iter;
 use crate::solve_priority_promotion;
+use crate::solve_strategy_improvement_default;
 use crate::solve_zielonka;
 use crate::x_and_not_x;
 
@@ -112,6 +114,14 @@ pub fn solve_variability_product_zielonka<'a>(
                 let (pg_solution, _) = match solver {
                     Solver::Zielonka => solve_zielonka(&reachable_pg, false),
                     Solver::PriorityPromotion => solve_priority_promotion(&reachable_pg, false),
+                    Solver::HybridSi => {
+                        solve_strategy_improvement_default(&reachable_pg, StrategyImprovementAlgorithm::HybridB, false)
+                    }
+                    Solver::VjSi => solve_strategy_improvement_default(
+                        &reachable_pg,
+                        StrategyImprovementAlgorithm::VogeJurdzinski,
+                        false,
+                    ),
                 };
                 let mut new_solution = [
                     bitvec![usize, Lsb0; 0; vpg.num_of_vertices()],
