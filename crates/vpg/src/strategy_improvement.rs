@@ -93,6 +93,8 @@ pub struct StrategyImprovementOptions {
     pub odd_warm_start: OddWarmStart,
     /// Stop with an error after this many iterations.
     pub max_iterations: Option<usize>,
+    /// Compute the decisive-element statistics ([`DecisiveStatistics`]).
+    pub decisive: bool,
 }
 
 impl fmt::Display for OddWarmStart {
@@ -112,6 +114,7 @@ impl StrategyImprovementOptions {
             initial_profile: None,
             odd_warm_start: OddWarmStart::Initial,
             max_iterations: None,
+            decisive: false,
         }
     }
 }
@@ -130,6 +133,98 @@ pub struct StrategyImprovementStatistics {
     pub fallbacks: usize,
     /// The wall time of the run (excluding the relabelling).
     pub time: Duration,
+    /// The decisive-element statistics, if requested.
+    pub decisive: Option<DecisiveStatistics>,
+}
+
+/// Statistics of the decisive elements of a run (`experiments/hb_g1`, section 1).
+///
+/// Let `Ξ_k` be the valuation of Even's strategy in round `k = 0..T-1`, and
+/// `Ξ_T` the final one. Round `k` is an *L-round* if the cycle maximum of some
+/// vertex differs in `Ξ_k` and `Ξ_{k+1}`. Otherwise its decisive element
+/// `δ_k` is the most relevant vertex (relevance index) of the symmetric
+/// differences `B_k(v) Δ B_{k+1}(v)` over all `v`, or `-1` if there is none.
+/// `N_x` counts the rounds with `δ_k = x`, and `N^I_x` the same within one
+/// l-interval (a maximal run of non-L rounds).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DecisiveStatistics {
+    /// The number of L-rounds `NL`.
+    pub l_rounds: usize,
+    /// `max_x N_x`.
+    pub max_count: usize,
+    /// The element `x` (relevance index, `-1` for none) attaining `max_count`.
+    pub max_count_element: i64,
+    /// `max_{I,x} N^I_x`.
+    pub max_interval_count: usize,
+    /// The maximum number of consecutive executed rounds with the same `σ̄`.
+    pub max_epoch_length: usize,
+    /// The number of Even vertices `n_E`.
+    pub even_vertices: usize,
+}
+
+impl fmt::Display for DecisiveStatistics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "l-rounds {}, max N_x {} (x = {}), max N^I_x {}, max epoch length {}, even vertices {}",
+            self.l_rounds,
+            self.max_count,
+            self.max_count_element,
+            self.max_interval_count,
+            self.max_epoch_length,
+            self.even_vertices
+        )
+    }
+}
+
+/// The part of a valuation needed for the decisive-element statistics.
+struct Snapshot {
+    profile: Vec<u32>,
+    lambda: Vec<u32>,
+    depth: Vec<u32>,
+}
+
+/// The vertices of `B(x)` under the profile `f`, in decreasing order.
+fn b_set(f: &[u32], lambda: &[u32], depth: &[u32], x: usize, out: &mut Vec<u32>) {
+    out.clear();
+    let mut y = x;
+    while depth[y] > 0 {
+        if y as u32 > lambda[y] {
+            out.push(y as u32);
+        }
+        y = f[y] as usize;
+    }
+    out.sort_unstable_by(|a, b| b.cmp(a));
+}
+
+/// The decisive element between two valuations with the same cycle maxima:
+/// the maximum of all `B_prev(v) Δ B_cur(v)`, or `-1`.
+fn decisive_element(prev: &Snapshot, cur: &Snapshot, left: &mut Vec<u32>, right: &mut Vec<u32>) -> i64 {
+    let mut delta = -1i64;
+    for v in 0..prev.profile.len() {
+        let (dp, dc) = (prev.depth[v], cur.depth[v]);
+        if dp == 0 && dc == 0 {
+            continue;
+        }
+        if dp > 0 && dc > 0 && prev.profile[v] == cur.profile[v] {
+            // Same move: the symmetric difference is that of the successor.
+            continue;
+        }
+        b_set(&prev.profile, &prev.lambda, &prev.depth, v, left);
+        b_set(&cur.profile, &cur.lambda, &cur.depth, v, right);
+        let mut i = 0;
+        let d = loop {
+            match (left.get(i), right.get(i)) {
+                (None, None) => break -1,
+                (Some(a), None) => break *a as i64,
+                (None, Some(b)) => break *b as i64,
+                (Some(a), Some(b)) if a != b => break (*a).max(*b) as i64,
+                _ => i += 1,
+            }
+        };
+        delta = delta.max(d);
+    }
+    delta
 }
 
 impl fmt::Display for StrategyImprovementStatistics {
@@ -142,7 +237,11 @@ impl fmt::Display for StrategyImprovementStatistics {
             self.best_response_rounds,
             self.fallbacks,
             self.time.as_secs_f64()
-        )
+        )?;
+        if let Some(decisive) = &self.decisive {
+            write!(f, ", {decisive}")?;
+        }
+        Ok(())
     }
 }
 
@@ -619,6 +718,18 @@ impl<'a> StrategyImprovement<'a> {
         let mut choice_filtered = vec![u32::MAX; n];
         let mut choice_improving = vec![u32::MAX; n];
 
+        // State of the decisive-element statistics.
+        let mut decisive = options.decisive.then(|| DecisiveStatistics {
+            even_vertices: (0..n).filter(|&v| !game.odd[v]).count(),
+            ..Default::default()
+        });
+        let mut snapshot: Option<Snapshot> = None;
+        let mut counts = vec![0usize; n + 1];
+        let mut interval_counts = vec![0usize; n + 1];
+        let mut touched: Vec<usize> = Vec::new();
+        let mut epoch_length = 0;
+        let (mut left, mut right) = (Vec::new(), Vec::new());
+
         loop {
             // σ̄: Odd's best response to σ, with valuation Ξ_σ.
             let mut ps = p.clone();
@@ -643,7 +754,39 @@ impl<'a> StrategyImprovement<'a> {
                 }
             }
 
+            if let Some(statistics) = decisive.as_mut() {
+                let current = Snapshot {
+                    profile: ps.clone(),
+                    lambda: self.valuation.lambda.clone(),
+                    depth: self.valuation.depth.clone(),
+                };
+                if let Some(prev) = &snapshot {
+                    if prev.lambda != current.lambda {
+                        statistics.l_rounds += 1;
+                        for &i in &touched {
+                            interval_counts[i] = 0;
+                        }
+                        touched.clear();
+                    } else {
+                        let delta = decisive_element(prev, &current, &mut left, &mut right);
+                        let index = (delta + 1) as usize;
+                        counts[index] += 1;
+                        if interval_counts[index] == 0 {
+                            touched.push(index);
+                        }
+                        interval_counts[index] += 1;
+                        if counts[index] > statistics.max_count {
+                            statistics.max_count = counts[index];
+                            statistics.max_count_element = delta;
+                        }
+                        statistics.max_interval_count = statistics.max_interval_count.max(interval_counts[index]);
+                    }
+                }
+                snapshot = Some(current);
+            }
+
             if !improvable {
+                self.statistics.decisive = decisive;
                 return Ok(ps);
             }
 
@@ -653,6 +796,11 @@ impl<'a> StrategyImprovement<'a> {
                 .is_none_or(|prev| (0..n).any(|v| game.odd[v] && prev[v] != ps[v]));
             if changed {
                 self.statistics.epochs += 1;
+                epoch_length = 0;
+            }
+            epoch_length += 1;
+            if let Some(statistics) = decisive.as_mut() {
+                statistics.max_epoch_length = statistics.max_epoch_length.max(epoch_length);
             }
 
             let mut q = match options.odd_warm_start {
@@ -874,6 +1022,38 @@ mod tests {
         assert_eq!(valuation.lambda, vec![1, 1]);
         valuation.compute(&[0, 1]);
         assert_eq!(valuation.compare(&game, 0, 1), Ordering::Greater);
+    }
+
+    /// The G1 counterexample of `experiments/hb_epochs_count` (n = 14): N_13 = 16 = n + NL, with
+    /// (iterations, NL, max N_x, max N^I_x, max epoch length) from `hb_g1/scripts/g1.py`.
+    #[test]
+    fn test_decisive_statistics_g1_counterexample() {
+        let game = read_pg("parity 14;\n0 5 1 7;\n1 16 0 8,4,7,12,5;\n2 30 0 10,6,0;\n3 21 0 4,13,6,0,7,5,9,3;\n4 4 0 1,3,0,10,12,6;\n5 24 0 3,7,5,9;\n6 28 1 2,7,6,9;\n7 15 0 13,6;\n8 4 0 11,6,0,3,5,9,7,10;\n9 11 0 12,6,10,0,7;\n10 22 1 3,10,5,13,4,6,1,2;\n11 16 0 2,11,12,8,6,7,4,9,5;\n12 14 0 5,6,13,7,9,0;\n13 1 0 9,10,6;\n".as_bytes()).unwrap();
+        let mut profile: Vec<VertexIndex> = game.iter_vertices().collect();
+        for line in "0 7\n1 7\n2 0\n3 13\n4 10\n5 9\n6 6\n7 13\n8 0\n9 0\n10 10\n11 7\n12 13\n13 10\n".lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            profile[parts[0].parse::<usize>().unwrap()] = VertexIndex::new(parts[1].parse().unwrap());
+        }
+
+        for odd_warm_start in [OddWarmStart::Initial, OddWarmStart::Previous] {
+            let mut options = StrategyImprovementOptions::new(StrategyImprovementAlgorithm::HybridB);
+            options.initial_profile = Some(profile.clone());
+            options.odd_warm_start = odd_warm_start;
+            options.decisive = true;
+            let result = solve_strategy_improvement(&game, &options, false).unwrap();
+            let decisive = result.statistics.decisive.unwrap();
+            assert_eq!(
+                (
+                    result.statistics.iterations,
+                    decisive.l_rounds,
+                    decisive.max_count,
+                    decisive.max_count_element,
+                    decisive.max_interval_count,
+                    decisive.max_epoch_length
+                ),
+                (18, 2, 16, 13, 9, 7)
+            );
+        }
     }
 
     include!("strategy_improvement_reference.rs");

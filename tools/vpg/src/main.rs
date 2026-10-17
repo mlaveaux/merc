@@ -144,6 +144,11 @@ struct SolveArgs {
     /// Strategy improvement only: fail after this many iterations.
     #[arg(long)]
     max_iterations: Option<usize>,
+
+    /// Strategy improvement only: also report the decisive-element
+    /// statistics (L-rounds, N_x, N^I_x, epoch lengths).
+    #[arg(long, default_value_t = false)]
+    decisive_statistics: bool,
 }
 
 /// Reads an initial strategy profile for strategy improvement: every vertex
@@ -349,6 +354,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
                 let mut options = StrategyImprovementOptions::new(algorithm);
                 options.odd_warm_start = args.odd_warm_start;
                 options.max_iterations = args.max_iterations;
+                options.decisive = args.decisive_statistics;
                 if let Some(path) = &args.initial_strategy {
                     options.initial_profile = Some(read_initial_strategy(&game, path)?);
                 }
