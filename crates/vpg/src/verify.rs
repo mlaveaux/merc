@@ -101,12 +101,11 @@ pub fn check_solution<G: PG>(pg: &G, solution: &[Set; 2], strategy: &[Strategy; 
     }
 
     // 1. The regions partition V.
-    for v in 0..n {
-        match (solution[0][v], solution[1][v]) {
-            (true, true) => return Err(format!("Vertex {v} is in both winning regions")),
-            (false, false) => return Err(format!("Vertex {v} is in neither winning region")),
-            _ => {}
-        }
+    if let Some(v) = (solution[0].clone() & &solution[1]).first_one() {
+        return Err(format!("Vertex {v} is in both winning regions"));
+    }
+    if let Some(v) = (solution[0].clone() | &solution[1]).first_zero() {
+        return Err(format!("Vertex {v} is in neither winning region"));
     }
 
     for player in [Player::Even, Player::Odd] {
