@@ -97,8 +97,10 @@ where
     let mut discovery_time = 0usize;
     let mut eq_class = 0usize;
 
-    // Work stack: (vertex, edge offset into outgoing_edges).
-    let mut work: Vec<(G::VertexIndex, usize)> = Vec::new();
+    // Work stack: (vertex, the remaining outgoing edges of that vertex). Keeping
+    // the iterator (instead of an offset that is skipped on resumption) makes
+    // the traversal linear in the number of edges, also for high out-degrees.
+    let mut work = Vec::new();
 
     for root in graph.iter_vertices() {
         let s0 = root.index();
@@ -106,9 +108,9 @@ where
             continue;
         }
 
-        work.push((root, 0));
+        work.push((root, graph.outgoing_edges(root)));
 
-        while let Some((s_vertex, offset)) = work.pop() {
+        while let Some((s_vertex, mut edges)) = work.pop() {
             let s = s_vertex.index();
 
             if low[s] == UNVISITED {
@@ -120,14 +122,12 @@ where
             }
 
             let mut child = None;
-            let mut next_offset = offset;
-            for (label, to) in graph.outgoing_edges(s_vertex).skip(offset) {
-                next_offset += 1;
+            for (label, to) in edges.by_ref() {
                 if filter(s_vertex, label, to) {
                     let v = to.index();
                     if disc[v] == UNVISITED {
                         disc[v] = 0; // Mark as queued to prevent double-pushing.
-                        child = Some((to, next_offset));
+                        child = Some(to);
                         break;
                     } else if on_scc_stack[v] {
                         low[s] = low[s].min(disc[v]);
@@ -135,10 +135,10 @@ where
                 }
             }
 
-            if let Some((child_vertex, resume_offset)) = child {
+            if let Some(child_vertex) = child {
                 // Push current state continuation, then recurse on child_vertex.
-                work.push((s_vertex, resume_offset));
-                work.push((child_vertex, 0));
+                work.push((s_vertex, edges));
+                work.push((child_vertex, graph.outgoing_edges(child_vertex)));
             } else {
                 if disc[s] == low[s] {
                     // s is the root of an SCC; pop all members off the SCC stack.
