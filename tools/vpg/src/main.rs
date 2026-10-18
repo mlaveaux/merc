@@ -25,6 +25,7 @@ use merc_vpg::Solver;
 use merc_vpg::StrategyImprovementAlgorithm;
 use merc_vpg::StrategyImprovementOptions;
 use merc_vpg::VertexIndex;
+use merc_vpg::check_solution;
 use merc_vpg::project_feature_transition_system_iter;
 use merc_vpg::solve_priority_promotion;
 use merc_vpg::solve_strategy_improvement;
@@ -65,6 +66,9 @@ use merc_vpg::verify_variability_product_zielonka_solution;
 use merc_vpg::write_pg;
 use merc_vpg::write_pg_solution;
 use merc_vpg::write_vpg;
+
+/// Stack size of the thread that runs the commands.
+const SOLVER_STACK_SIZE: usize = 8 << 30;
 
 /// Default node capacity for the Oxidd decision diagram manager. The choice
 /// for this value is fairly arbitrary.
@@ -128,9 +132,16 @@ struct SolveArgs {
     #[arg(long, default_value_t = false)]
     full_solution: bool,
 
-    /// Whether to verify the solution after computing it
+    /// Whether to verify the solution after computing it. For parity games
+    /// this checks the winning strategies of both players by SCC computations
+    /// in O(d * (n + m)) time; see `check_solution`.
     #[arg(long, default_value_t = false)]
     verify_solution: bool,
+
+    /// Parity games only: verify the solution with the original solitaire-game
+    /// checker instead (slow on large games).
+    #[arg(long, default_value_t = false)]
+    verify_solution_solitaire: bool,
 
     /// Strategy improvement only: a file with the initial move of vertices,
     /// one `<from> <to>` or `<from> <name> <to> <name>` per line. Other
@@ -302,7 +313,16 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let result = handle_command(&cli, &mut timing);
+    // Run on a thread with a large stack: the recursive solvers (Zielonka) need a
+    // stack that is linear in the size of the game. The memory is only reserved.
+    let result = std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(SOLVER_STACK_SIZE)
+            .spawn_scoped(scope, || handle_command(&cli, &mut timing))
+            .expect("Failed to spawn the solver thread")
+            .join()
+            .expect("The solver thread panicked")
+    });
 
     if cli.timings {
         timing.print();
@@ -392,7 +412,16 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
         if let Some(strategy) = strategy
             && args.verify_solution
         {
-            verify_solution(&game, &solution, &strategy);
+            if args.verify_solution_solitaire {
+                timing.measure("verify_solution_solitaire", || {
+                    verify_solution(&game, &solution, &strategy)
+                });
+            } else {
+                timing
+                    .measure("verify_solution", || check_solution(&game, &solution, &strategy))
+                    .map_err(|error| format!("Invalid solution: {error}"))?;
+            }
+            info!("Solution verified");
         }
     } else {
         // Read and solve a variability parity game.
