@@ -87,6 +87,7 @@ pub use variability_translate::translate_vpg;
 pub use variability_zielonka::solve_variability_product_zielonka;
 pub use variability_zielonka::solve_variability_zielonka;
 pub use variability_zielonka::verify_variability_product_zielonka_solution;
+pub use verify::check_solution;
 pub use verify::verify_solution;
 pub use zielonka::Set;
 pub use zielonka::solve_zielonka;
