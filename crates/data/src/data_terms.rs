@@ -7,6 +7,8 @@ use merc_aterm::SymbolRef;
 use merc_aterm::Term;
 use merc_aterm::is_int_term;
 
+use crate::BinderType;
+
 thread_local! {
     /// Thread local storage that stores various default terms representing data symbols.
     pub(crate) static DATA_SYMBOLS: RefCell<DataSymbols> = RefCell::new(DataSymbols::new());
@@ -137,6 +139,24 @@ impl DataSymbols {
     /// Returns true iff the given term is a data abstraction (binder).
     pub(crate) fn is_data_binder<'a, 'b, T: Term<'a, 'b>>(&self, term: &'b T) -> bool {
         term.get_head_symbol() == self.data_binder_symbol.copy()
+    }
+
+    /// Returns the binder type whose symbol is the head of the given term.
+    pub(crate) fn binder_type<'a, 'b, T: Term<'a, 'b>>(&self, term: &'b T) -> BinderType {
+        let sym = term.get_head_symbol();
+        if sym == self.data_lambda_symbol.copy() {
+            BinderType::Lambda
+        } else if sym == self.data_forall_symbol.copy() {
+            BinderType::Forall
+        } else if sym == self.data_exists_symbol.copy() {
+            BinderType::Exists
+        } else if sym == self.data_set_comprehension_symbol.copy() {
+            BinderType::SetComp
+        } else if sym == self.data_bag_comprehension_symbol.copy() {
+            BinderType::BagComp
+        } else {
+            panic!("unknown binder type {}", sym.name())
+        }
     }
 
     /// Returns true iff the given term is a data application.
@@ -270,6 +290,6 @@ pub(crate) fn is_data_equation<'a, 'b, T: Term<'a, 'b>>(term: &'b T) -> bool {
 }
 
 /// See [DataSymbols::is_data_whr_decl].
-pub(crate) fn is_data_whr_decl<'a, 'b, T: Term<'a, 'b>>(term: &'b T) -> bool {
+pub fn is_data_whr_decl<'a, 'b, T: Term<'a, 'b>>(term: &'b T) -> bool {
     DATA_SYMBOLS.with_borrow(|ds| ds.is_data_whr_decl(term))
 }

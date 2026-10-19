@@ -504,6 +504,21 @@ mod inner {
                 }
             })
         }
+
+        /// The kind of binder.
+        pub fn binder_type(&self) -> super::BinderType {
+            DATA_SYMBOLS.with_borrow(|ds| ds.binder_type(&self.term.arg(0)))
+        }
+
+        /// The bound variables.
+        pub fn variables(&self) -> ATermList<DataVariable> {
+            ATermList::from(self.term.arg(1).protect())
+        }
+
+        /// The body, in which the variables are bound.
+        pub fn body(&self) -> DataExpressionRef<'_> {
+            self.term.arg(2).into()
+        }
     }
 
     impl fmt::Display for DataAbstraction {
@@ -512,7 +527,8 @@ mod inner {
         }
     }
 
-    /// A single where-clause binding `identifier := expr`.
+    /// A single where-clause binding `identifier := expr`. mCRL2 uses the same term for the
+    /// assignments of a linear process.
     /// Wire format: `WhrDecl(DataVarId(name, sort), DataExpression)` — arity 2.
     #[merc_term(is_data_whr_decl)]
     pub struct DataWhrDecl {
@@ -528,6 +544,16 @@ mod inner {
                     term: ATerm::with_args(ds.data_whr_decl_symbol.deref(), &args).protect(),
                 }
             })
+        }
+
+        /// The variable this declaration binds.
+        pub fn variable(&self) -> DataVariableRef<'_> {
+            self.term.arg(0).into()
+        }
+
+        /// The value of the variable, which is not in the scope of the declarations.
+        pub fn expression(&self) -> DataExpressionRef<'_> {
+            self.term.arg(1).into()
         }
     }
 
@@ -554,6 +580,16 @@ mod inner {
                     term: ATerm::with_args(ds.data_where_clause.deref(), &args).protect(),
                 }
             })
+        }
+
+        /// The body, in which the declared variables are bound.
+        pub fn body(&self) -> DataExpressionRef<'_> {
+            self.term.arg(0).into()
+        }
+
+        /// The declarations `x := e`.
+        pub fn declarations(&self) -> ATermList<DataWhrDecl> {
+            ATermList::from(self.term.arg(1).protect())
         }
     }
 
@@ -636,6 +672,7 @@ mod inner {
 }
 
 pub use inner::DataAbstraction;
+pub use inner::DataAbstractionRef;
 pub use inner::DataApplication;
 pub use inner::DataApplicationRef;
 pub use inner::DataEquation;
@@ -646,7 +683,9 @@ pub use inner::DataFunctionSymbolRef;
 pub use inner::DataVariable;
 pub use inner::DataVariableRef;
 pub use inner::DataWhereClause;
+pub use inner::DataWhereClauseRef;
 pub use inner::DataWhrDecl;
+pub use inner::DataWhrDeclRef;
 pub use inner::MachineNumber;
 pub use inner::MachineNumberRef;
 
