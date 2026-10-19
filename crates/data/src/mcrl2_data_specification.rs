@@ -14,7 +14,7 @@ use crate::SortAlias;
 /// The five sections of an mCRL2 data specification, holding the fully typed,
 /// lowered terms. This is the binary serialization format also used by the
 /// mCRL2 toolset.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Mcrl2DataSpecification {
     sorts: Vec<BasicSort>,
     aliases: Vec<SortAlias>,
