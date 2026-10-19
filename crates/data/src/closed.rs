@@ -13,7 +13,8 @@ use crate::visit_data_expr;
 /// A closed term normalises to the same result under every substitution, which is what makes
 /// it sound to cache its normal form across calls that pass different substitutions.
 ///
-/// Panics for binders and where clauses, which have no flat argument list.
+/// Occurrences of variables bound by a binder or a where clause also count, so such a term may
+/// be reported as not closed even though it is; that is conservative for the caching above.
 pub fn is_closed<'a, 'b, T: Term<'a, 'b>>(term: &'b T) -> bool {
     // Terms are maximally shared, so the same subterm is typically reachable along many paths.
     // Remembering the ones already seen keeps this linear in the size of the term graph rather
