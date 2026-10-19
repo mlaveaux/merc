@@ -2,19 +2,24 @@ use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
 
+use merc_aterm::Symb;
 use merc_aterm::Term;
 use merc_utilities::Step;
 use merc_utilities::Visit;
 
+use crate::DataAbstractionRef;
 use crate::DataApplicationRef;
 use crate::DataExpressionRef;
 use crate::DataFunctionSymbolRef;
 use crate::DataVariableRef;
+use crate::DataWhereClauseRef;
 use crate::MachineNumberRef;
 use crate::is_data_application;
+use crate::is_data_binder;
 use crate::is_data_function_symbol;
 use crate::is_data_machine_number;
 use crate::is_data_variable;
+use crate::is_data_where_clause;
 
 /// A top-down traversal over data expressions that threads a context down the term.
 ///
@@ -32,8 +37,10 @@ use crate::is_data_variable;
 /// The traversal only inspects terms; [Step::Replace] is uninhabited here because a rewritten
 /// term has to be rebuilt bottom-up, which is what `TermBuilder` is for.
 ///
-/// Only the data expressions that this crate represents are traversed; binders and where clauses
-/// make [DataExpressionVisitor::try_visit] panic, as they do everywhere else in this crate.
+/// Binders and where clauses are traversed too. The variables they bind are not visited as
+/// variables, only their occurrences in the body are, so a visitor that needs to tell bound
+/// occurrences from free ones handles [DataExpressionVisitor::visit_binder] and
+/// [DataExpressionVisitor::visit_where_clause] itself.
 pub trait DataExpressionVisitor {
     /// Threaded from a node to its children.
     type Context: Copy;
@@ -80,12 +87,29 @@ pub trait DataExpressionVisitor {
         Ok(ControlFlow::Continue(Step::Into(context)))
     }
 
+    /// A binder's only subexpression is its body.
+    fn visit_binder(
+        &mut self,
+        _binder: &DataAbstractionRef<'_>,
+        context: Self::Context,
+    ) -> Visit<Infallible, Self::Context, Self::Break, Self::Error> {
+        Ok(ControlFlow::Continue(Step::Into(context)))
+    }
+
+    /// The subexpressions of a where clause are the values of its declarations, followed by its
+    /// body.
+    fn visit_where_clause(
+        &mut self,
+        _clause: &DataWhereClauseRef<'_>,
+        context: Self::Context,
+    ) -> Visit<Infallible, Self::Context, Self::Break, Self::Error> {
+        Ok(ControlFlow::Continue(Step::Into(context)))
+    }
+
     /// Visits `expr` and, unless a visit method breaks or prunes, its subexpressions.
     ///
     /// This is the only place that recurses. It keeps its own worklist rather than using the call
     /// stack, so a term that is deeper than the stack can hold is still traversed.
-    ///
-    /// Panics for binders and where clauses, which this crate does not represent.
     fn try_visit(
         &mut self,
         expr: &DataExpressionRef<'_>,
@@ -115,8 +139,39 @@ pub trait DataExpressionVisitor {
                 }
 
                 continue;
+            } else if is_data_binder(&expr) {
+                let binder = DataAbstractionRef::from(Term::copy(&expr));
+                match self.visit_binder(&binder, context)? {
+                    ControlFlow::Break(result) => return Ok(Some(result)),
+                    ControlFlow::Continue(Step::Prune) => {}
+                    ControlFlow::Continue(Step::Replace(replacement)) => match replacement {},
+                    ControlFlow::Continue(Step::Into(context)) => stack.push((expr.arg(2).into(), context)),
+                }
+                continue;
+            } else if is_data_where_clause(&expr) {
+                let clause = DataWhereClauseRef::from(Term::copy(&expr));
+                match self.visit_where_clause(&clause, context)? {
+                    ControlFlow::Break(result) => return Ok(Some(result)),
+                    ControlFlow::Continue(Step::Prune) => {}
+                    ControlFlow::Continue(Step::Replace(replacement)) => match replacement {},
+                    ControlFlow::Continue(Step::Into(context)) => {
+                        // Pushed in reverse, so the declarations are visited first and the body last.
+                        stack.push((expr.arg(0).into(), context));
+                        // The declarations form a cons list of `DataVarIdInit(variable, value)`.
+                        let mut declarations = Vec::new();
+                        let mut list = expr.arg(1);
+                        while list.get_head_symbol().arity() == 2 {
+                            declarations.push(list.arg(0).arg(1));
+                            list = list.arg(1);
+                        }
+                        for value in declarations.into_iter().rev() {
+                            stack.push((value.into(), context));
+                        }
+                    }
+                }
+                continue;
             } else {
-                panic!("DataExpressionVisitor is not defined for binders and where clauses: {expr}");
+                panic!("not a data expression: {expr}");
             };
 
             if let ControlFlow::Break(result) = outcome {
@@ -182,6 +237,14 @@ where
     fn visit_application(&mut self, application: &DataApplicationRef<'_>, context: C) -> Visit<Infallible, C, T, E> {
         (self.function)(&DataExpressionRef::from(Term::copy(application)), context)
     }
+
+    fn visit_binder(&mut self, binder: &DataAbstractionRef<'_>, context: C) -> Visit<Infallible, C, T, E> {
+        (self.function)(&DataExpressionRef::from(Term::copy(binder)), context)
+    }
+
+    fn visit_where_clause(&mut self, clause: &DataWhereClauseRef<'_>, context: C) -> Visit<Infallible, C, T, E> {
+        (self.function)(&DataExpressionRef::from(Term::copy(clause)), context)
+    }
 }
 
 /// Visits `expr` and its subexpressions top-down, calling `visitor` on every node.
@@ -218,11 +281,19 @@ mod tests {
     use merc_utilities::Step;
     use merc_utilities::Visit;
 
+    use crate::BasicSort;
+    use crate::BinderType;
+    use crate::DataAbstraction;
     use crate::DataApplicationRef;
     use crate::DataExpression;
     use crate::DataExpressionRef;
     use crate::DataFunctionSymbolRef;
+    use crate::DataVariable;
     use crate::DataVariableRef;
+    use crate::DataWhereClause;
+    use crate::DataWhrDecl;
+    use crate::SortExpression;
+    use crate::is_data_variable;
     use crate::visitor::DataExpressionVisitor;
     use crate::visitor::visit_data_expr;
 
@@ -327,5 +398,26 @@ mod tests {
                 ("b".to_string(), 1)
             ]
         );
+    }
+
+    /// Binders and where clauses are traversed: their bodies and declared values are visited, the
+    /// binding occurrences of their variables are not.
+    #[test]
+    fn test_visit_binder_and_where_clause() {
+        let x = DataVariable::with_sort("x", SortExpression::from(BasicSort::new("Bool")).copy());
+        let y = DataVariable::with_sort("y", SortExpression::from(BasicSort::new("Bool")).copy());
+        let lambda: DataExpression =
+            DataAbstraction::new(BinderType::Lambda, std::slice::from_ref(&x), y.clone().into()).into();
+        let clause: DataExpression =
+            DataWhereClause::new(lambda, &[DataWhrDecl::new(y.clone(), x.clone().into())]).into();
+
+        let mut variables = Vec::new();
+        let _: Option<()> = visit_data_expr(&clause.copy(), (), |expr, context| {
+            if is_data_variable(expr) {
+                variables.push(DataVariableRef::from(expr.copy()).name().to_string());
+            }
+            ControlFlow::Continue(Step::Into(context))
+        });
+        assert_eq!(variables, ["x", "y"]);
     }
 }
