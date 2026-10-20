@@ -3,7 +3,6 @@ use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
-use std::mem::transmute;
 
 use log::error;
 
@@ -161,6 +160,9 @@ pub trait ATermStreamable {
 /// index followed by one index per argument. A packet header also carries a flag marking the term
 /// as top-level output rather than only a subterm. The stream opens with a zero byte, the magic
 /// value and the version; a term with function symbol index zero marks the end of the stream.
+///
+/// The term pool stays locked while a term is written, so the underlying writer must not wait for
+/// a thread that creates terms.
 pub struct BinaryATermWriter<W: Write> {
     stream: BitStreamWriter<W>,
 
@@ -205,42 +207,6 @@ impl<W: Write> BinaryATermWriter<W> {
         })
     }
 
-    /// Peeks the entry at the back of `stack` without removing it, so it stays inside the
-    /// GC-rooted container for as long as the caller keeps using it.
-    ///
-    /// The returned `ATermRef<'static>`'s lifetime is only actually backed by `stack` still
-    /// containing this entry.
-    fn peek_stack(&self) -> Option<(ATermRef<'static>, bool)> {
-        let guard = self.stack.read();
-        let (term, ready) = guard.back()?;
-        // SAFETY: `term` is still located inside `stack`.
-        Some((
-            unsafe { transmute::<ATermRef<'_>, ATermRef<'static>>(term.copy()) },
-            *ready,
-        ))
-    }
-
-    /// Writes a function symbol to the output stream, or returns its existing index if it was
-    /// already written.
-    fn write_function_symbol(&mut self, symbol: &SymbolRef<'_>) -> Result<usize, MercError> {
-        if let Some(index) = self.function_symbols.read().index(&symbol.copy()) {
-            return Ok(*index);
-        }
-
-        // Write the packet before inserting the symbol, so that a failed write
-        // leaves `function_symbols` and `function_symbol_index_width`
-        // consistent.
-        self.stream.write_bits(PacketType::FunctionSymbol as u64, PACKET_BITS)?;
-        self.stream.write_string(symbol.name())?;
-        self.stream.write_integer(symbol.arity() as u64)?;
-
-        let (index, inserted) = self.function_symbols.write().insert(symbol.copy());
-        debug_assert!(inserted, "the symbol was just confirmed absent");
-        self.function_symbol_index_width = bits_for_value(self.function_symbols.read().len());
-
-        Ok(*index)
-    }
-
     /// Returns the current bit width needed to encode a function symbol index.
     fn function_symbol_index_width(&self) -> u8 {
         let expected = bits_for_value(self.function_symbols.read().len());
@@ -251,128 +217,163 @@ impl<W: Write> BinaryATermWriter<W> {
 
         self.function_symbol_index_width
     }
-
-    /// Returns the current bit width needed to encode a term index.
-    fn term_index_width(&self) -> u8 {
-        let expected = bits_for_value(self.terms.read().len());
-        debug_assert_eq!(
-            self.term_index_width, expected,
-            "term_index_width does not match bits_for_value",
-        );
-        self.term_index_width
-    }
 }
 
 impl<W: Write> BinaryATermWriter<W> {
-    /// The actual `write_aterm` loop, factored out so [`ATermWrite::write_aterm`] can clear
-    /// `stack` on an error path.
+    /// Writes `term` and every subterm that was not written before, children first, using an
+    /// explicit stack instead of recursion.
     fn write_aterm_impl(&mut self, term: &ATerm) -> Result<(), MercError> {
-        self.stack.write().push_back((term.copy(), false));
+        // The guards hold the global term pool for reading, so no garbage collection runs while
+        // they exist and the term references taken from them remain valid.
+        let mut stack = self.stack.write();
+        let mut terms = self.terms.write();
+        let mut function_symbols = self.function_symbols.write();
 
-        // Peek rather than pop: an entry must stay localted inside `stack` to
-        // be protected.
-        while let Some((current_term, write_ready)) = self.peek_stack() {
-            // Indicates that this term is output and not a subterm, these should always be written.
-            let is_output = self.stack.read().len() == 1;
+        // A previous call that failed may have left entries behind.
+        stack.clear();
+        stack.push_back((term.copy(), false));
 
-            if !self.terms.read().contains(&current_term) || is_output {
-                if write_ready {
-                    self.write_term_body(&current_term, is_output)?;
+        // An entry is visited once to queue its unwritten arguments, and written when all its
+        // arguments have been written, which is at the first visit when there are none.
+        while let Some((current, visited)) = stack.back().map(|(term, visited)| (term.copy(), *visited)) {
+            // The term at the bottom of the stack is the output, which is always written.
+            let is_output = stack.len() == 1;
 
-                    // Done with this entry now that it has been written (and, if not the
-                    // top-level output term, protected independently by `terms` above).
-                    self.stack.write().pop_back();
-                } else {
-                    self.queue_arguments(&current_term);
+            if !visited {
+                if !is_output && terms.contains(&current) {
+                    // Written before, possibly as an equal sibling earlier in this call.
+                    stack.pop_back();
+                    continue;
                 }
-            } else {
-                // This term was already written and as such should be skipped. This can happen
-                // if one term has two equal subterms.
-                self.stack.write().pop_back();
+
+                let position = stack.len() - 1;
+                for arg in current.arguments() {
+                    if !terms.contains(&arg) {
+                        stack.push_back((arg, false));
+                    }
+                }
+
+                if stack.len() - 1 != position {
+                    stack[position].1 = true;
+                    continue;
+                }
             }
+
+            if !(is_output && is_int_term(&current)) {
+                write_function_symbol(
+                    &mut self.stream,
+                    &mut function_symbols,
+                    &mut self.function_symbol_index_width,
+                    current.get_head_symbol(),
+                )?;
+            }
+            write_term_body(
+                &mut self.stream,
+                &function_symbols,
+                self.function_symbol_index_width,
+                &terms,
+                self.term_index_width,
+                &current,
+                is_output,
+            )?;
+
+            if !is_output {
+                let (_, inserted) = terms.insert(current);
+                debug_assert!(inserted, "A term is only written once.");
+                self.term_index_width = bits_for_value(terms.len());
+            }
+            stack.pop_back();
         }
 
         Ok(())
     }
+}
 
-    /// Writes the body of `current_term` to the stream: the head packet and,
-    /// for a non-integer term, the already-written argument indices. When
-    /// `is_output` the term is the top-level output term and is written down
-    /// as such without being added to the term table.
-    fn write_term_body(&mut self, current_term: &ATermRef<'_>, is_output: bool) -> Result<(), MercError> {
-        if is_int_term(current_term) {
-            let int_term = ATermIntRef::from(current_term.copy());
-            if is_output {
-                // If the integer is output, write the header and just an integer
-                self.stream.write_bits(PacketType::ATermIntOutput as u64, PACKET_BITS)?;
-                self.stream.write_integer(int_term.value() as u64)?;
-            } else {
-                let symbol_index = self.write_function_symbol(&int_term.get_head_symbol())?;
+/// Writes `symbol` as a packet unless it was written before, so that its index can be used.
+fn write_function_symbol<'a, W: Write>(
+    stream: &mut BitStreamWriter<W>,
+    function_symbols: &mut IndexedSet<SymbolRef<'a>>,
+    index_width: &mut u8,
+    symbol: SymbolRef<'a>,
+) -> Result<(), MercError> {
+    if function_symbols.contains(&symbol) {
+        return Ok(());
+    }
 
-                self.stream.write_bits(PacketType::ATerm as u64, PACKET_BITS)?;
-                self.stream
-                    .write_bits(symbol_index as u64, self.function_symbol_index_width())?;
-                self.stream.write_integer(int_term.value() as u64)?;
-            }
+    // Write the packet before inserting the symbol, so that a failed write leaves the table
+    // consistent with the stream.
+    stream.write_bits(PacketType::FunctionSymbol as u64, PACKET_BITS)?;
+    stream.write_string(symbol.name())?;
+    stream.write_integer(symbol.arity() as u64)?;
+
+    function_symbols.insert(symbol);
+    *index_width = bits_for_value(function_symbols.len());
+    Ok(())
+}
+
+/// Writes the packet of `term`, whose symbol and arguments have already been written. An output
+/// integer is written without its symbol.
+fn write_term_body<W: Write>(
+    stream: &mut BitStreamWriter<W>,
+    function_symbols: &IndexedSet<SymbolRef<'_>>,
+    function_symbol_index_width: u8,
+    terms: &IndexedSet<ATermRef<'_>>,
+    term_index_width: u8,
+    term: &ATermRef<'_>,
+    is_output: bool,
+) -> Result<(), MercError> {
+    debug_assert_eq!(function_symbol_index_width, bits_for_value(function_symbols.len()));
+    debug_assert_eq!(term_index_width, bits_for_value(terms.len()));
+
+    if is_int_term(term) {
+        let value = ATermIntRef::from(term.copy()).value() as u64;
+        if is_output {
+            stream.write_bits(PacketType::ATermIntOutput as u64, PACKET_BITS)?;
         } else {
-            let symbol_index = self.write_function_symbol(&current_term.get_head_symbol())?;
-            let packet_type = if is_output {
-                PacketType::ATermOutput
-            } else {
-                PacketType::ATerm
-            };
-
-            self.stream.write_bits(packet_type as u64, PACKET_BITS)?;
-            self.stream
-                .write_bits(symbol_index as u64, self.function_symbol_index_width())?;
-
-            for arg in current_term.arguments() {
-                let index = self.terms.read().index(&arg).expect("Argument must already be written");
-                self.stream.write_bits(*index as u64, self.term_index_width())?;
-            }
+            let symbol_index = function_symbols
+                .index(&term.get_head_symbol())
+                .expect("The symbol must already be written");
+            stream.write_bits(PacketType::ATerm as u64, PACKET_BITS)?;
+            stream.write_bits(*symbol_index as u64, function_symbol_index_width)?;
         }
-
-        if !is_output {
-            let (_, inserted) = self.terms.write().insert(current_term.copy());
-            assert!(inserted, "This term should have a new index assigned.");
-            self.term_index_width = bits_for_value(self.terms.read().len());
-        }
-
-        Ok(())
+        return stream.write_integer(value);
     }
 
-    /// Marks `current_term` ready for its next visit — once its (not yet
-    /// written) arguments below it on the stack are done — by flipping its
-    /// `write_ready` flag in place, then queues those arguments for
-    /// processing first. Two equal arguments are both pushed here, but that
-    /// does not write the term twice.
-    fn queue_arguments(&mut self, current_term: &ATermRef<'_>) {
-        if let Some(back) = self.stack.write().back_mut() {
-            back.1 = true;
-        }
+    let symbol_index = function_symbols
+        .index(&term.get_head_symbol())
+        .expect("The symbol must already be written");
+    let packet_type = if is_output {
+        PacketType::ATermOutput
+    } else {
+        PacketType::ATerm
+    };
 
-        for arg in current_term.arguments() {
-            if !self.terms.read().contains(&arg) {
-                self.stack.write().push_back((arg.copy(), false));
-            }
-        }
+    stream.write_bits(packet_type as u64, PACKET_BITS)?;
+    stream.write_bits(*symbol_index as u64, function_symbol_index_width)?;
+    for arg in term.arguments() {
+        let index = terms.index(&arg).expect("Argument must already be written");
+        stream.write_bits(*index as u64, term_index_width)?;
     }
+
+    Ok(())
 }
 
 impl<W: Write> ATermWrite for BinaryATermWriter<W> {
     fn write_aterm(&mut self, term: &ATerm) -> Result<(), MercError> {
-        let result = self.write_aterm_impl(term);
-        if result.is_err() {
-            self.stack.write().clear();
-        }
-        result
+        self.write_aterm_impl(term)
+    }
+
+    fn write_aterm_int(&mut self, value: usize) -> Result<(), MercError> {
+        // The same packet as an output ATermInt, without creating the term.
+        self.stream.write_bits(PacketType::ATermIntOutput as u64, PACKET_BITS)?;
+        self.stream.write_integer(value as u64)
     }
 
     fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MercError>
     where
         I: ExactSizeIterator<Item = ATerm>,
     {
-        self.write_aterm(&ATermInt::new(iter.len()))?;
+        self.write_aterm_int(iter.len())?;
         for ldd in iter {
             self.write_aterm(&ldd)?;
         }
@@ -499,14 +500,18 @@ impl<R: Read> BinaryATermReader<R> {
     }
 }
 
-impl<R: Read> ATermRead for BinaryATermReader<R> {
-    fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError> {
+/// A top-level item of a binary aterm stream.
+enum Output {
+    Term(ATerm),
+    Int(usize),
+    End,
+}
+
+impl<R: Read> BinaryATermReader<R> {
+    /// Reads packets until the next output term, output integer or the end of the stream.
+    fn read_output(&mut self) -> Result<Output, MercError> {
         if self.ended {
-            return Err(Error::new(
-                ErrorKind::UnexpectedEof,
-                "Attempted to read_aterm() after end of stream",
-            )
-            .into());
+            return Err(Error::new(ErrorKind::UnexpectedEof, "Attempted to read after end of stream").into());
         }
 
         loop {
@@ -529,8 +534,8 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                 }
                 PacketType::ATermIntOutput => {
                     let value = self.stream.read_integer()?.try_into()?;
-                    debug_trace!("Output int term: {}", ATermInt::new(value));
-                    return Ok(Some(ATermInt::new(value).into()));
+                    debug_trace!("Output int: {value}");
+                    return Ok(Output::Int(value));
                 }
                 PacketType::ATerm | PacketType::ATermOutput => {
                     let symbol_index = self.stream.read_bits(self.function_symbol_index_width())? as usize;
@@ -538,14 +543,16 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                         // End of stream marker
                         debug_trace!("End of stream marker reached");
                         self.ended = true;
-                        return Ok(None);
+                        return Ok(Output::End);
                     }
 
                     let symbols = self.function_symbols.read();
-                    let symbol = symbols.get(symbol_index).ok_or(format!(
-                        "Read invalid function symbol index {symbol_index}, length {}",
-                        symbols.len()
-                    ))?;
+                    let symbol = symbols.get(symbol_index).ok_or_else(|| {
+                        format!(
+                            "Read invalid function symbol index {symbol_index}, length {}",
+                            symbols.len()
+                        )
+                    })?;
 
                     if is_int_symbol(symbol) {
                         let value = self.stream.read_integer()?.try_into()?;
@@ -566,10 +573,9 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                             symbol,
                             (0..symbol.arity()).map(|_| {
                                 let arg_index = self.stream.read_bits(num_of_bits)? as usize;
-                                let arg = write_terms.get(arg_index).ok_or(format!(
-                                    "Read invalid aterm index {arg_index}, length {}",
-                                    write_terms.len()
-                                ))?;
+                                let arg = write_terms.get(arg_index).ok_or_else(|| {
+                                    format!("Read invalid aterm index {arg_index}, length {}", write_terms.len())
+                                })?;
                                 debug_trace!("Read arg: {arg}");
                                 Ok(arg)
                             }),
@@ -577,7 +583,7 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
 
                         if packet == PacketType::ATermOutput {
                             debug_trace!("Output term: {term}");
-                            return Ok(Some(term));
+                            return Ok(Output::Term(term));
                         }
                         debug_trace!("Read term: {term}");
 
@@ -588,6 +594,25 @@ impl<R: Read> ATermRead for BinaryATermReader<R> {
                     }
                 }
             }
+        }
+    }
+}
+
+impl<R: Read> ATermRead for BinaryATermReader<R> {
+    fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError> {
+        Ok(match self.read_output()? {
+            Output::Term(term) => Some(term),
+            Output::Int(value) => Some(ATermInt::new(value).into()),
+            Output::End => None,
+        })
+    }
+
+    fn read_aterm_int(&mut self) -> Result<usize, MercError> {
+        match self.read_output()? {
+            Output::Int(value) => Ok(value),
+            Output::Term(term) if is_int_term(&term) => Ok(ATermInt::from(term).value()),
+            Output::Term(term) => Err(format!("Expected an integer, found term {term}").into()),
+            Output::End => Err("Expected an integer, found the end of the stream".into()),
         }
     }
 
@@ -729,6 +754,31 @@ mod tests {
         assert!(
             input_stream.read_aterm_iter().is_err(),
             "a non-integer element count must be reported as a stream error"
+        );
+    }
+
+    #[test]
+    fn test_aterm_int_interchangeable_with_int_terms() {
+        // An integer written with write_aterm_int must read back as an ATermInt and vice versa,
+        // since mCRL2 writes state numbers as terms.
+        let mut stream: Vec<u8> = Vec::new();
+        let mut output_stream = BinaryATermWriter::new(&mut stream).unwrap();
+        output_stream.write_aterm_int(7).unwrap();
+        output_stream.write_aterm(&ATermInt::new(8)).unwrap();
+        output_stream.write_aterm(&ATerm::from_string("f(a)").unwrap()).unwrap();
+        ATermWrite::flush(&mut output_stream).unwrap();
+        drop(output_stream);
+
+        let mut input_stream = BinaryATermReader::new(&stream[..]).unwrap();
+        assert_eq!(input_stream.read_aterm().unwrap(), Some(ATermInt::new(7).into()));
+        assert_eq!(input_stream.read_aterm_int().unwrap(), 8);
+        assert!(
+            input_stream.read_aterm_int().is_err(),
+            "a non-integer term must be reported as an error"
+        );
+        assert!(
+            input_stream.read_aterm_int().is_err(),
+            "the end of the stream must be reported as an error"
         );
     }
 
