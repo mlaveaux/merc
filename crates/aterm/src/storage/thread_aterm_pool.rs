@@ -30,6 +30,7 @@ use crate::Term;
 use crate::TermParser;
 use crate::aterm::ATerm;
 use crate::aterm::ATermRef;
+use crate::is_garbage_collection_paused;
 use crate::storage::GlobalTermPool;
 use crate::storage::GlobalTermPoolGuard;
 use crate::storage::MAX_FIXED_ARITY;
@@ -522,6 +523,12 @@ impl ThreadTermPool {
     /// Trigger garbage collection if the counter is exhausted and the global pool is not locked.
     fn trigger_garbage_collection(&self) {
         if self.garbage_collection_counter.get() != 0 || self.term_pool.is_locked() {
+            return;
+        }
+
+        if is_garbage_collection_paused() {
+            // Leave the shared budget untouched, so terms created during a pause do not count.
+            self.garbage_collection_counter.set(GC_BUDGET_CHUNK);
             return;
         }
 
