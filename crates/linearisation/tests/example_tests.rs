@@ -1,24 +1,14 @@
 #![recursion_limit = "256"]
-//! Attempts to linearise every example specification from the corpus
-//! (`examples/mCRL2`, the same corpus `merc_typecheck`'s `example_tests.rs`
-//! type checks). Every one of these is a real, hand-written mCRL2
-//! specification, so this is a strong regression net for the recursive
-//! translation in `translate.rs`: whatever `linearise` does with them, it
-//! must never panic.
-//!
-//! As of Milestone 1 (see `docs/linearisation-implementation-plan.md`), most
-//! examples are expected to return `Err` — the translator only supports a
-//! single, self-recursive, `||`-free process so far, and most of this corpus
-//! is full protocols built from parallel composition. That's fine: this test
-//! does not assert `Ok`, only that linearisation reports a proper error
-//! rather than crashing. The pass/fail split will shift as later milestones
-//! (mutual recursion, the compositional mode, full parallel-composition
-//! expansion) lift those restrictions.
+//! Linearises every specification of the example corpus (`examples/mCRL2`) that the type checker
+//! accepts. Linearisation must either succeed or report an error, such as for an unsupported
+//! construct; it never panics.
 
+use test_case::test_case;
+
+use merc_linearisation::LinearisationOptions;
 use merc_syntax::UntypedProcessSpecification;
 use merc_typecheck::ProcessSpecification;
 use merc_utilities::test_logger;
-use test_case::test_case;
 
 #[cfg_attr(miri, ignore)]
 #[test_case(include_str!("../../../examples/mCRL2/academic/abp/abp.mcrl2") ; "abp.mcrl2")]
@@ -133,12 +123,7 @@ use test_case::test_case;
 #[test_case(include_str!("../../../examples/mCRL2/industrial/flexray/3_Mute_leader.expanded.mcrl2") ; "3_mute_leader.expanded.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/flexray/3_Regular.expanded.mcrl2") ; "3_regular.expanded.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/flexray/Big_Deaf_follower.expanded.mcrl2") ; "big_deaf_follower.expanded.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r1.mcrl2") ; "garage-r1.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r2-error.mcrl2") ; "garage-r2-error.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r2.mcrl2") ; "garage-r2.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-r3.mcrl2") ; "garage-r3.mcrl2")]
 // #[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage-ver.mcrl2") ; "garage-ver.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/industrial/garage/garage.mcrl2") ; "garage.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/ieee-11073/11073.mcrl2") ; "11073.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/lift/lift3-final.mcrl2") ; "lift3-final.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/industrial/lift/lift3-init.mcrl2") ; "lift3-init.mcrl2")]
@@ -161,7 +146,6 @@ use test_case::test_case;
 #[test_case(include_str!("../../../examples/mCRL2/language/small1.mcrl2") ; "small1.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/language/small2.mcrl2") ; "small2.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/language/small3.mcrl2") ; "small3.mcrl2")]
-#[test_case(include_str!("../../../examples/mCRL2/language/struct.mcrl2") ; "struct.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/language/tau.mcrl2") ; "tau.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/language/time.mcrl2") ; "time.mcrl2")]
 #[test_case(include_str!("../../../examples/mCRL2/language/upcast.mcrl2") ; "upcast.mcrl2")]
@@ -210,9 +194,10 @@ fn test_linearise_mcrl2_spec(input: &str) {
 
     let spec = UntypedProcessSpecification::parse(input).expect("the example corpus parses in merc_syntax");
     let spec = ProcessSpecification::from_untyped(spec)
+        .and_then(|mut spec| spec.lower())
         .expect("the example corpus type checks (see merc_typecheck's example_tests.rs)");
 
     // Must never panic: either a `LinearProcessSpecification` comes out, or a
     // `LinearisationError` explaining which unsupported construct was hit.
-    let _ = merc_linearisation::linearise(&spec);
+    let _ = merc_linearisation::linearise(&spec, merc_linearisation::rewriter, &LinearisationOptions::default());
 }

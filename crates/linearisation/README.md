@@ -1,67 +1,44 @@
 # Overview
 
-The `merc_linearisation` crate turns a type-checked
-`merc_typecheck::ProcessSpecification` into a `LinearProcessSpecification`
-(LPS): the condition/action/effect summand form the rest of merc — `merc_lts`,
-`merc_explore`, `merc_symbolic` — is built around. It is a native, from-scratch
-port of the linearisation algorithm mCRL2's `libraries/lps`
-(`source/linearise.cpp`) implements, following the design and phasing recorded
-in [`docs/linearisation-implementation-plan.md`](https://github.com/MERCorg/merc/blob/main/docs/linearisation-implementation-plan.md)
-in the repository root.
+The `merc_linearisation` crate turns a `merc_process::ProcessSpecification`,
+obtained by lowering a type-checked specification, into a
+`merc_lps::LinearProcessSpecification` (LPS): a single process whose
+behaviour is a set of summands `sum d. c -> a(e) . P(g)` over one vector of
+parameters. It follows the "regular" method of mCRL2's `mcrl22lps`, for
+specifications without time and without stochastic operators.
 
-## Status
+The specification must be in parallel pCRL format: parallel composition and
+`allow`, `block`, `hide`, `rename` and `comm` may only be used outside
+sequential and alternative composition. Successful termination is made
+observable by the action `Terminate`, a reserved name.
 
-This crate is under active development. Implemented so far:
-
-- The `LinearProcessSpecification`/`ActionSummand`/`DeadlockSummand` data
-  model (`specification.rs`) and a pretty-printer back to mCRL2 concrete
-  syntax (`print.rs`).
-- `translate::linearise`, covering the "regular", untimed, non-stochastic
-  subset of the process algebra for a **single, self-recursive** process (no
-  mutual recursion between distinct `proc` declarations, no `||`/`comm`, no
-  `at`/`dist`; `allow`/`block`/`hide`/`rename` are all supported). See
-  `translate.rs`'s module documentation for the exact supported grammar and
-  the errors returned for everything else.
-- `alphabet::simplify`, run automatically before translation: an
-  alphabet-based static analysis (porting mCRL2's `process::alphabet_operations`
-  / `process::alphabet_reduce` and the book's laws for these operators) that
-  drops a `hide`/`block`/`allow`/`rename`/`comm` wrapper wherever it can prove
-  the wrapper has no effect on its operand — including recognising a `comm`
-  that can never actually fire, which `translate` alone does not support.
-  See `alphabet.rs`'s module documentation for the precision/soundness
-  argument and the safeguard against the wide-parallel-composition blow-up
-  this kind of analysis is prone to.
-- `compositional::linearise_compositional`, recognising a top-level `init`
-  shaped as `hide(H, allow(A, comm(C, P1(...) || ... || Pn(...))))` (each of
-  `H`/`A`/`C` optional) and linearising each `Pi` independently with the same
-  core, producing a `tools/lts combine`-ready JSON manifest
-  (`CompositionalSpecification::manifest`). See `compositional.rs`'s module
-  documentation for why this needs no "cleave" step.
-
-Not yet implemented: mutual recursion across multiple process equations
-(needs a shared parameter vector / program-counter construction), and full
-monolithic linearisation of `||`/`comm` anywhere but the compositional mode's
-recognised top-level shape (state-operator elimination). These are the next
-milestones in the implementation plan linked above.
+Linearisation is a sequence of passes over the process terms of
+`merc_process`, whose data are `merc_data` terms. The sequential processes are
+brought into Greibach normal form, sequences of calls are replaced by single
+calls, and every equation becomes a value of a control parameter. The
+resulting linear processes are then combined along the parallel layer, where
+`allow`, `block`, communication and sum elimination are applied while the
+summands are generated.
 
 ## Usage
 
 ```rust
+use merc_linearisation::LinearisationOptions;
 use merc_syntax::UntypedProcessSpecification;
 use merc_typecheck::ProcessSpecification;
-use merc_linearisation::linearise;
 
 let untyped = UntypedProcessSpecification::parse(
-    "act a;
-     proc P(n: Nat) = (n > 0) -> a . P(Int2Nat(n - 1)) <> delta;
-     init P(3);",
+    "act a, b;
+     proc P(n: Nat) = (n < 3) -> a . P(n + 1) <> b . delta;
+     init P(0);",
 )
 .unwrap();
 
-let spec = ProcessSpecification::from_untyped(untyped).unwrap();
-let lps = linearise(&spec).unwrap();
+let spec = ProcessSpecification::from_untyped(untyped).unwrap().lower().unwrap();
+let lps = merc_linearisation::linearise(&spec, merc_linearisation::rewriter, &LinearisationOptions::default()).unwrap();
 
-println!("{lps}");
+let mut bytes = Vec::new();
+merc_lps::write_lps(&lps, &mut bytes).unwrap();
 ```
 
 ## Safety

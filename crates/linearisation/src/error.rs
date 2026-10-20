@@ -1,43 +1,42 @@
-//! Errors from [`crate::translate::linearise`] and
-//! [`crate::compositional::linearise_compositional`].
+use merc_process::ActionSetError;
 
-use merc_syntax::Span;
-
-/// An error linearising a `merc_typecheck::ProcessSpecification`.
+/// An error linearising a `merc_process::ProcessSpecification`.
 ///
-/// `#[non_exhaustive]`: more variants will be added as later milestones (see
-/// the crate README) lift the restrictions the current translator has.
+/// Processes and expressions are carried in their printed form, so that the error can be sent
+/// between threads while terms cannot.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum LinearisationError {
     #[error("the specification has no 'init'; there is nothing to linearise")]
     MissingInit,
 
-    #[error(
-        "'{name}' is called both directly and through another process; linearising more than one \
-         mutually recursive process is not yet supported"
-    )]
-    MutualRecursionUnsupported { name: String, span: Span },
+    #[error("the recursion through '{process}' is unguarded: it can call itself without performing an action first")]
+    UnguardedRecursion { process: String },
 
     #[error(
-        "'{name}' is not called in tail position (it is followed by further behaviour via '.'); \
-         only regular (tail-recursive) processes are supported"
+        "the process is not in parallel pCRL format: '{construct}' occurs in '{expression}' inside a sequential or \
+         alternative composition, but parallel composition and the operators on it are only allowed at the outer level"
     )]
-    NotInTailPosition { name: String, span: Span },
-
-    #[error("'{construct}' is not supported by this milestone of the linearisation crate yet")]
-    UnsupportedConstruct { construct: &'static str, span: Span },
-
-    #[error(
-        "'|' is only supported directly between actions (to write a multi-action); combining \
-         arbitrary behaviour with '|' needs full parallel-composition support, which is not \
-         implemented yet"
-    )]
-    UnsupportedSynchronisation { span: Span },
+    NotParallelPcrl {
+        construct: &'static str,
+        expression: String,
+    },
 
     #[error(
-        "every operand of the top-level '||' in a compositional specification must be a call to a \
-         declared process (e.g. 'P1(x) || P2(y)'); this operand is something else"
+        "linearisation generated more than {limit} processes for sequences of calls starting at '{process}'; the \
+         process is probably not regular"
     )]
-    CompositionalOperandNotAProcessCall { span: Span },
+    NonRegular { process: String, limit: usize },
+
+    #[error("the action name '{action}' is reserved for successful termination")]
+    ReservedActionName { action: String },
+
+    #[error(transparent)]
+    InvalidActionSet(#[from] ActionSetError),
+
+    #[error("'{construct}' is not supported by linearisation, found in '{expression}'")]
+    UnsupportedConstruct {
+        construct: &'static str,
+        expression: String,
+    },
 }
