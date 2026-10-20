@@ -6,7 +6,6 @@ use std::io::BufWriter;
 use std::io::Write;
 
 use merc_aterm::ATerm;
-use merc_aterm::ATermInt;
 use merc_aterm::ATermList;
 use merc_aterm::ATermStreamable;
 use merc_aterm::ATermWrite;
@@ -71,16 +70,16 @@ impl<W: Write> LtsBuilder<LtsMultiAction<LtsAction>> for LtsStream<W> {
         let label_term = label.to_owned().to_mcrl2_aterm()?;
 
         self.writer.write_aterm(&transition_marker())?;
-        self.writer.write_aterm(&ATermInt::new(*from))?;
+        self.writer.write_aterm_int(*from)?;
         self.writer.write_aterm(&label_term)?;
-        self.writer.write_aterm(&ATermInt::new(*to))?;
+        self.writer.write_aterm_int(*to)?;
         Ok(())
     }
 
     fn finish(&mut self, initial_state: StateIndex) -> Result<Self::LTS, MercError> {
         self.writer.write_aterm(&initial_state_marker())?;
-        self.writer.write_aterm(&ATermInt::new(1))?; // Length of initial state is 1.
-        self.writer.write_aterm(&ATermInt::new(*initial_state))?;
+        self.writer.write_aterm_int(1)?; // Length of initial state is 1.
+        self.writer.write_aterm_int(*initial_state)?;
 
         // Flushes and writes the end-of-stream marker.
         ATermWrite::flush(&mut self.writer)
