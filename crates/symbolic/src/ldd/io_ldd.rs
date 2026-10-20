@@ -107,6 +107,7 @@ impl<W: BitStreamWrite + ATermWrite> ATermWrite for BinaryLddWriter<W> {
     delegate::delegate! {
         to self.writer {
             fn write_aterm(&mut self, term: &ATerm) -> Result<(), MercError>;
+            fn write_aterm_int(&mut self, value: usize) -> Result<(), MercError>;
             fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MercError>
             where
                 I: ExactSizeIterator<Item = ATerm>;
@@ -204,6 +205,7 @@ impl<R: BitStreamRead + ATermRead> ATermRead for BinaryLddReader<R> {
     delegate::delegate! {
         to self.reader {
             fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError>;
+            fn read_aterm_int(&mut self) -> Result<usize, MercError>;
             fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MercError>>, MercError>;
         }
     }

@@ -97,6 +97,12 @@ pub trait ATermWrite {
     /// Writes an ATerm to the stream.
     fn write_aterm(&mut self, term: &ATerm) -> Result<(), MercError>;
 
+    /// Writes an integer to the stream, read back by [`ATermRead::read_aterm_int`] or as an
+    /// [`ATermInt`] by [`ATermRead::read_aterm`].
+    fn write_aterm_int(&mut self, value: usize) -> Result<(), MercError> {
+        self.write_aterm(&ATermInt::new(value))
+    }
+
     /// Writes an iterator of ATerms to the stream.
     fn write_aterm_iter<I>(&mut self, iter: I) -> Result<(), MercError>
     where
@@ -113,6 +119,22 @@ pub trait ATermWrite {
 pub trait ATermRead {
     /// Reads the next ATerm from the stream. Returns None when the end of the stream is reached.
     fn read_aterm(&mut self) -> Result<Option<ATerm>, MercError>;
+
+    /// Reads an integer written by [`ATermWrite::write_aterm_int`], or an [`ATermInt`] written
+    /// as a term.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the next term is not an integer, or the stream has ended.
+    fn read_aterm_int(&mut self) -> Result<usize, MercError> {
+        let term = self
+            .read_aterm()?
+            .ok_or("Expected an integer, found the end of the stream")?;
+        if !is_int_term(&term) {
+            return Err(format!("Expected an integer, found term {term}").into());
+        }
+        Ok(ATermInt::from(term).value())
+    }
 
     /// Reads an iterator of ATerms from the stream.
     fn read_aterm_iter(&mut self) -> Result<impl ExactSizeIterator<Item = Result<ATerm, MercError>>, MercError>;
