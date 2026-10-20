@@ -90,9 +90,6 @@ pub(crate) fn merc_derive_terms_impl(_attributes: TokenStream, input: TokenStrea
                         // Only 'a prepended for the Ref<'a> struct.
                         let generics_ref = create_generics_with_lifetimes(&object.generics, &["'a"]);
 
-                        // Only 'b prepended for the Ref<'b> struct.
-                        let generics_ref_b = create_generics_with_lifetimes(&object.generics, &["'b"]);
-
                         // Only 'static prepended for the Ref<'static> struct.
                         let generics_static = create_generics_with_lifetimes(&object.generics, &["'static"]);
 
@@ -189,7 +186,9 @@ pub(crate) fn merc_derive_terms_impl(_attributes: TokenStream, input: TokenStrea
                             }
 
                             impl #generics_ref  #name_ref #generics_ref  {
-                                pub fn copy<'b>(&'b self) -> #name_ref #generics_ref_b{
+                                /// A copy that lives as long as the referenced term rather than this
+                                /// borrow, so that a traversal can keep subterms on its own stack.
+                                pub fn copy(&self) -> #name_ref #generics_ref {
                                     self.term.copy().into()
                                 }
 
