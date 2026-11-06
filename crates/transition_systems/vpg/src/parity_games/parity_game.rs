@@ -224,7 +224,11 @@ impl ParityGame {
             self.owner.len() + 1,
             "There should be an offset for every vertex, and the sentinel state"
         );
-        debug_assert_eq!(self.initial_vertex, 0, "The initial vertex should be vertex 0");
+        debug_assert!(
+            self.initial_vertex.value() < self.owner.len().max(1),
+            "The initial vertex {} should be a vertex of the game",
+            self.initial_vertex.value()
+        );
 
         // Check that there are no duplicate edges
         #[cfg(debug_assertions)]

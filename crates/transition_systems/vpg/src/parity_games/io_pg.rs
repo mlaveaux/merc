@@ -40,6 +40,9 @@ pub enum IOError {
 ///
 /// `parity <num_of_vertices>;`
 /// `<index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;`
+///
+/// An optional line `start <index>;` directly after the header sets the
+/// initial vertex, which is vertex 0 otherwise.
 pub fn read_pg<R: Read>(reader: R) -> Result<ParityGame, MercError> {
     info!("Reading parity game in .pg format...");
 
@@ -63,60 +66,81 @@ pub fn read_pg<R: Read>(reader: R) -> Result<ParityGame, MercError> {
         1,
     );
 
+    // The optional start line; otherwise the line is the first vertex.
+    let start_regex = Regex::new(r#"^\s*start\s+([0-9]+)\s*;"#).expect("Regex compilation should not fail");
+    let mut initial_vertex = VertexIndex::new(0);
+    let mut first_line = None;
+    if let Some(line) = lines.next() {
+        match start_regex.captures(line) {
+            Some(captures) => initial_vertex = VertexIndex::new(captures[1].parse()?),
+            None => first_line = Some(line.to_string()),
+        }
+    }
+
     // Collect the data in a builder and remove duplicate edges at the end.
-    let mut builder = ParityGameBuilder::with_capacity(VertexIndex::new(0), num_of_vertices);
+    let mut builder = ParityGameBuilder::with_capacity(initial_vertex, num_of_vertices);
     if num_of_vertices > 0 {
         builder.add_vertex(VertexIndex::new(num_of_vertices - 1), Player::Even, Priority::new(0));
     }
 
     let mut vertex_count = 0;
+    if let Some(line) = first_line {
+        read_vertex_line(&line, &mut builder)?;
+        progress.print((vertex_count + 1, num_of_vertices));
+        vertex_count += 1;
+    }
     while let Some(line) = lines.next() {
-        // Parse the line: <index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;
-        let mut parts = line.split_whitespace();
-
-        let index: usize = parts
-            .next()
-            .ok_or(IOError::InvalidLine("Expected at least <index> ...;"))?
-            .parse()?;
-        let vertex_priority: usize = parts
-            .next()
-            .ok_or(IOError::InvalidLine("Expected at least <index> <priority> ...;"))?
-            .parse()?;
-        let vertex_owner: u8 = parts
-            .next()
-            .ok_or(IOError::InvalidLine(
-                "Expected at least <index> <priority> <owner> ...;",
-            ))?
-            .parse()?;
-
-        let vertex = VertexIndex::new(index);
-        let owner =
-            Player::try_from_index(vertex_owner).ok_or(IOError::InvalidLine("owner must be 0 (even) or 1 (odd)"))?;
-        builder.add_vertex(vertex, owner, Priority::new(vertex_priority));
-
-        for successors in parts {
-            // An optional vertex name in quotes may follow the successors, which we ignore.
-            if successors.starts_with('"') {
-                break;
-            }
-
-            // Parse successors (remaining parts, removing trailing semicolon)
-            for successor in successors
-                .trim_end_matches(';')
-                .split(',')
-                .filter(|s| !s.trim().is_empty())
-                .map(|s| s.trim().parse())
-            {
-                let successor = successor?;
-                builder.add_edge(vertex, VertexIndex::new(successor));
-            }
-        }
-
+        read_vertex_line(line, &mut builder)?;
         progress.print((vertex_count + 1, num_of_vertices));
         vertex_count += 1;
     }
 
     Ok(builder.finish(true, true))
+}
+
+/// Parses the line `<index> <priority> <owner> <outgoing_vertex>, <outgoing_vertex>, ...;` into the builder.
+fn read_vertex_line(line: &str, builder: &mut ParityGameBuilder) -> Result<(), MercError> {
+    let mut parts = line.split_whitespace();
+
+    let index: usize = parts
+        .next()
+        .ok_or(IOError::InvalidLine("Expected at least <index> ...;"))?
+        .parse()?;
+    let vertex_priority: usize = parts
+        .next()
+        .ok_or(IOError::InvalidLine("Expected at least <index> <priority> ...;"))?
+        .parse()?;
+    let vertex_owner: u8 = parts
+        .next()
+        .ok_or(IOError::InvalidLine(
+            "Expected at least <index> <priority> <owner> ...;",
+        ))?
+        .parse()?;
+
+    let vertex = VertexIndex::new(index);
+    let owner =
+        Player::try_from_index(vertex_owner).ok_or(IOError::InvalidLine("owner must be 0 (even) or 1 (odd)"))?;
+    builder.add_vertex(vertex, owner, Priority::new(vertex_priority));
+
+    for successors in parts {
+        // An optional vertex name in quotes may follow the successors, which we ignore.
+        if successors.starts_with('"') {
+            break;
+        }
+
+        // Parse successors (remaining parts, removing trailing semicolon)
+        for successor in successors
+            .trim_end_matches(';')
+            .split(',')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().parse())
+        {
+            let successor = successor?;
+            builder.add_edge(vertex, VertexIndex::new(successor));
+        }
+    }
+
+    Ok(())
 }
 
 /// Writes the given parity game to the given writer in .pg format.

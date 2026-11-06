@@ -16,7 +16,6 @@ use merc_lts::guess_lts_format_from_extension;
 use merc_lts::read_aut;
 use merc_lts::write_aut;
 use merc_symbolic::bits_to_bdd;
-use merc_vpg::OddWarmStart;
 use merc_vpg::PG;
 use merc_vpg::ParityGame;
 use merc_vpg::Projected;
@@ -24,12 +23,11 @@ use merc_vpg::ProjectedLts;
 use merc_vpg::Solver;
 use merc_vpg::StrategyImprovementAlgorithm;
 use merc_vpg::StrategyImprovementOptions;
-use merc_vpg::VertexIndex;
+use merc_vpg::StrategyImprovementStatistics;
 use merc_vpg::check_solution;
 use merc_vpg::project_feature_transition_system_iter;
 use merc_vpg::solve_priority_promotion;
 use merc_vpg::solve_strategy_improvement;
-use merc_vpg::solve_two_sided_lifting;
 use merc_vpg::verify_solution;
 use oxidd::BooleanFunction;
 
@@ -48,6 +46,7 @@ use merc_vpg::FeatureDiagram;
 use merc_vpg::ParityGameFormat;
 use merc_vpg::PgDot;
 use merc_vpg::Player;
+use merc_vpg::VertexIndex;
 use merc_vpg::VpgDot;
 use merc_vpg::VpgSolver;
 use merc_vpg::compute_reachable;
@@ -143,16 +142,17 @@ struct SolveArgs {
     #[arg(long, default_value_t = false)]
     verify_solution_solitaire: bool,
 
-    /// Strategy improvement only: a file with the initial move of vertices,
-    /// one `<from> <to>` or `<from> <name> <to> <name>` per line. Other
-    /// vertices start with their first outgoing edge.
-    #[arg(long)]
+    /// Strategy improvement only, for experiments: start from the moves in this
+    /// file instead of the initial profile (the first successor of every vertex
+    /// in relevance order, i.e. by (priority, index)).
+    ///
+    /// One `<from> <to>` or `<from> <name> <to> <name>` per line; vertices
+    /// without a line keep their initial move. This allows adversarial starts,
+    /// e.g. the initial strategies of lower-bound games. The solver is correct
+    /// from any start, but the open polynomial bound on the number of
+    /// iterations is about runs from the initial profile.
+    #[arg(long, value_name = "FILE")]
     initial_strategy: Option<PathBuf>,
-
-    /// Strategy improvement only: from which profile Odd's best response is
-    /// computed in every iteration.
-    #[arg(long, default_value_t = OddWarmStart::Initial)]
-    odd_warm_start: OddWarmStart,
 
     /// Strategy improvement only: fail after this many iterations.
     #[arg(long)]
@@ -169,14 +169,15 @@ struct SolveArgs {
 }
 
 /// Reads an initial strategy profile for strategy improvement: every vertex
-/// starts with its first outgoing edge, unless the file gives another move.
+/// starts with its first successor in relevance order (by priority, then
+/// index), unless the file gives another move.
 fn read_initial_strategy(game: &ParityGame, path: &Path) -> Result<Vec<VertexIndex>, MercError> {
     let mut profile: Vec<VertexIndex> = game
         .iter_vertices()
         .map(|v| {
             game.outgoing_edges(v)
-                .next()
                 .map(|edge| edge.to())
+                .min_by_key(|&w| (game.priority(w), w))
                 .ok_or_else(|| format!("Vertex {} has no outgoing edge", *v))
         })
         .collect::<Result<_, _>>()?;
@@ -197,6 +198,37 @@ fn read_initial_strategy(game: &ParityGame, path: &Path) -> Result<Vec<VertexInd
     }
 
     Ok(profile)
+}
+
+/// Logs the statistics of a strategy improvement run, as key-values so that
+/// `format_key_values_json` renders them as a JSON object next to the
+/// human-readable message.
+fn log_statistics(solver: Solver, statistics: &StrategyImprovementStatistics) {
+    let time = statistics.time.as_secs_f64();
+    match &statistics.decisive {
+        None => info!(
+            iterations = statistics.iterations,
+            epochs = statistics.epochs,
+            best_response_rounds = statistics.best_response_rounds,
+            fallbacks = statistics.fallbacks,
+            time = time;
+            "Strategy improvement ({solver}): {statistics}"
+        ),
+        Some(decisive) => info!(
+            iterations = statistics.iterations,
+            epochs = statistics.epochs,
+            best_response_rounds = statistics.best_response_rounds,
+            fallbacks = statistics.fallbacks,
+            time = time,
+            l_rounds = decisive.l_rounds,
+            max_count = decisive.max_count,
+            max_count_element = decisive.max_count_element,
+            max_interval_count = decisive.max_interval_count,
+            max_epoch_length = decisive.max_epoch_length,
+            even_vertices = decisive.even_vertices;
+            "Strategy improvement ({solver}): {statistics}"
+        ),
+    }
 }
 
 /// Compute the reachable part of a parity game
@@ -372,9 +404,6 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             Solver::PriorityPromotion => timing.measure("solve_priority_promotion", || {
                 solve_priority_promotion(&game, compute_strategy)
             }),
-            Solver::TwoSidedLifting => timing.measure("solve_two_sided_lifting", || {
-                solve_two_sided_lifting(&game, compute_strategy)
-            }),
             Solver::HybridSi | Solver::VjSi => {
                 let algorithm = if args.solver == Solver::HybridSi {
                     StrategyImprovementAlgorithm::HybridB
@@ -382,17 +411,16 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
                     StrategyImprovementAlgorithm::VogeJurdzinski
                 };
                 let mut options = StrategyImprovementOptions::new(algorithm);
-                options.odd_warm_start = args.odd_warm_start;
                 options.max_iterations = args.max_iterations;
-                options.decisive = args.decisive_statistics;
                 if let Some(path) = &args.initial_strategy {
                     options.initial_profile = Some(read_initial_strategy(&game, path)?);
                 }
+                options.decisive = args.decisive_statistics;
 
                 let result = timing.measure("solve_strategy_improvement", || {
                     solve_strategy_improvement(&game, &options, compute_strategy)
                 })?;
-                info!("Strategy improvement ({}): {}", args.solver, result.statistics);
+                log_statistics(args.solver, &result.statistics);
                 (result.solution, result.strategy)
             }
         };
@@ -403,7 +431,7 @@ fn handle_solve(cli: &Cli, args: &SolveArgs, timing: &mut Timing) -> Result<(), 
             for (index, player_set) in solution.iter().enumerate() {
                 println!("W{index}: {}", player_set.iter_ones().format(", "));
             }
-        } else if solution[0][0] {
+        } else if solution[0][*game.initial_vertex()] {
             println!("{}", Player::Even.solution())
         } else {
             println!("{}", Player::Odd.solution())

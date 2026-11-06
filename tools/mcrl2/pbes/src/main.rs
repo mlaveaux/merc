@@ -71,7 +71,6 @@ use merc_vpg::VertexIndex;
 use merc_vpg::convert_symbolic_parity_game;
 use merc_vpg::solve_priority_promotion;
 use merc_vpg::solve_strategy_improvement_default;
-use merc_vpg::solve_two_sided_lifting;
 use merc_vpg::solve_symbolic_zielonka;
 use merc_vpg::solve_zielonka;
 use merc_vpg::verify_solution;
@@ -923,7 +922,6 @@ fn handle_solve(args: &SolveArgs, timing: &Timing, preprocess: bool) -> Result<(
             StrategyImprovementAlgorithm::VogeJurdzinski,
             args.verify_solution,
         ),
-        Solver::TwoSidedLifting => solve_two_sided_lifting(&game, args.verify_solution),
     });
 
     if let Some(strategy) = strategy
