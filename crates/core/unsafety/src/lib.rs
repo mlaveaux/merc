@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod block_allocator;
+mod chained_pointer_set;
 mod concurrent_append_vec;
 mod concurrent_indexed_set;
 mod counting_allocator;
@@ -19,6 +20,7 @@ pub(crate) use freelist::*;
 pub use block_allocator::AllocBlock;
 pub use block_allocator::BlockAllocator;
 pub use block_allocator::BlockAllocatorSafe;
+pub use chained_pointer_set::ChainedPointerSet;
 pub use concurrent_append_vec::ConcurrentAppendVec;
 pub use concurrent_indexed_set::ConcurrentIndexedSet;
 pub use counting_allocator::AllocCounter;

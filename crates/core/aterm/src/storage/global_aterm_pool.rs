@@ -295,9 +295,17 @@ impl GlobalTermPool {
         if self.garbage_collection {
             // Garbage collection is enabled.
             self.collect_garbage();
+        } else {
+            // Without collection the sweep does not rebuild the tables, so grow them here.
+            self.terms.grow();
         }
 
         self.reset_gc_budget();
+    }
+
+    /// Returns true if a fixed-arity term table should grow its hash index.
+    pub(crate) fn needs_grow(&self) -> bool {
+        self.terms.needs_grow()
     }
 
     /// Recomputes the global GC budget from the free storage capacity.
@@ -486,7 +494,11 @@ impl GlobalTermPool {
             });
         }
 
-        (num_of_terms - self.len(), num_of_symbols - self.symbol_pool.len())
+        (
+            // `len` of the experimental term tables is an estimate between collections.
+            num_of_terms.saturating_sub(self.len()),
+            num_of_symbols - self.symbol_pool.len(),
+        )
     }
 
     /// Returns the metrics of the term pool, can be formatted and written to output.

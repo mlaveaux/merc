@@ -5,8 +5,8 @@ use std::ptr::slice_from_raw_parts_mut;
 use log::debug;
 use rustc_hash::FxBuildHasher;
 
-use merc_unsafety::AllocBlock;
 use merc_unsafety::BlockAllocatorSafe;
+use merc_unsafety::ChainedPointerSet;
 use merc_unsafety::StablePointer;
 use merc_unsafety::StablePointerSet;
 
@@ -27,24 +27,21 @@ pub(crate) struct ATermStorage {
     terms: StablePointerSet<SharedTerm, FxBuildHasher>,
 
     /// Stores the fixed size [SharedTermInt] integer terms.
-    int_terms: StablePointerSet<SharedTermInt, FxBuildHasher, AllocBlock<SharedTermInt, BLOCK_SIZE>>,
+    int_terms: FixedSet<SharedTermInt>,
 
     /// Stores terms of fixed arity, see [SharedTermFixed].
-    terms_0: StablePointerSet<SharedTermFixed<0>, FxBuildHasher, AllocBlock<SharedTermFixed<0>, BLOCK_SIZE>>,
-    terms_1: StablePointerSet<SharedTermFixed<1>, FxBuildHasher, AllocBlock<SharedTermFixed<1>, BLOCK_SIZE>>,
-    terms_2: StablePointerSet<SharedTermFixed<2>, FxBuildHasher, AllocBlock<SharedTermFixed<2>, BLOCK_SIZE>>,
-    terms_3: StablePointerSet<SharedTermFixed<3>, FxBuildHasher, AllocBlock<SharedTermFixed<3>, BLOCK_SIZE>>,
-    terms_4: StablePointerSet<SharedTermFixed<4>, FxBuildHasher, AllocBlock<SharedTermFixed<4>, BLOCK_SIZE>>,
-    terms_5: StablePointerSet<SharedTermFixed<5>, FxBuildHasher, AllocBlock<SharedTermFixed<5>, BLOCK_SIZE>>,
-    terms_6: StablePointerSet<SharedTermFixed<6>, FxBuildHasher, AllocBlock<SharedTermFixed<6>, BLOCK_SIZE>>,
-    terms_7: StablePointerSet<SharedTermFixed<7>, FxBuildHasher, AllocBlock<SharedTermFixed<7>, BLOCK_SIZE>>,
+    terms_0: FixedSet<SharedTermFixed<0>>,
+    terms_1: FixedSet<SharedTermFixed<1>>,
+    terms_2: FixedSet<SharedTermFixed<2>>,
+    terms_3: FixedSet<SharedTermFixed<3>>,
+    terms_4: FixedSet<SharedTermFixed<4>>,
+    terms_5: FixedSet<SharedTermFixed<5>>,
+    terms_6: FixedSet<SharedTermFixed<6>>,
+    terms_7: FixedSet<SharedTermFixed<7>>,
 }
 
 /// The initial capacity for the term storage.
 const INITIAL_CAPACITY: usize = 1024;
-
-/// The number of terms stored in every block of the fixed-size storage.
-const BLOCK_SIZE: usize = 1024;
 
 /// The largest arity stored in the fixed-size tables; larger terms go into the
 /// dynamically sized `terms` storage.
@@ -55,19 +52,15 @@ impl ATermStorage {
     pub(crate) fn new() -> Self {
         Self {
             terms: StablePointerSet::with_capacity_and_hasher(INITIAL_CAPACITY, FxBuildHasher),
-            int_terms: StablePointerSet::with_capacity_and_hasher_in(
-                INITIAL_CAPACITY,
-                FxBuildHasher,
-                AllocBlock::new(),
-            ),
-            terms_0: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_1: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_2: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_3: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_4: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_5: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_6: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
-            terms_7: StablePointerSet::with_capacity_and_hasher_in(INITIAL_CAPACITY, FxBuildHasher, AllocBlock::new()),
+            int_terms: new_fixed_set(),
+            terms_0: new_fixed_set(),
+            terms_1: new_fixed_set(),
+            terms_2: new_fixed_set(),
+            terms_3: new_fixed_set(),
+            terms_4: new_fixed_set(),
+            terms_5: new_fixed_set(),
+            terms_6: new_fixed_set(),
+            terms_7: new_fixed_set(),
         }
     }
 
@@ -248,18 +241,7 @@ impl ATermStorage {
     where
         F: FnMut(&StablePointer<SharedTerm>) -> bool,
     {
-        // Freeing nearly every term would otherwise leave them on the free lists in hash table
-        // order, which is slow to walk when removing the empty blocks below.
-        self.int_terms.allocator_mut().defer_deallocations();
-        self.terms_0.allocator_mut().defer_deallocations();
-        self.terms_1.allocator_mut().defer_deallocations();
-        self.terms_2.allocator_mut().defer_deallocations();
-        self.terms_3.allocator_mut().defer_deallocations();
-        self.terms_4.allocator_mut().defer_deallocations();
-        self.terms_5.allocator_mut().defer_deallocations();
-        self.terms_6.allocator_mut().defer_deallocations();
-        self.terms_7.allocator_mut().defer_deallocations();
-
+        // The fixed-arity tables free their removed terms and empty blocks themselves.
         // SAFETY: The caller guarantees that pointers to removed terms are not used again.
         unsafe {
             self.terms.retain(|term| f(term));
@@ -275,18 +257,33 @@ impl ATermStorage {
             self.terms_7.retain(|term| f(&cast_to_shared_term_ptr(term, 7)));
         }
 
-        // Removes empty blocks after removing entries.
-        let mut blocks_removed = 0;
-        blocks_removed += self.int_terms.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_0.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_1.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_2.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_3.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_4.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_5.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_6.allocator_mut().remove_free_blocks();
-        blocks_removed += self.terms_7.allocator_mut().remove_free_blocks();
-        debug!("Removed {} empty blocks from the fixed-size storage", blocks_removed);
+    }
+
+    /// Returns true if one of the fixed-arity tables should grow its hash index, see
+    /// [Self::grow].
+    pub(crate) fn needs_grow(&self) -> bool {
+        self.int_terms.needs_grow()
+            || self.terms_0.needs_grow()
+            || self.terms_1.needs_grow()
+            || self.terms_2.needs_grow()
+            || self.terms_3.needs_grow()
+            || self.terms_4.needs_grow()
+            || self.terms_5.needs_grow()
+            || self.terms_6.needs_grow()
+            || self.terms_7.needs_grow()
+    }
+
+    /// Grows the hash index of the fixed-arity tables that need it; the terms do not move.
+    pub(crate) fn grow(&mut self) {
+        self.int_terms.grow();
+        self.terms_0.grow();
+        self.terms_1.grow();
+        self.terms_2.grow();
+        self.terms_3.grow();
+        self.terms_4.grow();
+        self.terms_5.grow();
+        self.terms_6.grow();
+        self.terms_7.grow();
     }
 
     /// Returns the number of stored terms.
@@ -316,6 +313,18 @@ impl ATermStorage {
             + self.terms_7.capacity()
             + self.terms.capacity()
     }
+}
+
+/// The set that stores the terms of one fixed arity: a lock-free hash set with CAS chaining,
+/// see `experiments/aterm-lockfree-table.md` for the comparison with the DashSet-based
+/// `StablePointerSet` and with open addressing.
+type FixedSet<T> = ChainedPointerSet<T, FxBuildHasher>;
+
+/// Initial number of buckets of every fixed-arity table.
+const INITIAL_BUCKETS: usize = 1 << 14;
+
+fn new_fixed_set<T: Hash + Eq + Send + Sync + BlockAllocatorSafe + merc_unsafety::Erasable>() -> FixedSet<T> {
+    FixedSet::with_capacity_and_hasher(INITIAL_BUCKETS, FxBuildHasher)
 }
 
 /// Casts a pointer to a term in a fixed-size storage to a pointer to a

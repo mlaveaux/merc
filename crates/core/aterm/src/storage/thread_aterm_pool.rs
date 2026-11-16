@@ -575,14 +575,15 @@ impl ThreadTermPool {
         }
 
         // Subtract a chunk from the shared budget.
-        let previous = self
-            .term_pool
-            .read_recursive()
-            .expect("Lock poisoned!")
-            .consume_gc_budget(GC_BUDGET_CHUNK);
+        let (previous, needs_grow) = {
+            let guard = self.term_pool.read_recursive().expect("Lock poisoned!");
+            (guard.consume_gc_budget(GC_BUDGET_CHUNK), guard.needs_grow())
+        };
 
-        if previous <= GC_BUDGET_CHUNK {
-            // The global budget is exhausted, so collect
+        if previous <= GC_BUDGET_CHUNK || needs_grow {
+            // The global budget is exhausted or a table is full: collect. The sweep rebuilds
+            // every table at twice its live size, so a table only grows for live terms;
+            // growing without collecting let the capacity (and budget) double every cycle.
             self.collect_garbage();
         }
 
