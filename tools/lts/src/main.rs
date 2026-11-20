@@ -17,11 +17,14 @@ use merc_explore::combine_lts_parallel;
 use merc_io::LargeFormatter;
 use merc_lts::GenericLts;
 use merc_lts::LTS;
+use merc_lts::LabelledTransitionSystem;
 use merc_lts::LtsBuilderMem;
 use merc_lts::LtsFormat;
 use merc_lts::LtsMultiAction;
 use merc_lts::MutexLtsBuilder;
 use merc_lts::SimpleAction;
+use merc_lts::StateLabels;
+use merc_lts::TransitionLabel;
 use merc_lts::apply_lts;
 use merc_lts::apply_lts_pair;
 use merc_lts::guess_lts_format_from_extension;
@@ -126,6 +129,11 @@ struct ReduceArgs {
     /// Disables preprocessing of the LTS before reducing.
     #[arg(long)]
     no_preprocess: bool,
+
+    /// Hides the actions with the given comma separated names before reducing, i.e. removes them from every
+    /// multi-action. A label of which every action is hidden becomes tau.
+    #[arg(long, value_delimiter = ',')]
+    tau: Vec<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -381,17 +389,25 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
     // in the binary LTS output format; the other variants are relabelled to plain strings.
     match lts {
         GenericLts::Aut(lts) | GenericLts::Bcg(lts) => {
+            // These labels are unstructured strings, so only a label that equals a hidden name becomes tau.
+            let lts = if args.tau.is_empty() {
+                lts
+            } else {
+                lts.relabel_merged(|label| Ok(if args.tau.contains(&label) { String::tau_label() } else { label }))?
+            };
             let reduced_lts = reduce_lts(lts, args.equivalence, !args.no_preprocess, timing);
             log_reduced_stats(&reduced_lts);
             write_untyped_lts(&reduced_lts, output_format, args.output.as_deref())?;
         }
         GenericLts::AutMcrl2(lts) => {
+            let lts = hide_actions(lts, &args.tau)?;
             let reduced_lts = reduce_lts(lts, args.equivalence, !args.no_preprocess, timing);
             log_reduced_stats(&reduced_lts);
             let reduced_lts = reduced_lts.relabel(|label| Ok(label.to_string()))?;
             write_untyped_lts(&reduced_lts, output_format, args.output.as_deref())?;
         }
         GenericLts::Lts(lts, data_spec) => {
+            let lts = hide_actions(lts, &args.tau)?;
             let reduced_lts = reduce_lts(lts, args.equivalence, !args.no_preprocess, timing);
             log_reduced_stats(&reduced_lts);
 
@@ -408,6 +424,22 @@ fn handle_reduce(args: &ReduceArgs, timing: &mut Timing) -> Result<(), MercError
     }
 
     Ok(())
+}
+
+/// Applies the hide operator for the actions named `tau` to every multi-action label of `lts`. The state labels are
+/// dropped, since the reduction does not use them.
+fn hide_actions<A: TransitionLabel, S: StateLabels>(
+    lts: LabelledTransitionSystem<LtsMultiAction<A>, S>,
+    tau: &[String],
+) -> Result<LabelledTransitionSystem<LtsMultiAction<A>>, MercError> {
+    if tau.is_empty() {
+        return Ok(lts.with_state_labels(()));
+    }
+
+    lts.relabel_merged(|mut label| {
+        label.retain(|action| !tau.iter().any(|name| action.matches_label(name)));
+        Ok(label)
+    })
 }
 
 /// Handles the refinement checking between two LTSs.

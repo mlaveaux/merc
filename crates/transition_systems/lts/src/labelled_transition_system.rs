@@ -13,6 +13,8 @@ use rustc_hash::FxHashSet;
 
 use crate::LTS;
 use crate::LabelIndex;
+use crate::LtsBuilder;
+use crate::LtsBuilderMem;
 use crate::StateIndex;
 use crate::StateLabels;
 use crate::Transition;
@@ -393,6 +395,31 @@ impl<Label: TransitionLabel, S: StateLabels> LabelledTransitionSystem<Label, S> 
         .with_state_labels(self.state_labels))
     }
 
+    /// A [Self::relabel] variant in which labels that become equal are merged, and labels that become the hidden label
+    /// are hidden. For example, this hides actions by mapping them to [`TransitionLabel::tau_label`]. Transitions that
+    /// become equal are merged as well, and the state labels are dropped.
+    pub fn relabel_merged<L, F>(self, labelling: F) -> Result<LabelledTransitionSystem<L>, MercError>
+    where
+        F: Fn(Label) -> Result<L, MercError>,
+        L: TransitionLabel,
+    {
+        let initial_state = self.initial_state;
+        let num_of_states = self.num_of_states();
+        let relabelled = self.relabel(labelling)?;
+
+        // The builder merges equal labels and maps the hidden label to index 0.
+        let mut builder = LtsBuilderMem::new(relabelled.labels().to_vec(), Vec::new());
+        let indices = builder.label_indices(relabelled.labels());
+        builder.require_num_of_states(num_of_states);
+        for state in relabelled.iter_states() {
+            for transition in relabelled.outgoing_transitions(state) {
+                builder.add_transition_index(state, indices[transition.label], transition.to);
+            }
+        }
+
+        Ok(builder.finish(initial_state, true))
+    }
+
     /// Checks that the internal representation satisfies all structural invariants.
     pub fn assert_valid(&self) {
         assert!(
@@ -638,9 +665,57 @@ mod tests {
     use merc_utilities::random_test;
 
     use crate::LTS;
+    use crate::LabelIndex;
+    use crate::LabelledTransitionSystem;
+    use crate::StateIndex;
+    use crate::TransitionLabel;
     use crate::num_reachable_states;
     use crate::random_lts;
     use crate::write_aut;
+
+    /// Labels that become tau are hidden, and labels and transitions that become equal are merged.
+    #[test]
+    fn test_relabel_merged_hides_and_merges() {
+        let tau = String::tau_label();
+        let lts = LabelledTransitionSystem::new(
+            StateIndex::new(0),
+            Some(3),
+            || {
+                [(0, 0, 1), (0, 1, 1), (0, 2, 1), (1, 3, 2)]
+                    .into_iter()
+                    .map(|(from, label, to)| (StateIndex::new(from), LabelIndex::new(label), StateIndex::new(to)))
+            },
+            vec![tau.clone(), "a".to_string(), "b".to_string(), "c".to_string()],
+        );
+
+        // Hide a and rename b to c.
+        let merged = lts
+            .relabel_merged(|label| {
+                Ok(match label.as_str() {
+                    "a" => String::tau_label(),
+                    "b" => "c".to_string(),
+                    _ => label,
+                })
+            })
+            .unwrap();
+
+        let merged = &merged;
+        let transitions: Vec<(usize, String, usize)> = merged
+            .iter_states()
+            .flat_map(|s| {
+                merged
+                    .outgoing_transitions(s)
+                    .map(move |t| (s.value(), merged.labels()[t.label].clone(), t.to.value()))
+            })
+            .collect();
+        assert_eq!(merged.labels().len(), 2);
+        assert!(merged.labels()[0].is_tau_label());
+        assert_eq!(merged.num_of_states(), 3);
+        assert_eq!(transitions.len(), 3);
+        for transition in [(0, tau, 1), (0, "c".to_string(), 1), (1, "c".to_string(), 2)] {
+            assert!(transitions.contains(&transition), "missing {transition:?}");
+        }
+    }
 
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
