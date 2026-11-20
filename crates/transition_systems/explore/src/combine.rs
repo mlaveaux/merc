@@ -6,7 +6,6 @@ use hashbrown::HashMap;
 use itertools::Itertools;
 use log::info;
 use rustc_hash::FxBuildHasher;
-use streaming_iterator::StreamingIterator;
 
 use merc_aterm::ATerm;
 use merc_aterm::ATermList;
@@ -98,7 +97,8 @@ pub fn combine_lts<L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel, B: LtsBui
     timing: &Timing,
 ) -> Result<B::LTS, MercError> {
     check_arguments(&parallel_composition, allow, comm)?;
-    let lps = ComposedLts::new(&parallel_composition, hide, allow, comm);
+    let allow = sort_allow(allow);
+    let lps = ComposedLts::new(&parallel_composition, hide, &allow, comm);
 
     // Two different combinations of underlying transitions (e.g. from different LTSs in the
     // composition) can reduce to the same (label, successor) pair for a given state once hiding,
@@ -168,7 +168,8 @@ where
 {
     check_arguments(&parallel_composition, allow, comm)?;
 
-    let lps = ComposedLts::new(&parallel_composition, hide, allow, comm);
+    let allow = sort_allow(allow);
+    let lps = ComposedLts::new(&parallel_composition, hide, &allow, comm);
     let pool = configure_rayon_thread_pool(threads, false)?;
 
     let builder_ref: &B = builder;
@@ -409,37 +410,20 @@ fn check_communications(comm: &[CommExpr]) -> Result<(), MercError> {
 struct ComposedLts<'a, L> {
     lts_list: &'a [L],
     hide: &'a [String],
-    allow: &'a [MultiActionLabel],
+    allow: &'a [SortedMultiActionLabel],
     comm: &'a [CommExpr],
-
-    /// For every LTS and label index, whether the label can be part of an allowed multi-action, see
-    /// [`usable_action_names`]. Transitions with other labels are never combined.
-    usable_labels: Vec<Vec<bool>>,
 
     summands: Vec<ComposedSummand<'a, L>>,
 }
 
 impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> ComposedLts<'a, L> {
-    fn new(lts_list: &'a [L], hide: &'a [String], allow: &'a [MultiActionLabel], comm: &'a [CommExpr]) -> Self {
-        let usable_names = usable_action_names(allow, comm);
-        let is_usable = |label: &L::Label| {
-            label
-                .actions()
-                .iter()
-                .all(|action| usable_names.iter().any(|name| action.matches_label(name)))
-        };
-
+    fn new(lts_list: &'a [L], hide: &'a [String], allow: &'a [SortedMultiActionLabel], comm: &'a [CommExpr]) -> Self {
         Self {
             lts_list,
             hide,
             allow,
             comm,
-            usable_labels: lts_list
-                .iter()
-                .map(|lts| lts.labels().iter().map(is_usable).collect())
-                .collect(),
             summands: non_empty_subsets(lts_list.len())
-                .into_iter()
                 .map(|components| ComposedSummand {
                     components,
                     lts: PhantomData,
@@ -469,9 +453,10 @@ impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> LPS for ComposedLts
     fn create_context(&self) -> ComposedContext<'a, L> {
         ComposedContext {
             labels: CombinedLabels::new(self.lts_list, self.hide, self.allow, self.comm),
-            choices: vec![Vec::new(); self.lts_list.len()],
+            outgoing_transitions: vec![Vec::new(); self.lts_list.len()],
             odometer: Odometer::new(),
-            transition: ParallelTransition::default(),
+            key: Vec::new(),
+            target: Vec::new(),
         }
     }
 
@@ -480,17 +465,16 @@ impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> LPS for ComposedLts
         context: &mut ComposedContext<'a, L>,
         state: &'b [usize],
     ) -> impl Iterator<Item = usize> + 'b {
-        // Collect the usable outgoing transitions of every LTS once, so that the summands can share them.
-        for (i, (lts, choices)) in self.lts_list.iter().zip(&mut context.choices).enumerate() {
-            choices.clear();
-            choices.extend(
+        // Collect the outgoing transitions of every LTS once, so that the summands can share them.
+        for (i, (lts, outgoing)) in self.lts_list.iter().zip(&mut context.outgoing_transitions).enumerate() {
+            outgoing.clear();
+            outgoing.extend(
                 lts.outgoing_transitions(StateIndex::new(state[i]))
-                    .filter(|transition| self.usable_labels[i][transition.label])
                     .map(|transition| (transition.label, transition.to.value())),
             );
         }
 
-        // A summand in which an LTS cannot move has no parallel transitions, see [`ParallelTransitions::new`].
+        // A summand in which an LTS cannot move has no transitions, see [`ComposedSummand::enumerate`].
         0..self.summands.len()
     }
 
@@ -506,16 +490,15 @@ struct ComposedSummand<'a, L> {
 
 /// Returns every non-empty subset of `0..n` as a list in increasing order. The subsets are ordered like the binary
 /// numbers 1 to 2^n - 1, in which element 0 is the least significant bit.
-fn non_empty_subsets(n: usize) -> Vec<Vec<usize>> {
+fn non_empty_subsets(n: usize) -> impl Iterator<Item = Vec<usize>> {
     let mut odometer = Odometer::new();
     odometer.reset(std::iter::repeat_n(2, n));
 
-    let mut subsets = Vec::new();
-    while odometer.increment().is_some() {
-        // The last digit changes fastest, so it corresponds to element 0.
-        subsets.push(odometer.digits().iter().rev().positions(|&digit| digit == 1).collect());
-    }
-    subsets
+    // The last digit changes fastest, so it corresponds to element 0.
+    std::iter::from_fn(move || {
+        odometer.increment()?;
+        Some(odometer.digits().iter().rev().positions(|&digit| digit == 1).collect())
+    })
 }
 
 impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> Summand for ComposedSummand<'a, L> {
@@ -523,22 +506,41 @@ impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> Summand for Compose
     type Label = LtsMultiAction<A>;
     type Context = ComposedContext<'a, L>;
 
+    /// Enumerates the transitions in which every LTS in `components` takes one of its outgoing transitions, and the
+    /// other LTSs stay in their state. The odometer holds the index of the outgoing transition of every component,
+    /// and only the components from the first changed digit onwards are updated.
     fn enumerate<F>(&self, context: &mut Self::Context, state: &[usize], mut report: F) -> Result<(), MercError>
     where
         F: FnMut(&Self::Label, &[usize]) -> Result<(), MercError>,
     {
         let ComposedContext {
             labels,
-            choices,
+            outgoing_transitions,
             odometer,
-            transition,
+            key,
+            target,
         } = context;
 
-        let mut transitions = ParallelTransitions::new(&self.components, choices, state, odometer, transition);
-        while let Some(transition) = transitions.next() {
-            if let Some(label) = labels.label(&transition.labels) {
-                report(label, &transition.target)?;
+        if !odometer.reset(self.components.iter().map(|&i| outgoing_transitions[i].len())) {
+            return Ok(());
+        }
+        key.clear();
+        key.extend(self.components.iter().map(|&i| (i, LabelIndex::new(0))));
+        target.clear();
+        target.extend_from_slice(state);
+
+        let mut first_changed = Some(0);
+        while let Some(first) = first_changed {
+            for (k, &i) in self.components.iter().enumerate().skip(first) {
+                let (label, to) = outgoing_transitions[i][odometer.digits()[k]];
+                key[k] = (i, label);
+                target[i] = to;
             }
+
+            if let Some(label) = labels.label(key) {
+                report(label, target)?;
+            }
+            first_changed = odometer.increment();
         }
         Ok(())
     }
@@ -556,129 +558,14 @@ impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> Summand for Compose
 struct ComposedContext<'a, L: LTS> {
     labels: CombinedLabels<'a, L>,
 
-    /// The usable outgoing (label, target) pairs of every LTS in the current state, filled by [`LPS::prepare`].
-    choices: Vec<Vec<(LabelIndex, usize)>>,
+    /// The outgoing (label, target) pairs of every LTS in the current state, filled by [`LPS::prepare`].
+    outgoing_transitions: Vec<Vec<(LabelIndex, usize)>>,
 
-    /// The buffers of [`ParallelTransitions`], kept to avoid allocating them for every summand.
+    /// The buffers of [`ComposedSummand::enumerate`], kept to avoid allocating them for every summand: the odometer
+    /// over the outgoing transitions, the (LTS index, label index) pair of every LTS that moves, and the target state.
     odometer: Odometer,
-    transition: ParallelTransition,
-}
-
-/// A transition of a parallel composition before its label is computed.
-#[derive(Default)]
-struct ParallelTransition {
-    /// The (LTS index, label index) pair of every LTS that moves, in increasing order of LTS index.
-    labels: Vec<(usize, LabelIndex)>,
-    /// The state of every LTS after the transition.
+    key: Vec<(usize, LabelIndex)>,
     target: Vec<usize>,
-}
-
-/// The parallel transitions in which every LTS in `components` takes one of its `choices`, and the other LTSs stay in
-/// their state.
-///
-/// This is a [`StreamingIterator`] that updates a single [`ParallelTransition`] in place, changing only the LTSs whose
-/// choice changed.
-struct ParallelTransitions<'c> {
-    components: &'c [usize],
-    choices: &'c [Vec<(LabelIndex, usize)>],
-    /// The current choice of every LTS in `components`.
-    odometer: &'c mut Odometer,
-    transition: &'c mut ParallelTransition,
-    position: Position,
-}
-
-#[derive(Clone, Copy)]
-enum Position {
-    Start,
-    At,
-    Done,
-}
-
-impl<'c> ParallelTransitions<'c> {
-    /// Creates the iterator over the parallel transitions from `state`, where `choices[i]` contains the (label,
-    /// target) pairs of the outgoing transitions of LTS `i`. The `odometer` and `transition` are reused buffers.
-    ///
-    /// There are no parallel transitions when an LTS in `components` has no choices.
-    fn new(
-        components: &'c [usize],
-        choices: &'c [Vec<(LabelIndex, usize)>],
-        state: &[usize],
-        odometer: &'c mut Odometer,
-        transition: &'c mut ParallelTransition,
-    ) -> Self {
-        let position = if odometer.reset(components.iter().map(|&i| choices[i].len())) {
-            transition.labels.clear();
-            transition
-                .labels
-                .extend(components.iter().map(|&i| (i, LabelIndex::new(0))));
-            transition.target.clear();
-            transition.target.extend_from_slice(state);
-            Position::Start
-        } else {
-            Position::Done
-        };
-
-        Self {
-            components,
-            choices,
-            odometer,
-            transition,
-            position,
-        }
-    }
-
-    /// Updates the transition for the components from position `first` onwards to their current choice.
-    fn update_from(&mut self, first: usize) {
-        for (k, &i) in self.components.iter().enumerate().skip(first) {
-            let (label, to) = self.choices[i][self.odometer.digits()[k]];
-            self.transition.labels[k] = (i, label);
-            self.transition.target[i] = to;
-        }
-    }
-}
-
-impl StreamingIterator for ParallelTransitions<'_> {
-    type Item = ParallelTransition;
-
-    fn advance(&mut self) {
-        let changed = match self.position {
-            Position::Start => Some(0),
-            Position::At => self.odometer.increment(),
-            Position::Done => None,
-        };
-        self.position = match changed {
-            Some(first) => {
-                self.update_from(first);
-                Position::At
-            }
-            None => Position::Done,
-        };
-    }
-
-    fn get(&self) -> Option<&ParallelTransition> {
-        matches!(self.position, Position::At).then_some(&*self.transition)
-    }
-}
-
-/// Returns the action names that can occur in a multi-action allowed by `allow` after applying `comm`.
-///
-/// These are the names in `allow`, and the names on the left-hand side of a communication whose result is such a name.
-/// A multi-action containing any other name is not allowed, whatever it is combined with: communication only replaces
-/// names on its left-hand side by its result.
-fn usable_action_names(allow: &[MultiActionLabel], comm: &[CommExpr]) -> Vec<String> {
-    let mut names: Vec<String> = allow
-        .iter()
-        .flat_map(|label| label.actions.iter().map(|name| name.node.clone()))
-        .collect();
-    // The result of a communication cannot occur on the left-hand side of another, so one pass suffices.
-    for expr in comm {
-        if names.contains(&expr.to.node) {
-            names.extend(expr.from.actions.iter().map(|name| name.node.clone()));
-        }
-    }
-    names.sort_unstable();
-    names.dedup();
-    names
 }
 
 /// Computes the labels of parallel transitions, i.e. $\tau_I(\gamma_C(\alpha_{j_0} | \cdots | \alpha_{j_m}))$ when
@@ -690,7 +577,7 @@ fn usable_action_names(allow: &[MultiActionLabel], comm: &[CommExpr]) -> Vec<Str
 struct CombinedLabels<'a, L: LTS> {
     lts_list: &'a [L],
     hide: &'a [String],
-    allow: Vec<SortedMultiActionLabel>,
+    allow: &'a [SortedMultiActionLabel],
     comm: &'a [CommExpr],
 
     /// The label for every combination of (LTS index, label index) pairs, or `None` if it is not allowed.
@@ -698,12 +585,11 @@ struct CombinedLabels<'a, L: LTS> {
 }
 
 impl<'a, L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel> CombinedLabels<'a, L> {
-    fn new(lts_list: &'a [L], hide: &'a [String], allow: &[MultiActionLabel], comm: &'a [CommExpr]) -> Self {
+    fn new(lts_list: &'a [L], hide: &'a [String], allow: &'a [SortedMultiActionLabel], comm: &'a [CommExpr]) -> Self {
         Self {
             lts_list,
             hide,
-            // Pre-sort the allow set for efficient matching.
-            allow: allow.iter().map(SortedMultiActionLabel::new).collect(),
+            allow,
             comm,
             cache: HashMap::default(),
         }
@@ -752,7 +638,7 @@ fn combined_label<L: LTS<Label = LtsMultiAction<A>>, A: CombineLabel>(
     );
 
     // Check allow: alpha in A ∪ {tau}.
-    if !is_allowed(allow, &SortedLtsMultiAction::new(&multi_action)) {
+    if !is_allowed(allow, &multi_action) {
         return None;
     }
 
@@ -841,17 +727,26 @@ fn find_communication_match<L: CombineLabel>(actions: &[L], expr: &CommExpr) -> 
 /// - The action is tau (always allowed), or
 /// - The action label names, compared as sorted multisets, match one of the
 ///   entries in the allow set.
-fn is_allowed<L: CombineLabel>(allow: &[SortedMultiActionLabel], action: &SortedLtsMultiAction<L>) -> bool {
+///
+/// The actions of a multi-action are iterated in `L`'s sorted order, so this
+/// only works if `L`'s `Ord` implementation orders by label name first.
+fn is_allowed<L: CombineLabel>(allow: &[SortedMultiActionLabel], action: &LtsMultiAction<L>) -> bool {
     if action.is_tau_label() {
         return true;
     }
 
+    let actions = action.actions();
+    debug_assert!(
+        actions.iter().zip(actions.iter().sorted()).all(|(a, b)| a == b),
+        "LtsMultiAction's internal order must be consistent with the label-matching logic"
+    );
+
     allow.iter().any(|allowed| {
-        allowed.actions.len() == action.len()
+        allowed.actions.len() == actions.len()
             && allowed
                 .actions
                 .iter()
-                .zip(action.iter_actions())
+                .zip(actions.iter())
                 .all(|(name, a)| a.matches_label(name))
     })
 }
@@ -868,7 +763,7 @@ fn hide_action<L: CombineLabel>(hide: &[String], mut action: LtsMultiAction<L>) 
 }
 
 /// A multi-action label with action names sorted, for proper multiset
-/// comparison with [`SortedLtsMultiAction`].
+/// comparison in [`is_allowed`].
 struct SortedMultiActionLabel {
     /// Action names in sorted order.
     actions: Vec<String>,
@@ -882,49 +777,14 @@ impl SortedMultiActionLabel {
     }
 }
 
-/// A view of an [`LtsMultiAction`] for multiset comparison with
-/// [`SortedMultiActionLabel`].
-///
-/// `VecBag<L>` iterates in `L`'s sorted order, this only works if `L`'s `Ord`
-/// implementation is consistent with the label-matching logic in `is_allowed`
-/// and the communication matching in `find_communication_match`.
-struct SortedLtsMultiAction<'a, L: Ord> {
-    action: &'a LtsMultiAction<L>,
-}
-
-impl<'a, L: TransitionLabel> SortedLtsMultiAction<'a, L> {
-    fn new(action: &'a LtsMultiAction<L>) -> Self {
-        // Check if the L Ord is consistent.
-        debug_assert!(
-            action
-                .actions()
-                .iter()
-                .zip(action.actions().iter().sorted())
-                .all(|(a, b)| a == b),
-            "LtsMultiAction's internal order must be consistent with the label-matching logic"
-        );
-
-        SortedLtsMultiAction { action }
-    }
-
-    fn is_tau_label(&self) -> bool {
-        self.action.is_tau_label()
-    }
-
-    fn iter_actions(&self) -> impl Iterator<Item = &L> {
-        self.action.actions().iter()
-    }
-
-    fn len(&self) -> usize {
-        self.action.actions().len()
-    }
+/// Returns the allow set with the names of every multi-action sorted, see [`is_allowed`].
+fn sort_allow(allow: &[MultiActionLabel]) -> Vec<SortedMultiActionLabel> {
+    allow.iter().map(SortedMultiActionLabel::new).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use merc_collections::VecBag;
-    use merc_data::DataExpression;
-    use merc_lts::LtsAction;
     use merc_lts::LtsMultiAction;
     use merc_lts::SimpleAction;
     use merc_syntax::CommExpr;
@@ -933,7 +793,6 @@ mod tests {
     use merc_syntax::respan;
 
     use itertools::Itertools;
-    use streaming_iterator::StreamingIterator;
 
     use merc_lts::LTS;
     use merc_lts::LabelIndex;
@@ -946,19 +805,14 @@ mod tests {
     use merc_syntax::parse_comm_expr_set;
     use merc_utilities::random_test;
 
-    use super::CombineLabel;
     use super::CombinedLabels;
     use super::ComposedLts;
-    use super::Odometer;
-    use super::ParallelTransition;
-    use super::ParallelTransitions;
-    use super::SendAction;
-    use super::SortedLtsMultiAction;
     use super::SortedMultiActionLabel;
     use super::combined_label;
     use super::find_communication_match;
     use super::is_allowed;
     use super::non_empty_subsets;
+    use super::sort_allow;
     use crate::LPS;
     use crate::Summand;
 
@@ -1044,8 +898,7 @@ mod tests {
     }
 
     fn is_allowed_by(entries: &[&[&str]], actions: Vec<SimpleAction>) -> bool {
-        let action = multi_action(actions);
-        is_allowed(&allow(entries), &SortedLtsMultiAction::new(&action))
+        is_allowed(&allow(entries), &multi_action(actions))
     }
 
     /// The allow operator matches on label-name multisets only, independent of
@@ -1123,42 +976,58 @@ mod tests {
         assert_eq!(result[0], simple("c", &[]));
     }
 
-    /// Only the given components move, the last one fastest, and the other LTSs stay in their state.
+    /// A summand moves only its components, the last one fastest, and the other LTSs stay in their state. A summand in
+    /// which a component cannot move has no transitions.
     #[test]
-    fn parallel_transitions_enumerates_choices_of_components() {
-        let choices = vec![
-            vec![(LabelIndex::new(1), 10), (LabelIndex::new(2), 11)],
-            vec![(LabelIndex::new(3), 12)],
-            vec![(LabelIndex::new(4), 13), (LabelIndex::new(5), 14)],
+    fn summand_enumerates_outgoing_transitions_of_components() {
+        let ltss = vec![
+            make_lts(&["a", "b"], 3, &[(0, 1, 1), (0, 2, 2)]),
+            make_lts(&["c"], 2, &[(0, 1, 1)]),
+            make_lts(&["d", "e"], 3, &[(0, 1, 1), (0, 2, 2)]),
         ];
-        let (mut odometer, mut transition) = (Odometer::new(), ParallelTransition::default());
+        let allow = sort_allow(&parse_allow_action_names("{a|d, a|e, b|d, b|e}").unwrap());
+        let lps = ComposedLts::new(&ltss, &[], &allow, &[]);
 
-        let mut transitions = ParallelTransitions::new(&[0, 2], &choices, &[0, 1, 2], &mut odometer, &mut transition);
+        // The summand of the subset {0, 2}, see [`non_empty_subsets`].
+        let summand = &lps.summands()[4];
+        assert_eq!(summand.read_positions(), &[0, 2]);
+
+        let mut context = lps.create_context();
+        assert_eq!(lps.prepare(&mut context, &[0, 0, 0]).count(), 7);
         let mut result = Vec::new();
-        while let Some(transition) = transitions.next() {
-            result.push((transition.labels.clone(), transition.target.clone()));
-        }
+        summand
+            .enumerate(&mut context, &[0, 0, 0], |label, target| {
+                result.push((label.to_string(), target.to_vec()));
+                Ok(())
+            })
+            .unwrap();
         assert_eq!(
             result,
             vec![
-                (key(&[(0, 1), (2, 4)]), vec![10, 1, 13]),
-                (key(&[(0, 1), (2, 5)]), vec![10, 1, 14]),
-                (key(&[(0, 2), (2, 4)]), vec![11, 1, 13]),
-                (key(&[(0, 2), (2, 5)]), vec![11, 1, 14]),
+                ("a|d".to_string(), vec![1, 0, 1]),
+                ("a|e".to_string(), vec![1, 0, 2]),
+                ("b|d".to_string(), vec![2, 0, 1]),
+                ("b|e".to_string(), vec![2, 0, 2]),
             ]
         );
 
-        // An LTS without choices has no parallel transitions.
-        let choices = vec![vec![(LabelIndex::new(1), 10)], vec![]];
-        let mut transitions = ParallelTransitions::new(&[0, 1], &choices, &[0, 1], &mut odometer, &mut transition);
-        assert!(transitions.next().is_none());
+        // LTS 0 cannot move in state 1.
+        assert_eq!(lps.prepare(&mut context, &[1, 0, 0]).count(), 7);
+        let mut result = Vec::new();
+        summand
+            .enumerate(&mut context, &[1, 0, 0], |label, target| {
+                result.push((label.to_string(), target.to_vec()));
+                Ok(())
+            })
+            .unwrap();
+        assert!(result.is_empty());
     }
 
     #[test]
     fn non_empty_subsets_counts_in_binary() {
-        assert_eq!(non_empty_subsets(0), Vec::<Vec<usize>>::new());
+        assert_eq!(non_empty_subsets(0).collect_vec(), Vec::<Vec<usize>>::new());
         assert_eq!(
-            non_empty_subsets(3),
+            non_empty_subsets(3).collect_vec(),
             vec![
                 vec![0],
                 vec![1],
@@ -1171,38 +1040,11 @@ mod tests {
         );
     }
 
-    /// Exactly the actions with equal arguments are compatible for communication, and converting back returns the
-    /// original actions.
-    #[test]
-    fn send_action_conversion() {
-        let single = |label: &str, argument: &str| {
-            LtsMultiAction::new(VecBag::from_vec(vec![LtsAction::new(
-                label.to_owned(),
-                vec![DataExpression::from_string(argument).unwrap()],
-            )]))
-        };
-        let (a_one, b_one, b_two) = (single("a", "1"), single("b", "1"), single("b", "f(2)"));
-
-        let converted: Vec<LtsMultiAction<SendAction>> = [&a_one, &b_one, &b_two]
-            .iter()
-            .map(|action| SendAction::from_multi_action(action))
-            .collect();
-        let action = |i: usize| converted[i].actions().iter().next().unwrap();
-
-        assert!(action(0).comm_args_compatible(action(1)));
-        assert!(!action(1).comm_args_compatible(action(2)));
-        assert!(action(0).matches_label("a") && action(2).matches_label("b"));
-        assert_eq!(SendAction::from_multi_action(&b_two), converted[2]);
-        for (original, converted) in [&a_one, &b_one, &b_two].into_iter().zip(&converted) {
-            assert_eq!(&SendAction::to_multi_action(converted), original);
-        }
-    }
-
     /// Equal label indices in different LTSs must not share a cache entry.
     #[test]
     fn combined_labels_distinguishes_ltss() {
         let ltss = vec![make_lts(&["a"], 2, &[(0, 1, 1)]), make_lts(&["b"], 2, &[(0, 1, 1)])];
-        let allow = parse_allow_action_names("{a, a|b}").unwrap();
+        let allow = sort_allow(&parse_allow_action_names("{a, a|b}").unwrap());
         let mut labels = CombinedLabels::new(&ltss, &[], &allow, &[]);
 
         assert_eq!(
@@ -1222,7 +1064,7 @@ mod tests {
     fn combined_labels_caches_blocked_combinations() {
         let ltss = vec![make_lts(&["a", "b"], 1, &[]), make_lts(&["b"], 1, &[])];
         let comm = parse_comm_expr_set("{a|b -> c}").unwrap();
-        let allow = parse_allow_action_names("{c}").unwrap();
+        let allow = sort_allow(&parse_allow_action_names("{c}").unwrap());
         let hide = parse_action_names("{c}").unwrap();
         let mut labels = CombinedLabels::new(&ltss, &hide, &allow, &comm);
 
@@ -1249,10 +1091,9 @@ mod tests {
                 random_test_lts(rng, 5, 5),
             ];
             let comm = parse_comm_expr_set("{a|b -> c}").unwrap();
-            // b is only usable through the communication, and d is not usable.
-            let allow = parse_allow_action_names("{a, c, a|c}").unwrap();
+            // b is only allowed through the communication, and d is never allowed.
+            let allow = sort_allow(&parse_allow_action_names("{a, c, a|c}").unwrap());
             let hide = parse_action_names("{a}").unwrap();
-            let sorted_allow: Vec<SortedMultiActionLabel> = allow.iter().map(SortedMultiActionLabel::new).collect();
             let lps = ComposedLts::new(&ltss, &hide, &allow, &comm);
 
             for state in ltss.iter().map(|lts| 0..lts.num_of_states()).multi_cartesian_product() {
@@ -1286,7 +1127,7 @@ mod tests {
                     let target = (0..ltss.len())
                         .map(|i| combination[i].map_or(state[i], |(_, to)| to))
                         .collect();
-                    if let Some(label) = combined_label(&ltss, &pairs, &hide, &sorted_allow, &comm) {
+                    if let Some(label) = combined_label(&ltss, &pairs, &hide, &allow, &comm) {
                         expected.push((label, target));
                     }
                 }

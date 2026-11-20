@@ -6,6 +6,7 @@ use std::process::Command;
 use itertools::Itertools;
 use log::info;
 use merc_collections::VecBag;
+use merc_data::DataExpression;
 use merc_io::temp_dir;
 use merc_io::traced_command;
 use merc_lts::LTS;
@@ -36,6 +37,8 @@ use rand::RngExt;
 use rand::seq::IndexedRandom;
 use rand::seq::IteratorRandom;
 
+use merc_explore::CombineLabel;
+use merc_explore::SendAction;
 use merc_explore::combine_lts;
 use merc_explore::combine_lts_actions_parallel;
 use merc_explore::combine_lts_parallel;
@@ -70,6 +73,33 @@ fn make_lts(
         },
         labels,
     )
+}
+
+/// Exactly the actions with equal arguments are compatible for communication, and converting back returns the
+/// original actions.
+#[test]
+fn test_send_action_conversion() {
+    let single = |label: &str, argument: &str| {
+        LtsMultiAction::new(VecBag::from_vec(vec![LtsAction::new(
+            label.to_owned(),
+            vec![DataExpression::from_string(argument).unwrap()],
+        )]))
+    };
+    let (a_one, b_one, b_two) = (single("a", "1"), single("b", "1"), single("b", "f(2)"));
+
+    let converted: Vec<LtsMultiAction<SendAction>> = [&a_one, &b_one, &b_two]
+        .iter()
+        .map(|action| SendAction::from_multi_action(action))
+        .collect();
+    let action = |i: usize| converted[i].actions().iter().next().unwrap();
+
+    assert!(action(0).comm_args_compatible(action(1)));
+    assert!(!action(1).comm_args_compatible(action(2)));
+    assert!(action(0).matches_label("a") && action(2).matches_label("b"));
+    assert_eq!(SendAction::from_multi_action(&b_two), converted[2]);
+    for (original, converted) in [&a_one, &b_one, &b_two].into_iter().zip(&converted) {
+        assert_eq!(&SendAction::to_multi_action(converted), original);
+    }
 }
 
 #[test]

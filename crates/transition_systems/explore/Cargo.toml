@@ -35,7 +35,6 @@ quanta.workspace = true
 rand.workspace = true
 rayon.workspace = true
 rustc-hash.workspace = true
-streaming-iterator.workspace = true
 
 [dev-dependencies]
 merc_reduction.workspace = true
