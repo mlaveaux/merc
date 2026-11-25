@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 
 use itertools::Itertools;
 
@@ -11,6 +12,8 @@ use crate::DataVariable;
 use crate::LearnSuccessorsContext;
 use crate::free_variables_data_expression;
 use crate::is_application;
+use crate::is_pbes_false;
+use crate::is_pbes_true;
 use crate::is_variable;
 
 /// A summand-like structure that can be analysed.
@@ -35,17 +38,17 @@ pub trait CfgSummand {
 /// - the edge's **target** is the location the parameter moves to once the
 ///   summand fires (the closed value it is assigned), or the same location as
 ///   `source` (a self-loop) when the summand leaves `d` unchanged, or unknown.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CfgEdge<V> {
     /// Position into [`ControlFlowGraph::control_flow_parameters`] identifying
     /// which control flow parameter this edge belongs to.
     pub position: usize,
 
-    /// The location this edge departs from, i.e. the value the control flow
-    /// parameter is required to have for the summand to fire. `None` when the
-    /// summand's guard does not constrain it, so the edge departs from every
-    /// location.
-    pub source: Option<V>,
+    /// The location this edge departs from (see [`ControlFlowGraph::location`]),
+    /// i.e. the location the control flow parameter must be in for the summand
+    /// to fire. `None` when the summand's guard does not constrain it, so the
+    /// edge departs from every location.
+    pub source: Option<usize>,
 
     /// The location this edge arrives at, i.e. what happens to the control
     /// flow parameter once the summand fires. See [`CfgTarget`].
@@ -76,23 +79,39 @@ pub enum CfgTarget<V> {
 ///   (whether or not that same summand also constrains `d`'s source value), and
 /// - whenever a summand reads `d` to decide its guard, it does so through a
 ///   conjunct `d == c` with `c` a closed value (its *source* location), and
-/// - a summand that does not constrain `d` leaves it unchanged.
+/// - a summand that does not constrain `d` leaves it unchanged, and
+/// - `==` decides the equality of every two of its *location terms*: its initial
+///   value and the closed values of the guards and assignments.
 ///
 /// Under these conditions the value of a CFP in any reachable state is one of a
 /// statically known set of locations, and every summand's effect on it is
 /// exactly one edge (see [`CfgEdge`]) between two such locations: the graph
-/// `(locations, edges)` is the control flow graph of `d`.
+/// `(locations, edges)` is the control flow graph of `d`, as in van de Pol and
+/// Timmer (*State Space Reduction of Linear Processes Using Control Flow
+/// Reconstruction*, ATVA 2009).
+///
+/// The locations of the paper are values, while location terms are normal
+/// forms, and different normal forms can be equal when `==` is coarser than
+/// syntactic equality (e.g. by an equation `a == b = true`). The location terms
+/// are therefore grouped into *locations*, the classes of terms that `==` makes
+/// equal. A parameter for which `==` does not rewrite to `true` or `false` for
+/// some pair of location terms is not a control flow parameter, since its
+/// locations are unknown.
 ///
 /// The generic `V` is the representation of the values of the parameters.
 pub struct ControlFlowGraph<V> {
     /// The indices into `parameters` identified as control flow parameters.
     control_flow_parameters: Vec<usize>,
 
+    /// For every control flow parameter, the location of each of its location
+    /// terms.
+    locations: Vec<HashMap<V, usize>>,
+
     /// `edges[summand]` are the edges that summand contributes.
     edges: Vec<Vec<CfgEdge<V>>>,
 }
 
-impl<V> ControlFlowGraph<V> {
+impl<V: Hash + Eq> ControlFlowGraph<V> {
     /// Runs the control flow graph analysis over `summands`, whose guards and
     /// assignments are expressed in terms of `parameters`.
     ///
@@ -103,12 +122,16 @@ impl<V> ControlFlowGraph<V> {
     /// spuriously defeat the analysis merely by existing. A caller with no
     /// notion of dead code (every summand is live) can pass `|_| true`.
     ///
+    /// `initial_state` is the initial value of every parameter, which is a
+    /// location term of every control flow parameter.
+    ///
     /// `context` rewrites a term to normal form before it is tested for
-    /// closedness. `intern` interns a normalised location into the caller's own
-    /// representation `V`, so an edge's `source`/`target` can be compared
-    /// directly in that representation.
+    /// closedness, and decides the equality of location terms. `intern` interns
+    /// a normalised location term into the caller's own representation `V`, in
+    /// which the values of states are compared with it.
     pub fn new<S: CfgSummand>(
         parameters: &[DataVariable],
+        initial_state: &[DataExpression],
         summands: &[S],
         live: impl Fn(&S) -> bool,
         context: &LearnSuccessorsContext,
@@ -121,18 +144,58 @@ impl<V> ControlFlowGraph<V> {
             .collect();
 
         // A parameter is a control flow parameter iff every live summand treats
-        // it as such, and at least one live summand actually constrains it.
-        let control_flow_parameters: Vec<usize> = (0..parameters.len())
-            .filter(|&j| is_control_flow_parameter(j, &analyses, summands, &live))
-            .collect();
+        // it as such, at least one live summand actually constrains it, and `==`
+        // decides the equality of its location terms: its initial value and
+        // every source and target, which are the only values it can take.
+        let mut control_flow_parameters = Vec::new();
+        let mut location_terms: Vec<Vec<(ATerm, usize)>> = Vec::new();
+        for j in (0..parameters.len()).filter(|&j| is_control_flow_parameter(j, &analyses, summands, &live)) {
+            let mut terms: Vec<ATerm> = Vec::new();
+            let initial = closed_value(context, &initial_state[j].clone().into());
+            for term in initial.into_iter().chain(analyses.iter().flat_map(|analysis| {
+                analysis
+                    .source
+                    .get(&j)
+                    .cloned()
+                    .into_iter()
+                    .chain(analysis.target.get(&j).cloned().flatten())
+            })) {
+                if !terms.contains(&term) {
+                    terms.push(term);
+                }
+            }
 
-        // Build every summand's edges, interning their source/target locations
-        // into the caller's own representation `V`.
+            // A constrained parameter has a guard conjunct `d == c`, whose `==`
+            // compares the location terms.
+            let equality = analyses
+                .iter()
+                .find_map(|analysis| analysis.guard.get(&j))
+                .expect("a control flow parameter is constrained by a guard");
+            match locations(&terms, equality, context) {
+                Some(locations) => {
+                    control_flow_parameters.push(j);
+                    location_terms.push(terms.into_iter().zip(locations).collect());
+                }
+                None => log::debug!(
+                    "Parameter {} is not a control flow parameter, since == does not decide the equality of its locations",
+                    parameters[j].name()
+                ),
+            }
+        }
+
+        // Build every summand's edges, interning their target locations into
+        // the caller's own representation `V`.
         let mut edges: Vec<Vec<CfgEdge<V>>> = Vec::with_capacity(analyses.len());
         for analysis in &analyses {
             let mut summand_edges = Vec::new();
             for (position, &j) in control_flow_parameters.iter().enumerate() {
-                let source = analysis.source.get(&j).map(|term| intern_term(&mut intern, term));
+                // Every source is a location term of the parameter.
+                let source = analysis.source.get(&j).map(|source| {
+                    location_terms[position]
+                        .iter()
+                        .find_map(|(term, location)| (term == source).then_some(*location))
+                        .expect("a source is a location term")
+                });
                 let target = match analysis.target.get(&j) {
                     None => CfgTarget::Unchanged,
                     Some(None) => CfgTarget::Unknown,
@@ -150,8 +213,19 @@ impl<V> ControlFlowGraph<V> {
             edges.push(summand_edges);
         }
 
+        let locations = location_terms
+            .iter()
+            .map(|terms| {
+                terms
+                    .iter()
+                    .map(|(term, location)| (intern_term(&mut intern, term), *location))
+                    .collect()
+            })
+            .collect();
+
         let result = Self {
             control_flow_parameters,
+            locations,
             edges,
         };
 
@@ -173,6 +247,17 @@ impl<V> ControlFlowGraph<V> {
         result
     }
 
+    /// The location of the value `value` of the control flow parameter at
+    /// `position` into [`ControlFlowGraph::control_flow_parameters`], or `None`
+    /// when it is not one of its location terms. Every reachable value of a
+    /// control flow parameter is a location term, provided that it is in the
+    /// same normal form.
+    pub fn location(&self, position: usize, value: &V) -> Option<usize> {
+        self.locations[position].get(value).copied()
+    }
+}
+
+impl<V> ControlFlowGraph<V> {
     /// The indices into the caller's parameter vector identified as control
     /// flow parameters.
     pub fn control_flow_parameters(&self) -> &[usize] {
@@ -283,6 +368,48 @@ impl<V> fmt::Display for CfgDisplay<'_, V> {
     }
 }
 
+/// The location of every term of `terms`, numbered by the first term with that
+/// location, when `==` decides the equality of every pair of terms consistently,
+/// and `None` otherwise. The terms are compared with the `==` of `equality`, a
+/// guard conjunct `d == c` on the parameter.
+fn locations(terms: &[ATerm], equality: &DataExpression, context: &LearnSuccessorsContext) -> Option<Vec<usize>> {
+    let conjunct: ATerm = equality.clone().into();
+    let mut locations: Vec<usize> = Vec::with_capacity(terms.len());
+    for (index, term) in terms.iter().enumerate() {
+        let mut equal = Vec::with_capacity(index);
+        for other in &terms[..index] {
+            let instance = ATerm::with_args(
+                &conjunct.get_head_symbol(),
+                &[conjunct.arg(0), term.copy(), other.copy()],
+            );
+            let result = context.rewrite_under_sigma(&instance.copy().into());
+            if is_pbes_true(&result.copy()) {
+                equal.push(true);
+            } else if is_pbes_false(&result.copy()) {
+                equal.push(false);
+            } else {
+                return None;
+            }
+        }
+
+        // A term belongs to the location of the first earlier term that it is
+        // equal to, and must then be equal to exactly the terms of that location.
+        let location = equal
+            .iter()
+            .position(|&equal| equal)
+            .map_or(index, |other| locations[other]);
+        if equal
+            .iter()
+            .zip(&locations)
+            .any(|(&equal, &other)| equal != (other == location))
+        {
+            return None;
+        }
+        locations.push(location);
+    }
+    Some(locations)
+}
+
 /// Interns `term`, normalised to a [`DataExpressionRef`], through `intern`.
 fn intern_term<V>(intern: &mut impl FnMut(&DataExpressionRef) -> V, term: &ATerm) -> V {
     let value: DataExpressionRef<'_> = term.copy().into();
@@ -294,6 +421,10 @@ struct SummandAnalysis {
     /// Maps a parameter index to its required source location (closed under
     /// `context`) when the summand's guard contains a conjunct `d == c`.
     source: HashMap<usize, ATerm>,
+
+    /// Maps a parameter index with a source location to the guard conjunct
+    /// `d == c` (or `c == d`) that it was obtained from.
+    guard: HashMap<usize, DataExpression>,
 
     /// Maps each parameter index changed by the summand to the target
     /// location of the edge it contributes for that parameter: `Some(c)` when
@@ -316,11 +447,15 @@ fn analyse_summand<S: CfgSummand>(
     collect_conjuncts(summand.condition(), &mut conjuncts);
 
     let mut source = HashMap::new();
+    let mut guard = HashMap::new();
     for conjunct in &conjuncts {
-        if let Some((index, value)) = as_parameter_equality(conjunct, parameters, context) {
+        if let Some((index, value)) = as_parameter_equality(conjunct, parameters, context)
+            && !source.contains_key(&index)
+        {
             // A parameter cannot consistently be constrained to two different
             // closed values in the same (satisfiable) guard, so the first wins.
-            source.entry(index).or_insert(value);
+            source.insert(index, value);
+            guard.insert(index, conjunct.clone());
         }
     }
 
@@ -341,7 +476,7 @@ fn analyse_summand<S: CfgSummand>(
         }
     }
 
-    SummandAnalysis { source, target }
+    SummandAnalysis { source, guard, target }
 }
 
 /// Returns whether parameter `j` is a control flow parameter across all `live`

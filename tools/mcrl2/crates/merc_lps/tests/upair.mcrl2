@@ -1,0 +1,12 @@
+% An unordered pair: pair(x, y) and pair(y, x) are the same value.
+sort UPair;
+cons pair: Nat # Nat -> UPair;
+var x, y, z, w: Nat;
+eqn pair(x, y) == pair(z, w) = (x == z && y == w) || (x == w && y == z);
+
+act s, t;
+proc P(p: UPair) =
+    (p == pair(1, 2)) -> s . P(p = pair(3, 4))
+  + (p == pair(3, 4)) -> t . P(p = pair(2, 1));
+
+init P(pair(2, 1));

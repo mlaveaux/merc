@@ -80,8 +80,14 @@ impl CfgPbesSrfLps {
         // A summand belonging to an equation that is itself unreachable from
         // the initial equation must not be allowed to disqualify a genuine
         // control flow parameter merely by existing in the unified PBES.
+        // The state layout is `[equation_index, params...]`.
+        let initial_state: Vec<_> = inner.initial_state()[1..]
+            .iter()
+            .map(|&value| inner.value(value))
+            .collect();
         let graph = ControlFlowGraph::new(
             &parameters,
+            &initial_state,
             inner.summands(),
             |summand| inner.is_equation_reachable(summand.equation_index()),
             &context,
@@ -253,14 +259,17 @@ impl LPS for CfgPbesSrfLps {
         let summand_metrics = &self.summand_metrics;
 
         candidates.filter(move |&index| {
-            // A summand can fire only if the current state's value at every
-            // control flow parameter it constrains matches that edge's source
-            // location; an edge with no source location (`None`) departs from
-            // every location and never disqualifies the summand. State layout is
-            // `[equation_index, params...]`, hence the `1 +` offset.
+            // A summand is pruned when the current state's value at one of
+            // its control flow parameters is in another location than the one
+            // its guard requires; a value that is not a location term is never
+            // excluded. State layout is `[equation_index, params...]`, hence
+            // the `1 +` offset.
             let selected = self.graph.edges(index).iter().all(|edge| {
-                edge.source
-                    .is_none_or(|source| state[1 + control_flow_parameters[edge.position]] == source)
+                edge.source.is_none_or(|source| {
+                    self.graph
+                        .location(edge.position, &state[1 + control_flow_parameters[edge.position]])
+                        .is_none_or(|location| location == source)
+                })
             });
 
             #[cfg(feature = "metrics")]

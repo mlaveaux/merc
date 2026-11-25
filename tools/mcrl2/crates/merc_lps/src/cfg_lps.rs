@@ -79,8 +79,14 @@ impl CfgLinearProcessSpecification {
         // Every summand of an explicit LPS is a candidate from every state (see
         // `ExplicitLinearProcessSpecification::prepare`), so none of them is dead
         // code the analysis should discount.
+        let initial_state: Vec<_> = inner
+            .initial_state()
+            .into_iter()
+            .map(|value| inner.value(value))
+            .collect();
         let graph = ControlFlowGraph::new(
             &parameters,
+            &initial_state,
             inner.summands(),
             |_| true,
             &context,
@@ -251,13 +257,16 @@ impl LPS for CfgLinearProcessSpecification {
         let summand_metrics = &self.summand_metrics;
 
         (0..self.inner.summands().len()).filter(move |&index| {
-            // A summand can fire only if the current state's value at every
-            // control flow parameter it constrains matches that edge's source
-            // location; an edge with no source location (`None`) departs from
-            // every location and never disqualifies the summand.
+            // A summand is pruned when the current state's value at one of
+            // its control flow parameters is in another location than the one
+            // its guard requires; a value that is not a location term is never
+            // excluded.
             let selected = self.graph.edges(index).iter().all(|edge| {
-                edge.source
-                    .is_none_or(|source| state[control_flow_parameters[edge.position]] == source)
+                edge.source.is_none_or(|source| {
+                    self.graph
+                        .location(edge.position, &state[control_flow_parameters[edge.position]])
+                        .is_none_or(|location| location == source)
+                })
             });
 
             #[cfg(feature = "metrics")]

@@ -142,6 +142,15 @@ fn test_cfg_par() {
     compare_cfg_with_explicit("../../../../examples/mCRL2/academic/par/par.mcrl2");
 }
 
+/// Unordered pairs, in which `pair(2, 1) == pair(1, 2)` holds although they are
+/// different normal forms, so a summand guarded by `p == pair(1, 2)` can fire
+/// in the initial state `pair(2, 1)`.
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_cfg_user_defined_equality() {
+    compare_cfg_with_explicit("tests/upair.mcrl2");
+}
+
 /// Generates random LPS specs with [`random_lps`] and asserts that
 /// control-flow and plain explicit exploration agree on each.
 #[test]

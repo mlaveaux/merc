@@ -173,6 +173,65 @@ fn test_cfg_matches_srf_with_control_flow_parameter() {
     assert_cfg_matches_srf(&pbes);
 }
 
+/// A PBES over unordered pairs, in which `pair(2, 1) == pair(1, 2)` holds
+/// although they are different normal forms, so the summand of `X` guarded by
+/// `p == pair(1, 2)` can fire in location `pair(2, 1)`. Obtained with
+/// `lps2pbes` from `<t(7)> mu Z. (<t(7)>true || <true>Z)` on an unordered pair
+/// specification similar to `merc_lps/tests/upair.mcrl2`.
+const UPAIR_PBES: &str = "
+    sort UPair;
+    cons pair: Nat # Nat -> UPair;
+    var x, y, z, w: Nat;
+    eqn pair(x, y) == pair(z, w) = x == z && y == w || x == w && y == z;
+
+    pbes nu X1(p: UPair, m: Nat) =
+           val(m == 7) && val(p == pair(3, 4)) && X(pair(2, 1), m);
+         mu X(p: UPair, m: Nat) =
+           val(m == 7) && val(p == pair(3, 4))
+           || val(p == pair(3, 4)) && X(p, if(0 < m, Int2Nat(m - 1), 0))
+           || val(p == pair(3, 4)) && X(pair(2, 1), m)
+           || val(p == pair(1, 2)) && X(pair(3, 4), m);
+    init X1(pair(3, 4), 7);
+";
+
+#[test]
+fn test_cfg_matches_srf_with_user_defined_equality() {
+    let pbes = Pbes::from_text(UPAIR_PBES).expect("Failed to parse PBES");
+    assert_cfg_matches_srf(&pbes);
+}
+
+#[test]
+fn test_cfg_locations_are_values() {
+    let mut pbes = Pbes::from_text(UPAIR_PBES).expect("Failed to parse PBES");
+    pbes.normalize();
+
+    let lps = CfgPbesSrfLps::new(unified_srf(&pbes)).expect("Failed to build control-flow SRF view");
+    assert_eq!(
+        lps.control_flow_parameters().len(),
+        1,
+        "`==` decides the equality of the locations of `p`, so it is a control flow parameter"
+    );
+}
+
+/// Without equations for `==` on `D`, `a == b` does not rewrite to `true` or
+/// `false`, so the locations of `d` are unknown and it is not a control flow
+/// parameter.
+#[test]
+fn test_cfg_undecided_locations_are_not_control_flow() {
+    let mut pbes = Pbes::from_text(
+        "sort D;
+         map a, b: D;
+         pbes mu X(d: D) = val(d == a) && Y(b);
+              mu Y(d: D) = val(d == b) && X(a);
+         init X(a);",
+    )
+    .expect("Failed to parse PBES");
+    pbes.normalize();
+
+    let lps = CfgPbesSrfLps::new(unified_srf(&pbes)).expect("Failed to build control-flow SRF view");
+    assert!(lps.control_flow_parameters().is_empty());
+}
+
 /// Generates random PBESs with [`random_pbes`](merc_syntax::random_pbes) and
 /// asserts that control-flow and plain SRF exploration agree on each.
 #[test]
