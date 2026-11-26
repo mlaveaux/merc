@@ -219,6 +219,9 @@ impl MachineWordOp {
         if self == Self::ShiftRight {
             let bit = as_bool(&args.next()?)?;
             let n = as_word(&args.next()?)?;
+            if args.next().is_some() {
+                return None;
+            }
             return Some(machine_number(mw::shift_right(bit, n)));
         }
 
@@ -227,7 +230,8 @@ impl MachineWordOp {
         let mut words = [0u64; 5];
         let mut len = 0;
         for arg in args {
-            words[len] = as_word(&arg)?;
+            // No operation takes more arguments than the buffer holds.
+            *words.get_mut(len)? = as_word(&arg)?;
             len += 1;
         }
 

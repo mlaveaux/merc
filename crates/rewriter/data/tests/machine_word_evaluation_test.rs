@@ -138,9 +138,7 @@ fn test_every_operation_evaluates_only_at_its_arity() {
                 arity - 1
             );
         }
-        // `@shift_right` reads its two arguments and ignores any further ones, and more than five
-        // word arguments are out of range for `evaluate`.
-        if op != MachineWordOp::ShiftRight && arity < 5 {
+        if arity < 5 {
             assert_eq!(
                 evaluate(op, &arguments(op, arity + 1, 1)),
                 None,
@@ -294,4 +292,25 @@ fn test_non_concrete_arguments_are_ignored() {
         evaluate(MachineWordOp::ShiftRight, &[bool_literal(true), symbol("x")]),
         None
     );
+}
+
+/// An application with more arguments than the operation takes is not evaluated, however many
+/// arguments it has. This includes `@shift_right`, whose extra arguments must not be ignored, and
+/// applications with more arguments than any operation accepts, which must not panic.
+#[test]
+fn test_extra_arguments_are_never_evaluated() {
+    for (op, name, arity) in OPERATIONS {
+        if arity == 0 {
+            continue;
+        }
+
+        for extra in 1..=8 {
+            assert_eq!(
+                evaluate(op, &arguments(op, arity + extra, 1)),
+                None,
+                "{name} with {} arguments",
+                arity + extra
+            );
+        }
+    }
 }
