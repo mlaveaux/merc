@@ -35,7 +35,7 @@ Rules that keep this honest:
 
 Put the test next to the code it guards, in the crate that owns the invariant. Prefer `merc_utilities::random_test` (reproduce a failure with `MERC_SEED=<seed>`) so the postcondition is asserted over arbitrary inputs rather than one memorized output; keep miri-visible tests small and deterministic. Before claiming a test guards the fix, confirm it fails without it — revert the fix locally, run it, restore.
 
-Follow the repo's conventions while you are in there: one `use` per item and no glob imports, `thiserror`-based errors, `clap` derive with the `merc_tools` helpers, no new dependencies, small focused patches with no speculative abstractions.
+Follow the repo's conventions while you are in there: one `use` per item and no glob imports, `thiserror`-based errors or `merc_utilities::MercError`, traversal through `Visit`/`Step` or `TermBuilder` instead of new recursion over terms (`architecture` skill), `clap` derive with the `merc_tools` helpers, no new dependencies, small focused patches with no speculative abstractions.
 
 ## Report format
 

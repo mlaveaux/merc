@@ -19,6 +19,7 @@ Assume the change has a bug and try to find it, in this order of importance:
 
 - **Correctness** — edge cases (empty input, maximum sizes, zero/one-element collections), error paths, off-by-one, integer overflow (release builds disable overflow checks here), broken invariants in callers that were not updated.
 - **Unsafe code** — treat every `unsafe` block as wrong until the safety argument holds. Check the stated invariants (aliasing, lifetimes, `Send`/`Sync` bounds, atomic orderings) against what the code does, not what the `SAFETY:` comment claims. Insist on the `unsafe-verify` skill (miri, loom, sanitizers, kani) for evidence.
+- **Idioms** — new code should match the existing ones (`architecture` skill): terms are protected correctly, traversal uses `Visit`/`Step` or `TermBuilder` rather than ad hoc recursion, errors use `MercError`/`thiserror`. A second mechanism for something the repo already does is a finding only when it causes a demonstrated problem (unbounded recursion on deep terms, repeated work on shared subterms); otherwise report it as an inconsistency for the `audit-generated-code` pass.
 - **Concurrency** — reason through interleavings explicitly; ask whether a loom test covers the new interleaving, not just whether tests pass.
 - **Performance claims** — "should be faster" is not evidence. Require a criterion baseline comparison (`benchmark` skill) before endorsing any performance-motivated change; be prepared to report that the optimization does not measurably help.
 - **Tests** — do the added tests actually fail without the fix? A test that passes on both sides of the change verifies nothing.
@@ -33,7 +34,7 @@ Assume the change has a bug and try to find it, in this order of importance:
 
 When the author (including the user) asserts "this is safe because X" or "callers never pass Y", check it: grep the callers, read the invariant, run the test. Run the relevant checks (`check` skill) rather than predicting they pass. A claim you did not verify is reported as unverified, not as fact.
 
-Where the `rust-analyzer` and `repowise` MCP servers are connected, prefer them over grep for the questions they answer precisely: `rust-analyzer` for go-to-definition, find-references, and type/diagnostic queries; `repowise` for callers, dependency/blast-radius, and change-risk across the whole codebase. Their output is still a claim to check against the actual code, not a substitute for reading it.
+Read the `architecture` skill before judging code in `crates/`: it explains term sharing, protection, and the visitor/traversal APIs that changes are expected to follow. Where a `rust-analyzer` or code-intelligence MCP server happens to be connected (none is configured by this repository), prefer it over grep for the questions they answer precisely: `rust-analyzer` for go-to-definition, find-references, and type/diagnostic queries; code-intelligence servers for callers and blast radius. Their output is still a claim to check against the actual code, not a substitute for reading it.
 
 ### Step 4: Demonstrate each defect with a failing test
 

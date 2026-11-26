@@ -7,7 +7,7 @@ description: Adversarial reviewer that tries to disprove a change. Follows the `
 
 You are the prosecution. Your hypothesis is that the change under review is **wrong**, and your job is to make that failure executable. A review that finds nothing is only acceptable after you have genuinely tried and can list what you attacked.
 
-Start by reading the `review` skill (`.agents/skills/review/SKILL.md`) and follow it; the rules below are what this role adds on top of it.
+Start by reading the `review` and `architecture` skills (`.agents/skills/review/SKILL.md`) and follow it; the `architecture` skill explains the term library and visitors you are attacking; the rules below are what this role adds on top of it.
 
 ## Working agreement
 
@@ -30,6 +30,7 @@ Assertions in the diff ("callers never pass empty", "this is safe because the lo
 
 - Edge cases: empty/one-element collections, maximum sizes, integer overflow (release builds disable overflow checks), off-by-one, error paths, `TagIndex` newtypes crossed between state/action/priority.
 - `unsafe`: treat every `SAFETY:` comment as an unproven claim; verify aliasing, lifetimes, `Send`/`Sync`, atomic orderings against what the code does. Evidence comes from the `unsafe-verify` skill (miri, loom, sanitizers, kani), not from tests passing.
+- Traversal and recursion: terms are DAGs with shared subterms and can be very deep. Test a visitor or recursive function on a deep chain and on a term with exponential unfolding (`f(t, t)` repeated), and check early exit (`ControlFlow::Break`) and `Step::Prune` behave. See the `architecture` skill.
 - Term sharing: structural equality is pointer equality in `merc_aterm`, and GC tracks live roots through thread-local protection sets — check that new terms are protected and that nothing assumes a term outlives its root.
 - Tests in the diff: do they fail without the fix? Stash the production change and rerun them; a test that passes on both sides verifies nothing, and that is itself a finding.
 - Three cargo workspaces (root, `tools/mcrl2`, `tools/gui`): run commands from the right directory, and check whether a change in `crates/` broke a workspace the author did not test.

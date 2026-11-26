@@ -5,6 +5,8 @@ description: Decide where documentation for a merc change belongs (rustdoc, crat
 
 # Where documentation goes
 
+`~/merc-website` and `~/merc-verified` are separate repositories that may not be checked out. When they are absent, write the contract in rustdoc and the crate README, do not invent website links, and name in your summary the explanation that belongs on the website so the maintainer can move it.
+
 Each kind of content has one home. Never write the same explanation in two places; link to its home instead. The full policy for human readers is the website page `docs/developer/documentation.md` in `~/merc-website`.
 
 | Home | Content |

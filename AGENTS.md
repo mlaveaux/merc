@@ -35,6 +35,8 @@ that directory by itself, so read the matching `SKILL.md` before you start such 
 | [benchmark](.agents/skills/benchmark/SKILL.md) | the criterion benchmarks and before/after comparisons |
 | [unsafe-verify](.agents/skills/unsafe-verify/SKILL.md) | miri, loom, kani and the sanitizers for unsafe or concurrent code |
 | [review](.agents/skills/review/SKILL.md) | critical review of a diff, PR, commit or design |
+| [architecture](.agents/skills/architecture/SKILL.md) | the aterm term library, visitors and traversal, crate layout and code conventions; read before writing code in `crates/` |
+| [audit-generated-code](.agents/skills/audit-generated-code/SKILL.md) | finding unreviewed or inconsistent code and planning a review pass |
 | [documentation](.agents/skills/documentation/SKILL.md) | where documentation for a change belongs |
 
 Subagent definitions are in [`.agents/agents`](.agents/agents):
