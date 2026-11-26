@@ -30,13 +30,6 @@ eval = {"EVAL"  ~ NEWLINE+ ~ ((term  ~ NEWLINE) | NEWLINE)*}
 /// The actual REC specification
 rec_spec = {SOI ~ NEWLINE* ~ header ~ sorts ~ cons ~ opns ~ vars ~ rules ~ eval? ~ "END-SPEC" ~ NEWLINE* ~ EOI}
 
-// A single rewrite rule
-single_rewrite_rule = {SOI ~ rewrite_rule ~ EOI}
-
-// A single term.
-single_term = {SOI ~ term ~ EOI}
-
-
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)*}
 
 WHITESPACE = _{ " " | "\t" }

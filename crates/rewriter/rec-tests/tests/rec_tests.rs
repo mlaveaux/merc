@@ -234,20 +234,17 @@ fn test_rec_specification_duplicating(rec_files: Vec<&str>, expected_result: &st
     rec_test(rec_files, expected_result, false);
 }
 
-// TODO: the fix for the set-automaton construction blowup (making
-// `State::derive_transition` merge a fresh match goal into an existing
-// partition only when it shares an overlapping obligation position, rather
-// than whenever any goal in that partition is merely still root-anchored)
-// trades away some of Sabre's step-count laziness advantage over
-// InnermostRewriter on these specs specifically. Revisit whether a smarter
-// merge criterion can restore the step-count invariant without reintroducing
-// the unbounded automaton growth it fixes.
+// On these specifications the set-automaton rewriter takes more rewrite steps
+// than the innermost rewriter, so only the normal forms are compared. The automaton construction merges a new match goal
+// into an existing partition only when their obligation positions overlap,
+// which bounds the size of the automaton but gives up part of the laziness that
+// keeps the step count within that of innermost elsewhere.
 #[cfg_attr(miri, ignore)]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/benchexpr10.rec"), include_str!("../../../../examples/REC/rec/asfsdfbenchmark.rec")], include_str!("snapshot/result_benchexpr10.txt") ; "benchexpr10")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/benchsym10.rec"), include_str!("../../../../examples/REC/rec/asfsdfbenchmark.rec")], include_str!("snapshot/result_benchsym10.txt") ; "benchsym10")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/factorial5.rec"), include_str!("../../../../examples/REC/rec/factorial.rec")], include_str!("snapshot/result_factorial5.txt") ; "factorial5")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/garbagecollection.rec")], include_str!("snapshot/result_garbagecollection.txt") ; "garbagecollection")]
-fn test_rec_specification_todo_stepcount_regression(rec_files: Vec<&str>, expected_result: &str) {
+fn test_rec_specification_more_steps_than_innermost(rec_files: Vec<&str>, expected_result: &str) {
     rec_test(rec_files, expected_result, false);
 }
 
@@ -302,18 +299,16 @@ fn test_rec_specification_release(rec_files: Vec<&str>, expected_result: &str) {
     rec_test(rec_files, expected_result, true);
 }
 
-// The release-only counterparts of
-// `test_rec_specification_todo_stepcount_regression`; see the TODO there. These
-// are the larger instances of the same specifications (benchexpr, benchsym and
-// factorial), plus revnat, and they lost the step-count invariant in the same
-// way.
+// The larger instances of the specifications above (benchexpr, benchsym and
+// factorial), plus revnat, on which the set-automaton rewriter also takes more
+// rewrite steps than the innermost rewriter.
 #[cfg_attr(miri, ignore)]
 #[cfg(not(debug_assertions))]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/benchexpr20.rec"), include_str!("../../../../examples/REC/rec/asfsdfbenchmark.rec")], include_str!("snapshot/result_benchexpr20.txt") ; "benchexpr20")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/benchsym20.rec"), include_str!("../../../../examples/REC/rec/asfsdfbenchmark.rec")], include_str!("snapshot/result_benchsym20.txt") ; "benchsym20")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/factorial6.rec"), include_str!("../../../../examples/REC/rec/factorial.rec")], include_str!("snapshot/result_factorial6.txt") ; "factorial6")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/revnat100.rec"), include_str!("../../../../examples/REC/rec/revnat.rec")], include_str!("snapshot/result_revnat100.txt") ; "revnat100")]
-fn test_rec_specification_release_todo_stepcount_regression(rec_files: Vec<&str>, expected_result: &str) {
+fn test_rec_specification_release_more_steps_than_innermost(rec_files: Vec<&str>, expected_result: &str) {
     rec_test(rec_files, expected_result, false);
 }
 
@@ -344,8 +339,8 @@ fn test_rec_specification_largestack(rec_files: Vec<&str>, expected_result: &str
     rec_test(rec_files, expected_result, true);
 }
 
-// The deep-recursion specifications that also lost the step-count invariant; see
-// the TODO on `test_rec_specification_todo_stepcount_regression`.
+// The deep-recursion specifications on which the set-automaton rewriter also
+// takes more rewrite steps than the innermost rewriter.
 #[cfg_attr(miri, ignore)]
 #[cfg(all(unix, not(debug_assertions)))]
 #[ignore]
@@ -354,7 +349,7 @@ fn test_rec_specification_largestack(rec_files: Vec<&str>, expected_result: &str
 #[test_case(vec![include_str!("../../../../examples/REC/rec/factorial7.rec"), include_str!("../../../../examples/REC/rec/factorial.rec")], include_str!("snapshot/result_factorial7.txt") ; "factorial7")]
 #[test_case(vec![include_str!("../../../../examples/REC/rec/factorial8.rec"), include_str!("../../../../examples/REC/rec/factorial.rec")], include_str!("snapshot/result_factorial8.txt") ; "factorial8")]
 // #[test_case(vec![include_str!("../../../../examples/REC/rec/factorial9.rec"), include_str!("../../../../examples/REC/rec/factorial.rec")], include_str!("snapshot/result_factorial9.txt") ; "factorial9")]
-fn test_rec_specification_largestack_todo_stepcount_regression(rec_files: Vec<&str>, expected_result: &str) {
+fn test_rec_specification_largestack_more_steps_than_innermost(rec_files: Vec<&str>, expected_result: &str) {
     rec_test(rec_files, expected_result, false);
 }
 

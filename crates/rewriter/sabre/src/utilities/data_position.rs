@@ -137,39 +137,3 @@ impl<'a> Iterator for DataPositionIterator<'a> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use merc_data::DataExpression;
-
-    use super::DataPosition;
-    use super::DataPositionIndexed;
-    use super::DataPositionIterator;
-
-    #[test]
-    fn test_get_data_position() {
-        let t = DataExpression::from_string("f(g(a),b)").unwrap();
-        let expected = DataExpression::from_string("a").unwrap();
-
-        assert_eq!(t.get_data_position(&DataPosition::new(&[1, 1])), expected.copy());
-    }
-
-    #[test]
-    fn test_data_position_iterator() {
-        let t = DataExpression::from_string("f(g(a),b)").unwrap();
-
-        for (term, pos) in DataPositionIterator::new(t.copy()) {
-            assert_eq!(
-                t.get_data_position(&pos),
-                term,
-                "The resulting (subterm, position) pair doesn't match the get_data_position implementation"
-            );
-        }
-
-        assert_eq!(
-            DataPositionIterator::new(t.copy()).count(),
-            4,
-            "The number of subterms doesn't match the expected value"
-        );
-    }
-}

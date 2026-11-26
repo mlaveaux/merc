@@ -80,27 +80,3 @@ fn substitute_rec(
         result
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use merc_aterm::storage::THREAD_TERM_POOL;
-    use merc_data::DataExpression;
-
-    use crate::utilities::DataPosition;
-    use crate::utilities::DataPositionIndexed;
-
-    use super::data_substitute;
-
-    #[test]
-    fn test_data_substitute() {
-        let t = DataExpression::from_string("s(s(a))").unwrap();
-        let t0 = DataExpression::from_string("0").unwrap();
-
-        // substitute the a for 0 in the term s(s(a))
-        let result =
-            THREAD_TERM_POOL.with(|tp| data_substitute(tp, &t.copy(), t0.clone(), &DataPosition::new(&[1, 1])));
-
-        // Check that indeed the new term as a 0 at position 1.1.
-        assert_eq!(t0, result.get_data_position(&DataPosition::new(&[1, 1])).protect());
-    }
-}

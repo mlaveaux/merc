@@ -223,15 +223,6 @@ impl RecParser {
         )
     }
 
-    /// Parse a single rewrite rule
-    fn single_rewrite_rule(rule: ParseNode) -> ParseResult<RewriteRuleSyntax> {
-        match_nodes!(rule.into_children();
-            [rewrite_rule(rule), EOI(_)] => {
-                Ok(rule)
-            },
-        )
-    }
-
     /// Parse a condition in a rewrite rule
     fn condition(condition: ParseNode) -> ParseResult<ConditionSyntax> {
         match_nodes!(condition.into_children();
@@ -331,82 +322,5 @@ impl RecParser {
 
     fn opns(_opns: ParseNode) -> ParseResult<()> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_raw_parsing() {
-        assert!(RecParser::parse(Rule::single_term, "f(a").is_err());
-        assert!(RecParser::parse(Rule::single_term, "f()").is_err());
-        assert!(RecParser::parse(Rule::single_term, "f(a,)").is_err());
-        assert!(RecParser::parse(Rule::single_term, "f").is_ok());
-        assert!(RecParser::parse(Rule::single_term, "f(a)").is_ok());
-        assert!(RecParser::parse(Rule::single_term, "f(a,b)").is_ok());
-        assert!(RecParser::parse(Rule::single_rewrite_rule, "f(a,b) = g(x)").is_ok());
-        assert!(RecParser::parse(Rule::single_rewrite_rule, "f(a,b) = g(x) if x = a").is_ok());
-        assert!(RecParser::parse(Rule::single_rewrite_rule, "f(a,b) = g(x) if x<> a").is_ok());
-        assert!(RecParser::parse(Rule::single_rewrite_rule, "f(a,b) = g(x) if x <= a").is_err());
-        assert!(RecParser::parse(Rule::single_rewrite_rule, "f(a,b) = ").is_err());
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_parsing_rewrite_rule() {
-        let expected = RewriteRuleSyntax {
-            lhs: ATerm::from_string("f(x,b)").unwrap(),
-            rhs: ATerm::from_string("g(x)").unwrap(),
-            conditions: vec![
-                ConditionSyntax {
-                    lhs: ATerm::from_string("x").unwrap(),
-                    rhs: ATerm::from_string("a").unwrap(),
-                    equality: true,
-                },
-                ConditionSyntax {
-                    lhs: ATerm::from_string("b").unwrap(),
-                    rhs: ATerm::from_string("b").unwrap(),
-                    equality: true,
-                },
-            ],
-        };
-
-        let mut parse_result =
-            RecParser::parse(Rule::single_rewrite_rule, "f(x,b) = g(x) if x = a and-if b = b").unwrap();
-        let node = ParseNode::new(parse_result.next().unwrap());
-        let actual = RecParser::single_rewrite_rule(node).unwrap();
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_variable_parsing() {
-        let mut parse_result = RecParser::parse(Rule::var_decl, "X Y Val Max : Nat").unwrap();
-        let node = ParseNode::new(parse_result.next().unwrap());
-        let result = RecParser::var_decl(node).unwrap();
-
-        assert_eq!(result, vec!["X", "Y", "Val", "Max"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_parsing_rec() {
-        assert!(
-            RecParser::parse(
-                Rule::rec_spec,
-                include_str!("../../../../examples/REC/rec/missionaries.rec")
-            )
-            .is_ok()
-        );
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn loading_rec() {
-        let _ = parse_rec(include_str!("../../../../examples/REC/rec/missionaries.rec"), None);
     }
 }

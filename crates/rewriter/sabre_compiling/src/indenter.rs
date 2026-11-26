@@ -172,4 +172,27 @@ mod tests {
 
         assert_eq!(result, expected, "Line continuation handling incorrect");
     }
+
+    /// Tests that nested guards add up and that dropping a guard restores the outer level
+    #[test]
+    fn test_dropping_the_guard_restores_the_indentation() {
+        let mut buffer = Vec::new();
+        {
+            let mut formatter = IndentFormatter::new(&mut buffer);
+            writeln!(formatter, "outer").unwrap();
+            {
+                let _outer = formatter.indent();
+                writeln!(formatter, "one").unwrap();
+                {
+                    let _inner = formatter.indent();
+                    writeln!(formatter, "two").unwrap();
+                }
+                writeln!(formatter, "one again").unwrap();
+            }
+            write!(formatter, "outer again").unwrap();
+        }
+
+        let result = String::from_utf8(buffer).unwrap();
+        assert_eq!(result, "outer\n  one\n    two\n  one again\nouter again");
+    }
 }
