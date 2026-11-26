@@ -1,6 +1,7 @@
 use std::ops::ControlFlow;
 use std::rc::Rc;
 
+use ahash::AHashSet;
 use merc_data::DataApplication;
 use merc_data::DataExpression;
 use merc_enumerate::EnumerationPlans;
@@ -69,7 +70,18 @@ fn enumerate_finds_every_solution_for_real_machine_word_nat() {
         },
     );
     assert!(matches!(outcome, merc_enumerate::Outcome::Exhausted), "{outcome:?}");
+    // Three distinct values that satisfy `m < 3` are exactly 0, 1 and 2.
     assert_eq!(solutions.len(), 3, "expected m = 0, 1, 2, got {solutions:?}");
+    let distinct: AHashSet<&Vec<DataExpression>> = solutions.iter().collect();
+    assert_eq!(distinct.len(), 3, "solutions must be distinct: {solutions:?}");
+    for solution in &solutions {
+        let goal = DataExpression::from(DataApplication::with_args(&goal_symbol, solution));
+        assert_eq!(
+            rewriter.rewrite(&goal),
+            DataExpression::bool_literal(true),
+            "{solution:?}"
+        );
+    }
 
     // Every reported value must itself be a normal form: callers (e.g. the
     // LPS explorer) splice these straight into further `rewrite_with` calls
@@ -113,5 +125,15 @@ fn naive_enumerator_finds_every_solution_for_real_machine_word_nat() {
     let body = equation.rhs().protect();
 
     let solutions = NaiveEnumerator::new(&mut rewriter, &plans, 4).enumerate_all(&vars, &body);
+    // Three distinct values that satisfy `m < 3` are exactly 0, 1 and 2.
     assert_eq!(solutions.len(), 3, "expected m = 0, 1, 2, got {solutions:?}");
+    let goal_symbol = equation.lhs().data_function_symbol().protect();
+    for solution in &solutions {
+        let goal = DataExpression::from(DataApplication::with_args(&goal_symbol, solution));
+        assert_eq!(
+            rewriter.rewrite(&goal),
+            DataExpression::bool_literal(true),
+            "{solution:?}"
+        );
+    }
 }

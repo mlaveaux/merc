@@ -107,6 +107,11 @@ impl RemainingList {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
+    use merc_utilities::random_test;
+    use rand::RngExt;
+
     use super::RemainingArena;
     use super::RemainingList;
 
@@ -123,13 +128,6 @@ mod tests {
         let list = RemainingList::new(&mut arena, vec![]);
         assert!(list.is_empty());
         assert!(list.pop_front(&mut arena).is_none());
-    }
-
-    #[test]
-    fn test_single_element_list_pops_its_only_element() {
-        let mut arena = RemainingArena::default();
-        let list = RemainingList::new(&mut arena, vec![7]);
-        assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), vec![7]);
     }
 
     #[test]
@@ -177,5 +175,46 @@ mod tests {
         let list = list.with_appended(&mut arena, [1, 2]);
         let list = list.with_appended(&mut arena, [3, 4]);
         assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), vec![1, 2, 3, 4]);
+    }
+
+    /// Random pops and appends on random earlier versions of a list behave like a [VecDeque]
+    /// that is cloned for every version: every version stays valid and independent.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Test is too slow under miri
+    fn test_random_operations_match_a_persistent_queue_model() {
+        random_test(100, |rng| {
+            let mut arena = RemainingArena::default();
+            let original: Vec<u32> = (0..rng.random_range(0..5)).collect();
+            let mut versions = vec![(
+                RemainingList::new(&mut arena, original.clone()),
+                VecDeque::from(original),
+            )];
+            let mut next = 100;
+
+            for _ in 0..50 {
+                let (list, model) = versions[rng.random_range(0..versions.len())].clone();
+                if rng.random_bool(0.5) {
+                    let mut model = model;
+                    match list.pop_front(&mut arena) {
+                        Some((value, rest)) => {
+                            assert_eq!(Some(value), model.pop_front());
+                            versions.push((rest, model));
+                        }
+                        None => assert!(model.is_empty() && list.is_empty()),
+                    }
+                } else {
+                    let fresh: Vec<u32> = (next..next + rng.random_range(0..3)).collect();
+                    next += 3;
+                    let mut model = model;
+                    model.extend(fresh.iter().copied());
+                    versions.push((list.with_appended(&mut arena, fresh), model));
+                }
+            }
+
+            for (list, model) in versions {
+                assert_eq!(list.is_empty(), model.is_empty());
+                assert_eq!(list.drain(&mut arena).collect::<Vec<_>>(), Vec::from(model));
+            }
+        });
     }
 }

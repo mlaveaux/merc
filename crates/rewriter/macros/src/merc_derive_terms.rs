@@ -376,37 +376,158 @@ mod tests {
     use std::str::FromStr;
 
     use proc_macro2::TokenStream;
+    use quote::ToTokens;
+    use syn::ImplItem;
+    use syn::Item;
 
     use crate::merc_derive_terms_impl;
 
-    #[test]
-    fn test_macro() {
-        let input = "
-            mod anything {
+    /// Expands `input` and returns the items of the resulting module.
+    fn generated_items(input: &str) -> Vec<Item> {
+        let tokens = TokenStream::from_str(input).unwrap();
+        let output = merc_derive_terms_impl(TokenStream::default(), tokens);
+        let module: syn::ItemMod = syn::parse2(output).expect("the expansion is a module");
+        let (_, items) = module.content.expect("the module has a body");
 
-                #[merc_term(test)]
-                struct Test {
-                    term: ATerm,
-                }
+        // Verbatim items hold several items each; parse them back so they can be inspected.
+        let file: syn::File = syn::parse2(items.iter().map(|item| item.to_token_stream()).collect())
+            .expect("generated code should be valid Rust");
+        file.items
+    }
 
-                impl Test {
-                    fn a_function() {
+    /// Renders `tokens` without whitespace, so that assertions do not depend on token spacing.
+    fn render(tokens: &impl ToTokens) -> String {
+        tokens.to_token_stream().to_string().replace(' ', "")
+    }
 
+    fn expand(input: &str) -> Vec<String> {
+        generated_items(input).iter().map(render).collect()
+    }
+
+    /// The sorted signatures of the methods in the inherent `impl` blocks of `self_type` (rendered
+    /// without whitespace, e.g. `TestRef<'a>`).
+    fn methods(input: &str, self_type: &str) -> Vec<String> {
+        let mut signatures = Vec::new();
+        for item in generated_items(input) {
+            if let Item::Impl(implementation) = item
+                && implementation.trait_.is_none()
+                && render(&implementation.self_ty) == self_type
+            {
+                for item in implementation.items {
+                    if let ImplItem::Fn(function) = item {
+                        signatures.push(render(&function.sig));
                     }
                 }
             }
-        ";
+        }
+        signatures.sort();
+        signatures
+    }
 
-        let tokens = TokenStream::from_str(input).unwrap();
-        let result = merc_derive_terms_impl(TokenStream::default(), tokens);
+    const INPUT: &str = "
+        mod anything {
+            #[merc_term(is_test)]
+            struct Test {
+                term: ATerm,
+            }
 
-        // The generated module must parse back as valid Rust and mention the
-        // generated `TestRef` type.
-        let rendered = result.to_string();
-        syn::parse2::<syn::File>(result).expect("generated code should be valid Rust");
+            impl Test {
+                fn kept(&self) -> ATermRef<'_> {
+                    self.term.copy()
+                }
+
+                #[merc_ignore]
+                fn ignored(&self) {}
+            }
+
+            #[merc_ignore]
+            impl Test {
+                fn only_owned(&self) {}
+            }
+        }
+    ";
+
+    #[test]
+    fn test_generates_ref_type_and_conversions() {
+        let items = expand(INPUT);
+        let has = |needle: &str| items.iter().any(|item| item.contains(needle));
+
+        assert!(has("pubstructTestRef<'a>"), "{items:#?}");
+        assert!(has("implFrom<ATerm>forTest"), "{items:#?}");
         assert!(
-            rendered.contains("TestRef"),
-            "expected a generated TestRef type, got: {rendered}"
+            has("impl<'a>::std::convert::From<ATermRef<'a>>forTestRef<'a>"),
+            "{items:#?}"
         );
+        assert!(has("unsafeimplTransmutableforTestRef<'static>"), "{items:#?}");
+        // The predicate named in `#[merc_term(...)]` is checked on every conversion.
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.matches("debug_assert!(is_test(&term)").count())
+                .sum::<usize>(),
+            2,
+            "{items:#?}"
+        );
+    }
+
+    #[test]
+    fn test_duplicates_methods_onto_the_ref_type() {
+        // `merc_ignore` on a method keeps it off the `Ref` type, and on an `impl` block keeps the
+        // whole block off it. An elided lifetime in a return type becomes `'a`.
+        assert_eq!(
+            methods(INPUT, "TestRef<'a>"),
+            [
+                "fncopy(&self)->TestRef<'a>",
+                "fnkept(&self)->ATermRef<'a>",
+                "fnprotect(&self)->Test"
+            ]
+        );
+        assert_eq!(
+            methods(INPUT, "Test"),
+            [
+                "fncopy<'a>(&'aself)->TestRef<'a>",
+                "fnignored(&self)",
+                "fnkept(&self)->ATermRef<'_>",
+                "fnonly_owned(&self)"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_bare_merc_term_has_no_assertion() {
+        let items = expand("mod m { #[merc_term] struct Test { term: ATerm } }");
+        assert!(items.iter().all(|item| !item.contains("debug_assert")), "{items:#?}");
+        assert!(
+            items.iter().any(|item| item.contains("structTestRef<'a>")),
+            "{items:#?}"
+        );
+    }
+
+    #[test]
+    fn test_invalid_merc_term_argument_is_a_compile_error() {
+        let items = expand("mod m { #[merc_term(a, b)] struct Test { term: ATerm } }");
+        assert!(
+            items
+                .iter()
+                .any(|item| item.contains("compile_error!(\"merc_termexpectsasingleassertionfunctionidentifier")),
+            "{items:#?}"
+        );
+    }
+
+    #[test]
+    fn test_unsupported_impl_block_is_a_compile_error() {
+        let items = expand("mod m { #[merc_term] struct Test { term: ATerm } impl<T> Test<T> { fn f() {} } }");
+        assert!(
+            items
+                .iter()
+                .any(|item| item.starts_with("compile_error!(\"merc_derive_termscanonlyduplicateimplblocks")),
+            "{items:#?}"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "has no field 'term: ATerm'")]
+    fn test_struct_without_term_field_is_rejected() {
+        expand("mod m { #[merc_term] struct Test { other: ATerm } }");
     }
 }
