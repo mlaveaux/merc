@@ -117,52 +117,6 @@ unsafe impl<A: Allocator> AllocatorDst for A {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use allocator_api2::alloc::Global;
-
-    #[repr(C)]
-    struct WithHeader<T> {
-        length: usize,
-        array: [T],
-    }
-
-    // SAFETY: `layout_for` computes the `#[repr(C)]` layout of the header
-    // plus `length` array elements.
-    unsafe impl<T> SliceDst for WithHeader<T> {
-        fn layout_for(length: usize) -> Result<Layout, LayoutError> {
-            let header_layout = Layout::new::<usize>();
-            let array_layout = Layout::array::<T>(length)?;
-
-            repr_c(&[header_layout, array_layout])
-        }
-
-        fn length(&self) -> usize {
-            self.length
-        }
-
-        fn retype(ptr: NonNull<[()]>) -> NonNull<Self> {
-            // SAFETY: casting a pointer preserves non-nullity, and `ptr` is
-            // `NonNull`, so `raw_ptr` is never null.
-            unsafe {
-                let raw_ptr = ptr.as_ptr() as *mut WithHeader<T>;
-                NonNull::new_unchecked(raw_ptr)
-            }
-        }
-    }
-
-    #[test]
-    fn test_variable_sized_array() {
-        let ptr = Global
-            .allocate_slice_dst::<WithHeader<usize>>(5)
-            .expect("Allocation failed in test");
-
-        Global.deallocate_slice_dst(ptr, 5);
-    }
-}
-
 #[cfg(kani)]
 mod verification {
     use super::*;

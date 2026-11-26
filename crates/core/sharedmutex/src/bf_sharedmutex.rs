@@ -378,7 +378,7 @@ impl<T> BfSharedMutex<T> {
     pub fn try_write<'a>(&'a self) -> Result<Option<BfSharedMutexWriteGuard<'a, T>>, Box<dyn Error + 'a>> {
         let other = match self.shared.other.try_lock() {
             Ok(other) => other,
-            Err(TryLockError::WouldBlock) => return Ok(Some(self.acquire_exclusive(self.shared.other.lock()?))),
+            Err(TryLockError::WouldBlock) => return Ok(None),
             Err(TryLockError::Poisoned(err)) => return Err(Box::new(err)),
         };
 

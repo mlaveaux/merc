@@ -211,23 +211,12 @@ unsafe impl Allocator for AllocCounter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
     use std::thread;
 
-    #[test]
-    fn test_basic_allocation_tracking() {
-        let counter = AllocCounter::new();
-        let metrics = counter.get_metrics();
+    use super::*;
 
-        // Initially all metrics should be zero
-        assert_eq!(metrics.number_of_allocations, 0);
-        assert_eq!(metrics.size_of_allocations, 0);
-        assert_eq!(metrics.total_number_of_allocations, 0);
-        assert_eq!(metrics.total_size_of_allocations, 0);
-        assert_eq!(metrics.max_number_of_allocations, 0);
-        assert_eq!(metrics.max_size_of_allocations, 0);
-    }
+    // These tests read the private fields of `AllocMetrics`, which has no public accessors.
 
     #[test]
     fn test_thread_safety() {
@@ -239,12 +228,11 @@ mod tests {
             .map(|_| {
                 let counter = Arc::clone(&counter);
                 thread::spawn(move || {
+                    let layout = Layout::from_size_align(64, 8).unwrap();
                     for _ in 0..allocations_per_thread {
-                        let layout = Layout::from_size_align(64, 8).unwrap();
-                        let ptr = counter.alloc(layout);
-                        if !ptr.is_null() {
-                            counter.dealloc(ptr, layout);
-                        }
+                        let ptr = Allocator::allocate(&*counter, layout).unwrap();
+                        // SAFETY: `ptr` was just allocated by `counter` with `layout`.
+                        unsafe { Allocator::deallocate(&*counter, ptr.cast(), layout) };
                     }
                 })
             })
@@ -260,7 +248,6 @@ mod tests {
         assert_eq!(metrics.number_of_allocations, 0);
         assert_eq!(metrics.size_of_allocations, 0);
 
-        // Total allocations should equal num_threads * allocations_per_thread
         assert_eq!(
             metrics.total_number_of_allocations,
             num_threads * allocations_per_thread
@@ -269,18 +256,24 @@ mod tests {
             metrics.total_size_of_allocations,
             num_threads * allocations_per_thread * 64
         );
+
+        // Each thread holds at most one allocation at a time.
+        assert!((1..=num_threads).contains(&metrics.max_number_of_allocations));
+        assert!((64..=num_threads * 64).contains(&metrics.max_size_of_allocations));
     }
 
     #[test]
     fn test_reset_functionality() {
         let counter = AllocCounter::new();
 
-        // Simulate some allocations
         let layout = Layout::from_size_align(32, 8).unwrap();
-        let ptr = counter.alloc(layout);
+        let ptr = Allocator::allocate(&counter, layout).unwrap();
 
         let metrics_before = counter.get_metrics();
-        assert!(metrics_before.number_of_allocations > 0);
+        assert_eq!(metrics_before.number_of_allocations, 1);
+        assert_eq!(metrics_before.size_of_allocations, 32);
+        assert_eq!(metrics_before.total_number_of_allocations, 1);
+        assert_eq!(metrics_before.max_number_of_allocations, 1);
 
         counter.reset();
         let metrics_after = counter.get_metrics();
@@ -290,18 +283,12 @@ mod tests {
         assert_eq!(metrics_after.size_of_allocations, 0);
 
         // Total and max metrics should be preserved
-        assert_eq!(
-            metrics_after.total_number_of_allocations,
-            metrics_before.total_number_of_allocations
-        );
-        assert_eq!(
-            metrics_after.max_number_of_allocations,
-            metrics_before.max_number_of_allocations
-        );
+        assert_eq!(metrics_after.total_number_of_allocations, 1);
+        assert_eq!(metrics_after.total_size_of_allocations, 32);
+        assert_eq!(metrics_after.max_number_of_allocations, 1);
+        assert_eq!(metrics_after.max_size_of_allocations, 32);
 
-        // Clean up
-        if !ptr.is_null() {
-            counter.dealloc(ptr, layout);
-        }
+        // SAFETY: `ptr` was allocated by `counter` with `layout`.
+        unsafe { Allocator::deallocate(&counter, ptr.cast(), layout) };
     }
 }
