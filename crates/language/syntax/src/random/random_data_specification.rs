@@ -49,9 +49,9 @@ pub fn random_data_specification<R: Rng>(rng: &mut R, sort_count: usize, max_dep
 fn random_leaf_sort<R: Rng>(rng: &mut R, earlier: &[String]) -> SortExpression {
     let use_earlier = !earlier.is_empty() && rng.random_bool(0.5);
     if use_earlier {
-        SortExpressionKind::Reference(earlier.choose(rng).unwrap().clone()).into()
+        SortExpressionKind::Reference(earlier.choose(rng).expect("There is at least one earlier sort").clone()).into()
     } else {
-        SortExpressionKind::Simple(*BASIC_SORTS.choose(rng).unwrap()).into()
+        SortExpressionKind::Simple(*BASIC_SORTS.choose(rng).expect("There is at least one basic sort")).into()
     }
 }
 
@@ -78,7 +78,7 @@ fn random_sort_expr<R: Rng>(
             SortExpressionKind::Struct { inner }.into()
         }
         2 => {
-            let container = *CONTAINERS.choose(rng).unwrap();
+            let container = *CONTAINERS.choose(rng).expect("There is at least one container");
             let element = random_sort_expr(rng, earlier, depth - 1, constructor_id);
             SortExpressionKind::Complex(container, Box::new(element)).into()
         }

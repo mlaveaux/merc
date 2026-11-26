@@ -178,7 +178,7 @@ impl Renderer {
 
         let mut image =
             tiny_skia::PixmapMut::from_bytes(self.pixel_buffer.make_mut_bytes(), settings.width, settings.height)
-                .unwrap();
+                .expect("The buffer has the size of the settings");
 
         if let Some(skia_renderer) = &mut self.skia_renderer {
             skia_renderer.render(
@@ -195,7 +195,7 @@ impl Renderer {
             );
         }
 
-        *output.lock().unwrap() = self.pixel_buffer.clone();
+        *output.lock().expect("Lock poisoned!") = self.pixel_buffer.clone();
         Ok(())
     }
 
@@ -270,7 +270,8 @@ impl Renderer {
         );
 
         // The scene is fully opaque, so the premultiplied output equals the straight alpha output.
-        *output.lock().unwrap() = SharedPixelBuffer::clone_from_slice(pixels, settings.width, settings.height);
+        *output.lock().expect("Lock poisoned!") =
+            SharedPixelBuffer::clone_from_slice(pixels, settings.width, settings.height);
         Ok(())
     }
 
@@ -363,7 +364,7 @@ fn read_back(
                 let packed = repack_padded_rows(&mapped, width, height);
                 drop(mapped);
 
-                *output.lock().unwrap() = SharedPixelBuffer::clone_from_slice(&packed, width, height);
+                *output.lock().expect("Lock poisoned!") = SharedPixelBuffer::clone_from_slice(&packed, width, height);
 
                 mapped_buffer.unmap();
             }

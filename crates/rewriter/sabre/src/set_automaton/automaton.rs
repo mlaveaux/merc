@@ -232,11 +232,10 @@ impl<M> SetAutomaton<M> {
         // Pick a state to explore
         while let Some(s_index) = queue.pop_front() {
             for (symbol, arity) in &symbols {
-                let (mut announcements, pos_to_goals) =
-                    states
-                        .get(s_index)
-                        .unwrap()
-                        .derive_transition(symbol, *arity, &supported_rules, apma);
+                let (mut announcements, pos_to_goals) = states
+                    .get(s_index)
+                    .expect("The state index refers to an existing state")
+                    .derive_transition(symbol, *arity, &supported_rules, apma);
 
                 announcements.sort_by(|ma1, ma2| ma1.position.cmp(&ma2.position));
 
@@ -252,7 +251,12 @@ impl<M> SetAutomaton<M> {
                         #[allow(clippy::map_entry)]
                         if map_goals_state.contains_key(&goals) {
                             // The destination state already exists
-                            destinations.push((pos, *map_goals_state.get(&goals).unwrap()))
+                            destinations.push((
+                                pos,
+                                *map_goals_state
+                                    .get(&goals)
+                                    .expect("The destination state exists, checked above"),
+                            ))
                         } else if !goals.is_empty() {
                             // The destination state does not yet exist, create it
                             let new_state = State::new(goals.clone());
@@ -601,7 +605,13 @@ impl State {
                 }
                 MatchGoalClassification::Unchanged => {
                     let mut mg = mg.clone();
-                    if mg.announcement.rule.lhs != mg.obligations.first().unwrap().pattern {
+                    if mg.announcement.rule.lhs
+                        != mg
+                            .obligations
+                            .first()
+                            .expect("A match goal has at least one obligation")
+                            .pattern
+                    {
                         mg.announcement.symbols_seen += 1;
                     }
                     result.unchanged.push(mg.clone());
@@ -691,7 +701,13 @@ impl State {
                 // the size of the automaton.
                 // 2. The average lookahead may be shorter.
                 if label.is_none() {
-                    label = Some(goal.obligations.first().unwrap().position.clone());
+                    label = Some(
+                        goal.obligations
+                            .first()
+                            .expect("A match goal has at least one obligation")
+                            .position
+                            .clone(),
+                    );
                 }
 
                 for obligation in &goal.obligations {
@@ -705,7 +721,7 @@ impl State {
         }
 
         State {
-            label: label.unwrap(),
+            label: label.expect("At least one match goal determines the label"),
             match_goals: goals,
         }
     }

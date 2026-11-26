@@ -53,7 +53,9 @@ impl GraphLayout {
             // Split the layout into the current state and every state after it, so each unordered
             // pair is visited once. The last state yields an empty right slice (no repulsion partner).
             let (left_layout, right_layout) = self.layout_states.split_at_mut(state_index.value() + 1);
-            let state_layout = left_layout.last_mut().unwrap();
+            let state_layout = left_layout
+                .last_mut()
+                .expect("split_at_mut leaves the current state in the left slice");
 
             // Accumulate repulsion forces between vertices.
             for other_state_layout in right_layout {

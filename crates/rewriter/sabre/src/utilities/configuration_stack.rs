@@ -209,7 +209,9 @@ impl<'a> ConfigurationStack<'a> {
     /// Grow a Configuration with index c. tr_slice contains the hypertransition to possibly multiple states
     pub(crate) fn grow(&mut self, pool: &mut SharedTermStack, c: usize, tr_slice: &'a [(DataPosition, usize)]) {
         // Pick the first transition to grow the stack
-        let (pos, des) = tr_slice.first().unwrap();
+        let (pos, des) = tr_slice
+            .first()
+            .expect("A hypertransition has at least one destination");
 
         // If there are more transitions store the remaining on the side stack
         let tr_slice: &[(DataPosition, usize)] = &(tr_slice)[1..];
@@ -374,7 +376,7 @@ impl<'a> ConfigurationStack<'a> {
         };
 
         if should_pop {
-            Some(stack.pop().unwrap().info)
+            Some(stack.pop().expect("The stack is not empty when a leaf is popped").info)
         } else {
             None
         }

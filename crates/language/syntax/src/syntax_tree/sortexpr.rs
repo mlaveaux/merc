@@ -455,11 +455,22 @@ impl Mcrl2Parser {
         let mut iter = sort.into_children();
 
         // An expression of the shape SortExprPrimary ~ (SortExprProduct ~ SortExprPrimary)*
-        let mut result = vec![parse_sortexpr_primary(iter.next().unwrap().as_pair().clone())?];
+        let mut result = vec![parse_sortexpr_primary(
+            iter.next()
+                .expect("The rule has a leading primary sort")
+                .as_pair()
+                .clone(),
+        )?];
 
         for mut chunk in &iter.chunks(2) {
-            if chunk.next().unwrap().as_rule() == Rule::SortExprProduct {
-                let sort = parse_sortexpr_primary(chunk.next().unwrap().as_pair().clone())?;
+            if chunk.next().expect("Every chunk has a product operator").as_rule() == Rule::SortExprProduct {
+                let sort = parse_sortexpr_primary(
+                    chunk
+                        .next()
+                        .expect("Every product operator is followed by a primary sort")
+                        .as_pair()
+                        .clone(),
+                )?;
                 result.push(sort);
             }
         }

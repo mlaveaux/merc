@@ -159,8 +159,10 @@ impl Iterator for CubeIterAll<'_> {
             self.initialize_cube();
         }
 
-        // At this point, cube must be Some; otherwise we would have returned None above.
-        let cube = self.cube.as_ref().unwrap();
+        let cube = self
+            .cube
+            .as_ref()
+            .expect("The cube is Some, otherwise the iterator would have returned None above");
         let result = self.current_cube.clone();
 
         // Advance to the next assignment for this cube. If overflow,

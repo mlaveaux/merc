@@ -203,7 +203,8 @@ pub fn refine_bisimulation<L: TransitionLabel>(
         let Some(group) = unstable_group else {
             return Ok((blocks, b_variables));
         };
-        let blocks_p_prime_b_prime = unstable_blocks_p_prime_b_prime.unwrap();
+        let blocks_p_prime_b_prime = unstable_blocks_p_prime_b_prime
+            .expect("The unstable blocks are present whenever an unstable group was found");
 
         // Introduce new b and b' variables.
         let mut b_vars = manager_ref

@@ -52,7 +52,7 @@ impl<T> BfVec<T> {
 
     /// Append a new element to the vector.
     pub fn push(&self, value: T) {
-        let mut read = self.shared.read().unwrap();
+        let mut read = self.shared.read().expect("Lock poisoned!");
 
         // Reserve an index for the new element with a compare-and-swap so that a reservation
         // never has to be rolled back; a rollback could hand the same slot to two threads.
@@ -67,7 +67,7 @@ impl<T> BfVec<T> {
                 self.reserve(new_capacity);
 
                 // Acquire read access and try a new position.
-                read = self.shared.read().unwrap();
+                read = self.shared.read().expect("Lock poisoned!");
                 continue;
             }
 
@@ -86,7 +86,11 @@ impl<T> BfVec<T> {
         // the read lock, so the buffer is allocated and the slot is exclusively
         // ours and uninitialised.
         unsafe {
-            let end = read.buffer.unwrap().as_ptr().add(last_index);
+            let end = read
+                .buffer
+                .expect("The buffer is allocated, since last_index < capacity")
+                .as_ptr()
+                .add(last_index);
             ptr::write(end, value);
         }
 
@@ -110,7 +114,7 @@ impl<T> BfVec<T> {
 
     /// Obtain the number of elements in the vector.
     pub fn len(&self) -> usize {
-        self.shared.read().unwrap().len.load(Ordering::Relaxed)
+        self.shared.read().expect("Lock poisoned!").len.load(Ordering::Relaxed)
     }
 
     /// Returns true iff the vector is empty.
@@ -131,7 +135,7 @@ impl<T> BfVec<T> {
     where
         T: Clone,
     {
-        let read = self.shared.read().unwrap();
+        let read = self.shared.read().expect("Lock poisoned!");
 
         // Acquire pairs with the publishing store in `push`, so the slots below `len` are initialised.
         assert!(
@@ -142,18 +146,25 @@ impl<T> BfVec<T> {
         // SAFETY: `index < len` (Acquire) guarantees the slot is initialised
         // and published, and the read lock keeps the buffer alive for the
         // clone.
-        unsafe { (*read.buffer.unwrap().as_ptr().add(index)).clone() }
+        unsafe {
+            (*read
+                .buffer
+                .expect("The buffer is allocated, since index < len")
+                .as_ptr()
+                .add(index))
+            .clone()
+        }
     }
 
     /// Drops the elements in the Vec, but keeps the capacity.
     pub fn clear(&self) {
-        let mut write = self.shared.write().unwrap();
+        let mut write = self.shared.write().expect("Lock poisoned!");
         write.clear();
     }
 
     /// Reserve the given capacity.
     fn reserve(&self, capacity: usize) {
-        let mut write = self.shared.write().unwrap();
+        let mut write = self.shared.write().expect("Lock poisoned!");
 
         // A reserve could have happened in the meantime which makes this call obsolete
         if capacity <= write.capacity {
@@ -168,8 +179,9 @@ impl<T> BfVec<T> {
             "All reserved slots must be published before a resize"
         );
 
-        let old_layout = Layout::array::<T>(write.capacity).unwrap();
-        let layout = Layout::array::<T>(capacity).unwrap();
+        let old_layout =
+            Layout::array::<T>(write.capacity).expect("The capacity does not overflow the maximum layout size");
+        let layout = Layout::array::<T>(capacity).expect("The capacity does not overflow the maximum layout size");
 
         // SAFETY: Held under the write lock, so no push is in flight and every reserved slot is
         // initialised. We allocate a larger buffer, move the `len` live elements into it, and
@@ -214,7 +226,11 @@ impl<T> BfVecShared<T> {
             // SAFETY: `&mut self` gives exclusive access, and slots `0..len` are initialised, so
             // each element can be dropped exactly once in place.
             unsafe {
-                let ptr = self.buffer.unwrap().as_ptr().add(i);
+                let ptr = self
+                    .buffer
+                    .expect("The buffer is allocated, since len > 0")
+                    .as_ptr()
+                    .add(i);
 
                 ptr::drop_in_place(ptr);
             }
@@ -233,7 +249,8 @@ impl<T> Drop for BfVecShared<T> {
         // SAFETY: `clear` dropped every live element, so the buffer holds no initialised values;
         // we free it with the same layout it was allocated with.
         unsafe {
-            let layout = Layout::array::<T>(self.capacity).unwrap();
+            let layout =
+                Layout::array::<T>(self.capacity).expect("The capacity does not overflow the maximum layout size");
             if let Some(buffer) = self.buffer {
                 alloc::dealloc(buffer.as_ptr() as *mut u8, layout);
             }

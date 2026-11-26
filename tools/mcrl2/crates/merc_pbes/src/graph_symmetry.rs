@@ -906,8 +906,14 @@ impl Sdg {
         let mut edge_colours = vec![Vec::new(); n];
 
         for edge in self.graph.edge_indices() {
-            let (u, v) = self.graph.edge_endpoints(edge).unwrap();
-            let colour = self.graph.edge_weight(edge).unwrap();
+            let (u, v) = self
+                .graph
+                .edge_endpoints(edge)
+                .expect("The edge index comes from the graph");
+            let colour = self
+                .graph
+                .edge_weight(edge)
+                .expect("The edge index comes from the graph");
             let ec_key = format!("{:?}", colour);
             let dense_ec = *ec_map.entry(ec_key).or_insert_with(|| {
                 let c = next_ec;
@@ -1019,8 +1025,14 @@ where
     }
 
     for edge in sdg.graph.edge_indices() {
-        let (u, v) = sdg.graph.edge_endpoints(edge).unwrap();
-        let colour = sdg.graph.edge_weight(edge).unwrap();
+        let (u, v) = sdg
+            .graph
+            .edge_endpoints(edge)
+            .expect("The edge index comes from the graph");
+        let colour = sdg
+            .graph
+            .edge_weight(edge)
+            .expect("The edge index comes from the graph");
         let elabel = colour.to_string();
 
         if matches!(colour, EdgeColour::Update(_)) {

@@ -115,7 +115,7 @@ impl<C: Eq + PartialEq + Markable> Eq for Protected<C> {}
 impl<C: Ord + PartialEq + PartialOrd + Markable> Ord for Protected<C> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let c: &C = &other.container.lock();
-        self.container.lock().partial_cmp(c).unwrap()
+        self.container.lock().partial_cmp(c).expect("Terms are totally ordered")
     }
 }
 

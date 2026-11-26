@@ -322,8 +322,16 @@ impl SymmetryAlgorithm {
             let mut update_partition = Vec::new();
             for group in data_parameter_partition {
                 update_partition.extend(partition(group.iter().cloned(), |lhs, rhs| {
-                    parameter_updates[self.parameters.iter().position(|p| p.name() == lhs.name()).unwrap()]
-                        == parameter_updates[self.parameters.iter().position(|p| p.name() == rhs.name()).unwrap()]
+                    parameter_updates[self
+                        .parameters
+                        .iter()
+                        .position(|p| p.name() == lhs.name())
+                        .expect("The parameter is declared")]
+                        == parameter_updates[self
+                            .parameters
+                            .iter()
+                            .position(|p| p.name() == rhs.name())
+                            .expect("The parameter is declared")]
                 }));
             }
 
@@ -342,7 +350,12 @@ impl SymmetryAlgorithm {
             // Determine the indices of these parameters.
             let parameter_indices: Vec<usize> = group
                 .iter()
-                .map(|param| self.parameters.iter().position(|p| p.name() == param.name()).unwrap())
+                .map(|param| {
+                    self.parameters
+                        .iter()
+                        .position(|p| p.name() == param.name())
+                        .expect("The parameter is declared")
+                })
                 .collect();
 
             info!("Data parameters group: {:?}, indices: {:?}", group, parameter_indices);

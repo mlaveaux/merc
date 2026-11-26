@@ -26,11 +26,17 @@ pub(crate) fn random_term<R: Rng>(
 
     let mut result = ATerm::default();
     for _ in 0..iterations {
-        let (symbol, arity) = symbols.iter().choose(rng).unwrap();
+        let (symbol, arity) = symbols.iter().choose(rng).expect("At least one symbol is available");
 
         let mut arguments = vec![];
         for _ in 0..*arity {
-            arguments.push(subterms.iter().choose(rng).unwrap().clone());
+            arguments.push(
+                subterms
+                    .iter()
+                    .choose(rng)
+                    .expect("At least one subterm is available")
+                    .clone(),
+            );
         }
 
         result = ATerm::with_args(&Symbol::new(symbol, *arity), &arguments);

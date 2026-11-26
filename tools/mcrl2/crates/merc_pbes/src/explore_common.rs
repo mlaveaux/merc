@@ -388,7 +388,7 @@ pub fn compute_priorities(is_mu: &[bool]) -> Vec<usize> {
         prev_is_mu = mu;
     }
 
-    let max_depth = *depths.last().unwrap();
+    let max_depth = *depths.last().expect("There is at least one depth");
     let mut priorities: Vec<usize> = depths.iter().map(|&d| max_depth - d).collect();
 
     let first_is_mu = is_mu[0];

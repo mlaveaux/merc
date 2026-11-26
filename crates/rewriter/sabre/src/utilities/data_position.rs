@@ -124,7 +124,7 @@ impl<'a> Iterator for DataPositionIterator<'a> {
             None
         } else {
             // Get a subterm to inspect
-            let (term, pos) = self.queue.pop_front().unwrap();
+            let (term, pos) = self.queue.pop_front().expect("The queue is not empty, checked above");
 
             // Put subterms in the queue
             for (i, argument) in term.data_arguments().enumerate() {

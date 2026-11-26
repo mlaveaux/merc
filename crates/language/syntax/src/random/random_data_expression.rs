@@ -49,7 +49,10 @@ pub fn random_boolean_data_expression<R: Rng, Id>(rng: &mut R, variables: &[IdDe
     candidates.push(DataExprKind::Bool(true).into());
     candidates.push(DataExprKind::Bool(false).into());
 
-    candidates.into_iter().choose(rng).unwrap()
+    candidates
+        .into_iter()
+        .choose(rng)
+        .expect("There is at least one candidate")
 }
 
 /// Generates a random integer data expression from the given variable list.
@@ -81,7 +84,10 @@ pub fn random_integer_data_expression<R: Rng, Id>(rng: &mut R, variables: &[IdDe
     candidates.push(number("0"));
     candidates.push(number("1"));
 
-    candidates.into_iter().choose(rng).unwrap()
+    candidates
+        .into_iter()
+        .choose(rng)
+        .expect("There is at least one candidate")
 }
 
 /// Generates a random, well-typed value of the given sort, given the declared sorts a

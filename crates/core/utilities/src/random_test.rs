@@ -57,6 +57,6 @@ where
     // Propagate a worker panic so a failing assertion fails the test instead of
     // being silently swallowed.
     for thread in threads {
-        thread.join().unwrap();
+        thread.join().expect("A worker thread panicked");
     }
 }

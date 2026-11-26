@@ -79,7 +79,7 @@ pub fn merc_aterm_to_mcrl2(root: &merc_aterm::ATermRef<'_>) -> Mcrl2ATerm {
     }
 
     debug_assert_eq!(result_stack.len(), 1, "conversion must yield exactly one term");
-    result_stack.pop().unwrap()
+    result_stack.pop().expect("The conversion yields exactly one term")
 }
 
 /// Converts a mCRL2 C++ [`Mcrl2ATerm`] into a maximally-shared term in the
@@ -135,7 +135,7 @@ pub fn mcrl2_aterm_to_merc(root: &Mcrl2ATermRef<'_>) -> merc_aterm::ATerm {
     }
 
     debug_assert_eq!(result_stack.len(), 1, "conversion must yield exactly one term");
-    result_stack.pop().unwrap()
+    result_stack.pop().expect("The conversion yields exactly one term")
 }
 
 #[cfg(test)]

@@ -156,7 +156,7 @@ impl BlockPartition {
             .chain(end_of_blocks..self.blocks.len())
             .map(BlockIndex::new)
             .max_by_key(|block_index| self.block(*block_index).len())
-            .unwrap();
+            .expect("The range contains at least the block itself");
         self.swap_blocks(block_index, max_block_index);
 
         self.assert_consistent();

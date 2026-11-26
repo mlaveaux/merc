@@ -1074,7 +1074,12 @@ impl Mcrl2Parser {
     }
 
     fn FixedPointOperator(op: ParseNode) -> ParseResult<FixedPointOperator> {
-        match op.into_children().next().unwrap().as_rule() {
+        match op
+            .into_children()
+            .next()
+            .expect("A fixed point operator has a child")
+            .as_rule()
+        {
             Rule::FixedPointMu => Ok(FixedPointOperator::Least),
             Rule::FixedPointNu => Ok(FixedPointOperator::Greatest),
             x => unimplemented!("This is not a fixed point operator: {:?}", x),

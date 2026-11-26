@@ -234,7 +234,10 @@ fn rewrite_aux<S: RewriteSubstitution, E: Enumerator>(
                 .expect("The stack always ends with a Return configuration");
             stack.terms.write(|write_terms| match config {
                 Config::Rewrite(result) => {
-                    let term = write_terms.pop().unwrap().unwrap();
+                    let term = write_terms
+                        .pop()
+                        .expect("The stack holds the term to rewrite")
+                        .expect("The pending term was initialised");
 
                     match term.kind() {
                         // A machine number is a value in normal form; it has no head function
@@ -579,7 +582,11 @@ fn find_match<'a, E: Enumerator>(
                 return None;
             }
 
-            state_index = transition.destinations.first().unwrap().1;
+            state_index = transition
+                .destinations
+                .first()
+                .expect("A transition with destinations has a first destination")
+                .1;
         }
     }
 }

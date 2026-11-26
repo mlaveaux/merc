@@ -125,7 +125,9 @@ impl NaiveRewriter {
                     'ec_check: for ec in &ema.equivalence_classes {
                         if ec.positions.len() > 1 {
                             let mut iter_pos = ec.positions.iter();
-                            let first_pos = iter_pos.next().unwrap();
+                            let first_pos = iter_pos
+                                .next()
+                                .expect("An equivalence class with more than one position has a first position");
                             let first_term = t.get_data_position(first_pos);
 
                             for other_pos in iter_pos {
@@ -150,7 +152,11 @@ impl NaiveRewriter {
                     return None;
                 }
 
-                state_index = transition.destinations.first().unwrap().1;
+                state_index = transition
+                    .destinations
+                    .first()
+                    .expect("A transition with destinations has a first destination")
+                    .1;
             }
         }
     }

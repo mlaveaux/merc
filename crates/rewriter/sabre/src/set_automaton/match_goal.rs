@@ -34,7 +34,11 @@ impl MatchGoal {
         }
 
         // Initialise the prefix with the first match goal, can only shrink afterwards
-        let first_match_pos = &goals.first().unwrap().announcement.position;
+        let first_match_pos = &goals
+            .first()
+            .expect("There is at least one match goal")
+            .announcement
+            .position;
         let mut gcp_length = first_match_pos.len();
         let prefix = first_match_pos;
 
@@ -68,8 +72,18 @@ impl MatchGoal {
             // update match announcement
             goal.announcement.position = DataPosition::new(&goal.announcement.position.indices()[len..]);
             for mo_index in 0..goal.obligations.len() {
-                let shortened = DataPosition::new(&goal.obligations.get(mo_index).unwrap().position.indices()[len..]);
-                goal.obligations.get_mut(mo_index).unwrap().position = shortened;
+                let shortened = DataPosition::new(
+                    &goal
+                        .obligations
+                        .get(mo_index)
+                        .expect("The obligation index is in range")
+                        .position
+                        .indices()[len..],
+                );
+                goal.obligations
+                    .get_mut(mo_index)
+                    .expect("The obligation index is in range")
+                    .position = shortened;
             }
         }
         goals
@@ -137,7 +151,9 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
         if !position_to_goals.contains_key(&g.announcement.position) {
             position_to_goals.insert(g.announcement.position.clone(), vec![i]);
         } else {
-            let vec = position_to_goals.get_mut(&g.announcement.position).unwrap();
+            let vec = position_to_goals
+                .get_mut(&g.announcement.position)
+                .expect("The position was inserted above");
             vec.push(i);
         }
     }
@@ -155,7 +171,7 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
         let mut goals_in_partition = vec![];
 
         // put the goals with position p in the partition
-        let g = position_to_goals.get(p).unwrap();
+        let g = position_to_goals.get(p).expect("Every position has at least one goal");
         for i in g {
             goals_in_partition.push(goals[*i].clone());
         }
@@ -167,7 +183,9 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
         p_index += 1;
         while p_index < all_positions.len() && MatchGoal::pos_comparable(p, &all_positions[p_index]) {
             // Put the goals with position all_positions[p_index] in the partition
-            let g = position_to_goals.get(&all_positions[p_index]).unwrap();
+            let g = position_to_goals
+                .get(&all_positions[p_index])
+                .expect("Every position has at least one goal");
             for i in g {
                 goals_in_partition.push(goals[*i].clone());
             }

@@ -57,7 +57,7 @@ where
 
         // The term at the first position must be equivalent to all other positions.
         let mut iter_pos = ec.positions.iter();
-        let first = term.get_data_position(iter_pos.next().unwrap());
+        let first = term.get_data_position(iter_pos.next().expect("An equivalence class has at least one position"));
         iter_pos.all(|other_pos| first == term.get_data_position(other_pos))
     })
 }

@@ -52,7 +52,7 @@ where
             },
             |tp, symbol, args| Ok(tp.create_term_iter(&symbol, args)),
         )
-        .unwrap()
+        .expect("The closures never return an error")
 }
 
 impl<I: fmt::Debug, C: fmt::Debug> TermBuilder<I, C> {

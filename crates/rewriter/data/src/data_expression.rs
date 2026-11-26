@@ -828,7 +828,7 @@ pub fn to_untyped_data_expression(t: ATerm, variables: Option<&AHashSet<String>>
                     Ok(DataApplication::with_args(&input, &args).into())
                 },
             )
-            .unwrap()
+            .expect("The closures never return an error")
             .into()
     })
 }

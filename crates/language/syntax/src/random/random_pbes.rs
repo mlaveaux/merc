@@ -131,7 +131,10 @@ fn random_pbes_from_pred_vars<R: Rng>(
 
 fn random_leaf<R: Rng>(rng: &mut R, freevars: &[IdDecl], config: &PbesGenConfig, negated: bool) -> PbesExpr {
     if !config.predicate_vars.is_empty() && rng.random_bool(config.propvar_probability) {
-        let pv = config.predicate_vars.choose(rng).unwrap();
+        let pv = config
+            .predicate_vars
+            .choose(rng)
+            .expect("There is at least one predicate variable");
         let args = pv
             .params
             .iter()
@@ -184,7 +187,7 @@ fn random_pbes_expr<R: Rng>(
     } else {
         &[0, 1, 2, 3]
     };
-    let op = *op_table.choose(rng).unwrap();
+    let op = *op_table.choose(rng).expect("The operator table is not empty");
 
     match op {
         0 => {

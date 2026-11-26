@@ -649,7 +649,12 @@ impl<'a> Iterator for ATermArgs<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.arity {
-            let res = Some(self.term.as_ref().unwrap().arg(self.index));
+            let res = Some(
+                self.term
+                    .as_ref()
+                    .expect("The term is present while index < arity")
+                    .arg(self.index),
+            );
 
             self.index += 1;
             res
@@ -669,7 +674,12 @@ impl<'a> Iterator for ATermArgs<'a> {
 impl DoubleEndedIterator for ATermArgs<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index < self.arity {
-            let res = Some(self.term.as_ref().unwrap().arg(self.arity - 1));
+            let res = Some(
+                self.term
+                    .as_ref()
+                    .expect("The term is present while index < arity")
+                    .arg(self.arity - 1),
+            );
 
             self.arity -= 1;
             res

@@ -16,7 +16,7 @@ pub fn index_edge<T, I: PartialEq + PartialOrd<usize> + SliceIndex<[T], Output =
 ) -> Edge<&mut T> {
     if a == b {
         assert!(a < slice.len());
-        Edge::Selfloop(slice.get_mut(a).unwrap())
+        Edge::Selfloop(slice.get_mut(a).expect("The index is in bounds, asserted above"))
     } else {
         assert!(a < slice.len() && b < slice.len());
 

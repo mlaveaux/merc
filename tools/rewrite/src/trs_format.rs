@@ -39,7 +39,7 @@ impl fmt::Display for SimpleTermFormatter<'_> {
             DataExpressionKind::Application(_) => {
                 let mut args = self.term.arguments();
 
-                let head = args.next().unwrap();
+                let head = args.next().expect("An application has a head");
                 write!(f, "{}", SimpleTermFormatter::new(&head))?;
 
                 let mut first = true;

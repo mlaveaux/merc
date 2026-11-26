@@ -133,7 +133,7 @@ impl<'a> Iterator for PositionIterator<'a> {
             None
         } else {
             // Get a subterm to inspect
-            let (term, pos) = self.queue.pop_front().unwrap();
+            let (term, pos) = self.queue.pop_front().expect("The queue is not empty, checked above");
 
             // Put subterms in the queue
             for (i, argument) in term.arguments().enumerate() {

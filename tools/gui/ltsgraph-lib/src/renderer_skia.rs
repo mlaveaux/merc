@@ -91,14 +91,14 @@ impl SkiaRenderer {
             builder.line_to(2.0, -5.0);
             builder.line_to(-2.0, -5.0);
             builder.close();
-            builder.finish().unwrap()
+            builder.finish().expect("The arrow path has a non-empty bounding box")
         };
 
         // A single circle that is used to render colored states
         let circle = {
             let mut builder = tiny_skia::PathBuilder::new();
             builder.push_circle(0.0, 0.0, state_radius);
-            builder.finish().unwrap()
+            builder.finish().expect("The circle path has a positive radius")
         };
 
         // Resize the labels if necessary

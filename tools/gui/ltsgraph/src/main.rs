@@ -191,7 +191,7 @@ async fn run() -> Result<(), MercError> {
         app.on_settings_changed(move || {
             // Request the settings for the next simulation tick.
             if let Some(app) = app_weak.upgrade() {
-                let mut settings = settings.lock().unwrap();
+                let mut settings = settings.lock().expect("Lock poisoned!");
                 settings.handle_length = app.global::<Settings>().get_handle_length();
                 settings.repulsion_strength = app.global::<Settings>().get_repulsion_strength();
                 settings.delta = app.global::<Settings>().get_timestep();
@@ -220,7 +220,7 @@ async fn run() -> Result<(), MercError> {
         Arc::new(PauseableThread::new(
             "ltsgraph canvas worker",
             move || {
-                let initial = settings_init.lock().unwrap().clone();
+                let initial = settings_init.lock().expect("Lock poisoned!").clone();
                 Ok(Renderer::new(
                     viewer_type.clone(),
                     wgpu.clone(),
@@ -229,11 +229,11 @@ async fn run() -> Result<(), MercError> {
                 ))
             },
             move |renderer| {
-                let render_settings = settings.lock().unwrap().to_render_settings();
+                let render_settings = settings.lock().expect("Lock poisoned!").to_render_settings();
 
                 // Held for the rest of this iteration so the renderer rebuild (from `lts`) and the
                 // subsequent render (using `viewer`) always see a pair from the same load.
-                let mut reload_state = state.reload.lock().unwrap();
+                let mut reload_state = state.reload.lock().expect("Lock poisoned!");
 
                 if reload_state.reload_lts {
                     info!("Creating the renderer");
@@ -254,7 +254,7 @@ async fn run() -> Result<(), MercError> {
                     );
                 } else {
                     // If we are not rendering the graph, we still need to ensure the canvas is initialized.
-                    let mut canvas = state.canvas.lock().unwrap();
+                    let mut canvas = state.canvas.lock().expect("Lock poisoned!");
                     if canvas.width() != render_settings.width || canvas.height() != render_settings.height {
                         *canvas = SharedPixelBuffer::<Rgba8Pixel>::new(render_settings.width, render_settings.height);
                     }
@@ -269,7 +269,7 @@ async fn run() -> Result<(), MercError> {
                             .set_refresh(!app.global::<Settings>().get_refresh());
                     };
                 })
-                .unwrap();
+                .expect("The event loop is running");
 
                 Ok(false)
             },
@@ -297,14 +297,14 @@ async fn run() -> Result<(), MercError> {
                 // Held across both the layout step and the viewer copy below so the layout thread
                 // never copies a `GraphLayout` into a `Viewer` from a different (already-reloaded,
                 // differently-sized) load, or vice versa.
-                let mut reload_state = state.reload.lock().unwrap();
+                let mut reload_state = state.reload.lock().expect("Lock poisoned!");
                 let ReloadState {
                     graph_layout, viewer, ..
                 } = &mut *reload_state;
 
                 if let Some(layout) = graph_layout.as_mut() {
                     // Read the settings and free the lock since otherwise the callback above blocks.
-                    let settings = settings.lock().unwrap().clone();
+                    let settings = settings.lock().expect("Lock poisoned!").clone();
 
                     let start = Instant::now();
                     is_stable = layout.update(settings.handle_length, settings.repulsion_strength, settings.delta);
@@ -376,7 +376,7 @@ async fn run() -> Result<(), MercError> {
                     // thread from ever observing a partially-updated combination of the three (see
                     // `ReloadState`'s documentation).
                     {
-                        let mut reload_state = state.reload.lock().unwrap();
+                        let mut reload_state = state.reload.lock().expect("Lock poisoned!");
                         reload_state.viewer = Some(viewer);
                         reload_state.graph_layout = Some(layout);
                         reload_state.lts = Some(lts);
@@ -430,11 +430,11 @@ async fn run() -> Result<(), MercError> {
         let render_handle = render_handle.clone();
 
         app.on_update_canvas(move |width, height, _| {
-            let mut settings = settings.lock().unwrap();
+            let mut settings = settings.lock().expect("Lock poisoned!");
             settings.width = width as u32;
             settings.height = height as u32;
 
-            let canvas = state.canvas.lock().unwrap().clone();
+            let canvas = state.canvas.lock().expect("Lock poisoned!").clone();
             if canvas.width() != settings.width || canvas.height() != settings.height {
                 // Request another redraw when the size has changed.
                 debug!(
@@ -475,9 +475,9 @@ async fn run() -> Result<(), MercError> {
                         warn!("Failed to load LTS from file dialog.");
                     }
                 })
-                .unwrap();
+                .expect("The event loop is running");
             })
-            .unwrap();
+            .expect("The event loop is running");
         });
     }
 
@@ -491,7 +491,7 @@ async fn run() -> Result<(), MercError> {
 
         app.on_focus_view(move || {
             if let Some(app) = app_weak.upgrade()
-                && let Some(viewer) = state.reload.lock().unwrap().viewer.as_ref()
+                && let Some(viewer) = state.reload.lock().expect("Lock poisoned!").viewer.as_ref()
             {
                 debug!("Centering view on graph.");
 
@@ -501,7 +501,7 @@ async fn run() -> Result<(), MercError> {
                 app.global::<Settings>().set_view_x(center.x);
                 app.global::<Settings>().set_view_y(center.y);
 
-                let mut settings = settings.lock().unwrap();
+                let mut settings = settings.lock().expect("Lock poisoned!");
                 settings.view_x = center.x;
                 settings.view_y = center.y;
 

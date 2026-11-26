@@ -446,8 +446,8 @@ pub fn variable_rename_reverse_edge<'id, 'a>(
 pub(crate) fn collect_children<E: Edge, N: InnerNode<E>>(node: &N) -> (Ref<'_, E>, Ref<'_, E>) {
     debug_assert_eq!(N::ARITY, 2);
     let mut it = node.children();
-    let f_then = it.next().unwrap();
-    let f_else = it.next().unwrap();
+    let f_then = it.next().expect("A binary node has a then child");
+    let f_else = it.next().expect("A binary node has an else child");
     debug_assert!(it.next().is_none());
     (f_then, f_else)
 }

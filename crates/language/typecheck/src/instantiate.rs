@@ -994,7 +994,7 @@ fn replace_type_var(sort: &SortExpression, type_var_id: TypeVarId, result_sort: 
 
             Ok(None)
         })
-        .unwrap()
+        .expect("The closure never returns an error")
 }
 
 #[cfg(test)]

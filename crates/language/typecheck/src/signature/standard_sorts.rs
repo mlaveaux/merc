@@ -147,44 +147,44 @@ pub(crate) fn function_update_text(domain_names: &[String], range: &str) -> Stri
         spec,
         "map @func_update: {function_sort} # {domain_sorts} # {range} -> {function_sort};"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    @func_update_stable: {function_sort} # {domain_sorts} # {range} -> {function_sort};"
     )
-    .unwrap();
-    writeln!(spec, "    @is_not_an_update: {function_sort} -> Bool;").unwrap();
+    .expect("Writing to a String cannot fail");
+    writeln!(spec, "    @is_not_an_update: {function_sort} -> Bool;").expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    @if_always_else: Bool # {function_sort} # {function_sort} -> {function_sort};"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
 
-    writeln!(spec, "var").unwrap();
+    writeln!(spec, "var").expect("Writing to a String cannot fail");
     for (i, argument_sort) in domain_names.iter().enumerate() {
-        writeln!(spec, "    @x{i}, @y{i}: {argument_sort};").unwrap();
+        writeln!(spec, "    @x{i}, @y{i}: {argument_sort};").expect("Writing to a String cannot fail");
     }
-    writeln!(spec, "    @v, @w: {range};").unwrap();
-    writeln!(spec, "    @f: {domain_sorts} -> {range};").unwrap();
+    writeln!(spec, "    @v, @w: {range};").expect("Writing to a String cannot fail");
+    writeln!(spec, "    @f: {domain_sorts} -> {range};").expect("Writing to a String cannot fail");
 
     writeln!(
         spec,
         "eqn @is_not_an_update(@f) -> @func_update(@f,{x_args},@v) = \
          @if_always_else(@f({x_args}) == @v,@f,@func_update_stable(@f,{x_args},@v));"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    @func_update(@func_update_stable(@f,{x_args},@w),{x_args},@v) = \
          @if_always_else(@f({x_args}) == @v,@f,@func_update_stable(@f,{x_args},@v));"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    {y_lt_x} -> @func_update(@func_update_stable(@f,{y_args},@w), {x_args},@v) = \
          @func_update_stable(@func_update(@f,{x_args},@v),{y_args},@w);"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    {x_lt_y} -> @func_update(@func_update_stable(@f,{y_args},@w), {x_args},@v) = \
@@ -192,18 +192,18 @@ pub(crate) fn function_update_text(domain_names: &[String], range: &str) -> Stri
          @func_update_stable(@f,{y_args},@w), \
          @func_update_stable(@func_update_stable(@f,{y_args},@w), {x_args},@v));"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    {x_neq_y} -> @func_update_stable(@f,{x_args},@v)({y_args}) = @f({y_args});"
     )
-    .unwrap();
-    writeln!(spec, "    @func_update_stable(@f,{x_args},@v)({x_args}) = @v;").unwrap();
+    .expect("Writing to a String cannot fail");
+    writeln!(spec, "    @func_update_stable(@f,{x_args},@v)({x_args}) = @v;").expect("Writing to a String cannot fail");
     writeln!(
         spec,
         "    @func_update(@f,{x_args},@v)({y_args}) = if({x_eq_y},@v,@f({y_args}));"
     )
-    .unwrap();
+    .expect("Writing to a String cannot fail");
 
     spec
 }
@@ -260,7 +260,7 @@ pub(crate) fn structured_sort_equations(
     let mut vars = String::new();
     for (i, constructor) in constructors.iter().enumerate() {
         for (j, (_, sort)) in constructor.args.iter().enumerate() {
-            writeln!(vars, "    @x{i}_{j}, @y{i}_{j}: {sort};").unwrap();
+            writeln!(vars, "    @x{i}_{j}, @y{i}_{j}: {sort};").expect("Writing to a String cannot fail");
         }
     }
 
@@ -271,10 +271,12 @@ pub(crate) fn structured_sort_equations(
     for (i, constructor) in constructors.iter().enumerate() {
         if let Some(recogniser) = &constructor.recogniser {
             let recogniser = &recogniser.node;
-            writeln!(eqns, "    {recogniser}({}) = true;", application(i, "@x")).unwrap();
+            writeln!(eqns, "    {recogniser}({}) = true;", application(i, "@x"))
+                .expect("Writing to a String cannot fail");
             for j in 0..constructors.len() {
                 if j != i {
-                    writeln!(eqns, "    {recogniser}({}) = false;", application(j, "@x")).unwrap();
+                    writeln!(eqns, "    {recogniser}({}) = false;", application(j, "@x"))
+                        .expect("Writing to a String cannot fail");
                 }
             }
         }
@@ -285,7 +287,8 @@ pub(crate) fn structured_sort_equations(
         for (j, (projection, _)) in constructor.args.iter().enumerate() {
             if let Some(projection) = projection {
                 let projection = &projection.node;
-                writeln!(eqns, "    {projection}({}) = @x{i}_{j};", application(i, "@x")).unwrap();
+                writeln!(eqns, "    {projection}({}) = @x{i}_{j};", application(i, "@x"))
+                    .expect("Writing to a String cannot fail");
             }
         }
     }
@@ -306,7 +309,7 @@ pub(crate) fn structured_sort_equations(
             application(i, "@x"),
             application(i, "@y")
         )
-        .unwrap();
+        .expect("Writing to a String cannot fail");
         for j in 0..constructors.len() {
             if j != i {
                 writeln!(
@@ -315,7 +318,7 @@ pub(crate) fn structured_sort_equations(
                     application(i, "@x"),
                     application(j, "@y")
                 )
-                .unwrap();
+                .expect("Writing to a String cannot fail");
             }
         }
     }
@@ -334,7 +337,7 @@ pub(crate) fn structured_sort_equations(
             application(i, "@x"),
             application(i, "@y")
         )
-        .unwrap();
+        .expect("Writing to a String cannot fail");
         writeln!(
             eqns,
             "    less_total({}, {}) = {} < {};",
@@ -343,26 +346,28 @@ pub(crate) fn structured_sort_equations(
             application(i, "@x"),
             application(i, "@y")
         )
-        .unwrap();
+        .expect("Writing to a String cannot fail");
         for j in 0..constructors.len() {
             if i < j {
-                writeln!(eqns, "    {} < {} = true;", application(i, "@x"), application(j, "@y")).unwrap();
+                writeln!(eqns, "    {} < {} = true;", application(i, "@x"), application(j, "@y"))
+                    .expect("Writing to a String cannot fail");
                 writeln!(
                     eqns,
                     "    less_total({}, {}) = true;",
                     application(i, "@x"),
                     application(j, "@y")
                 )
-                .unwrap();
+                .expect("Writing to a String cannot fail");
             } else if i > j {
-                writeln!(eqns, "    {} < {} = false;", application(i, "@x"), application(j, "@y")).unwrap();
+                writeln!(eqns, "    {} < {} = false;", application(i, "@x"), application(j, "@y"))
+                    .expect("Writing to a String cannot fail");
                 writeln!(
                     eqns,
                     "    less_total({}, {}) = false;",
                     application(i, "@x"),
                     application(j, "@y")
                 )
-                .unwrap();
+                .expect("Writing to a String cannot fail");
             }
         }
     }
@@ -380,10 +385,11 @@ pub(crate) fn structured_sort_equations(
             application(i, "@x"),
             application(i, "@y")
         )
-        .unwrap();
+        .expect("Writing to a String cannot fail");
         for j in 0..constructors.len() {
             if i < j {
-                writeln!(eqns, "    {} <= {} = true;", application(i, "@x"), application(j, "@y")).unwrap();
+                writeln!(eqns, "    {} <= {} = true;", application(i, "@x"), application(j, "@y"))
+                    .expect("Writing to a String cannot fail");
             } else if i > j {
                 writeln!(
                     eqns,
@@ -391,15 +397,15 @@ pub(crate) fn structured_sort_equations(
                     application(i, "@x"),
                     application(j, "@y")
                 )
-                .unwrap();
+                .expect("Writing to a String cannot fail");
             }
         }
     }
 
     if vars.is_empty() {
-        write!(spec, "eqn\n{eqns}").unwrap();
+        write!(spec, "eqn\n{eqns}").expect("Writing to a String cannot fail");
     } else {
-        write!(spec, "var\n{vars}eqn\n{eqns}").unwrap();
+        write!(spec, "var\n{vars}eqn\n{eqns}").expect("Writing to a String cannot fail");
     }
 
     // Named after the first constructor so a parse-error render reads as "the
