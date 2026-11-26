@@ -98,3 +98,35 @@ fn random_concurrent_insert_counts_each_once() {
     }
     assert_eq!(residents.len(), set.len(), "iter visits every resident value once");
 }
+
+/// A small deterministic test that miri can run: it exercises `get_unchecked` through `insert` and
+/// `index` while the table and the value storage grow, with heap-allocated values so that a read
+/// of freed or uninitialised memory is reported, and drops the values after `clear` and with the set.
+#[test]
+fn insert_and_lookup_across_growth_and_clear() {
+    let mut set: ConcurrentIndexedSet<String> = ConcurrentIndexedSet::new();
+
+    for round in 0..2 {
+        for i in 0..40usize {
+            let (index, is_new) = set.insert(format!("value-{i}"));
+            assert!(is_new, "round {round}: value {i} is fresh");
+            assert_eq!(index, i, "indices are dense on a single thread");
+        }
+
+        // Equal values are deduplicated, including after the table has been resized.
+        for i in 0..40usize {
+            assert_eq!(set.insert(format!("value-{i}")), (i, false));
+            assert_eq!(set.index(&format!("value-{i}")), Some(i));
+            assert_eq!(
+                set.get_by_index(i).map(String::as_str),
+                Some(format!("value-{i}").as_str())
+            );
+        }
+        assert_eq!(set.len(), 40);
+        assert_eq!(set.index(&"absent".to_string()), None);
+
+        set.clear();
+        assert!(set.is_empty());
+        assert_eq!(set.index(&"value-0".to_string()), None, "a cleared set has no values");
+    }
+}
