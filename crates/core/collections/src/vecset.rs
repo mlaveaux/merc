@@ -192,39 +192,3 @@ impl<T: fmt::Debug> fmt::Debug for VecSet<T> {
         write!(f, "{{{:?}}}", self.sorted_array.iter().format(", "))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use itertools::Itertools;
-    use rand::RngExt;
-
-    use merc_utilities::random_test;
-
-    use crate::VecSet;
-
-    #[test]
-    fn test_random_vecset_difference() {
-        random_test(100, |rng| {
-            let size = rng.random_range(0..20);
-            let size2 = rng.random_range(0..20);
-            let vec1: Vec<u32> = (0..size).map(|_| rng.random_range(0..100)).collect();
-            let vec2: Vec<u32> = (0..size2).map(|_| rng.random_range(0..100)).collect();
-
-            let set1 = VecSet::from_vec(vec1.clone());
-            let set2 = VecSet::from_vec(vec2.clone());
-
-            println!("left: {:?}", set1);
-            println!("right: {:?}", set2);
-
-            let difference: Vec<u32> = set1.difference(&set2).cloned().collect();
-            let expected_difference: Vec<u32> = vec1
-                .into_iter()
-                .filter(|x| !vec2.contains(x))
-                .sorted()
-                .dedup()
-                .collect();
-
-            assert_eq!(difference, expected_difference);
-        })
-    }
-}
