@@ -28,3 +28,11 @@ fn test_real_int_term_is_still_recognized() {
     let real = ATermInt::new(42);
     assert!(is_int_term(&ATerm::from(real)));
 }
+
+#[test]
+fn test_int_term_value() {
+    let int_term = ATermInt::new(42);
+
+    assert_eq!(int_term.value(), 42);
+    assert!(is_int_term(&int_term));
+}

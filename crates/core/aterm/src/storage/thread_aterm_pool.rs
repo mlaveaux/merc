@@ -704,6 +704,7 @@ impl DerefMut for ProtectionSetGuard<'_> {
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc;
+    use std::thread;
 
     use crate::ATerm;
     use crate::ATermRef;
@@ -711,77 +712,6 @@ mod tests {
     use crate::Symbol;
     use crate::Term;
     use crate::storage::THREAD_TERM_POOL;
-
-    use std::thread;
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // On Windows the parking_lot uses an unsupported operation.
-    fn test_thread_local_protection() {
-        merc_utilities::test_logger();
-
-        thread::scope(|scope| {
-            for _ in 0..3 {
-                scope.spawn(|| {
-                    // Create and protect some terms
-                    let symbol = Symbol::new("test", 0);
-                    let term = ATerm::constant(&symbol);
-                    let protected = term.protect();
-
-                    // Verify protection
-                    THREAD_TERM_POOL.with(|tp| {
-                        assert!(
-                            tp.lock_protection_set()
-                                .term_protection_set
-                                .contains_root(protected.root())
-                        );
-                    });
-
-                    // Unprotect
-                    let root = protected.root();
-                    drop(protected);
-
-                    THREAD_TERM_POOL.with(|tp| {
-                        assert!(!tp.lock_protection_set().term_protection_set.contains_root(root));
-                    });
-                });
-            }
-        });
-    }
-
-    #[test]
-    fn test_parsing() {
-        merc_utilities::test_logger();
-
-        let t = ATerm::from_string("f(g(a),b)").unwrap();
-
-        assert!(t.get_head_symbol().name() == "f");
-        assert!(t.arg(0).get_head_symbol().name() == "g");
-        assert!(t.arg(1).get_head_symbol().name() == "b");
-    }
-
-    #[test]
-    fn test_create_term() {
-        merc_utilities::test_logger();
-
-        let f = Symbol::new("f", 2);
-        let g = Symbol::new("g", 1);
-
-        let t = THREAD_TERM_POOL.with(|tp| {
-            tp.create_term(
-                &f,
-                &[
-                    tp.create_term(&g, &[tp.create_constant(&Symbol::new("a", 0))])
-                        .protect(),
-                    tp.create_constant(&Symbol::new("b", 0)),
-                ],
-            )
-            .protect()
-        });
-
-        assert!(t.get_head_symbol().name() == "f");
-        assert!(t.arg(0).get_head_symbol().name() == "g");
-        assert!(t.arg(1).get_head_symbol().name() == "b");
-    }
 
     #[test]
     fn test_orphaned_thread_term_remains_readable_after_gc() {

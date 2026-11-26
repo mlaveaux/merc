@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::mem::offset_of;
 use std::ptr::NonNull;
 use std::ptr::slice_from_raw_parts_mut;
 
@@ -369,35 +370,21 @@ impl SharedTermInt {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::mem::align_of;
-    use std::mem::offset_of;
-    use std::mem::size_of;
+// `symbol` must be at offset 0 in all term representations so that any pointer to a term
+// can safely be cast to `*const SymbolRef` to read the header.
+const _: () = assert!(offset_of!(SharedTermFixed<1>, symbol) == 0);
+const _: () = assert!(offset_of!(SharedTermInt, symbol) == 0);
 
-    use crate::ATermIndex;
-    use crate::ATermRef;
+// The args (SharedTermFixed) and annotation (SharedTermInt) fields must start at the same
+// byte offset.
+const _: () = assert!(offset_of!(SharedTermFixed<1>, args) == offset_of!(SharedTermInt, annotation));
 
-    use super::SharedTermFixed;
-    use super::SharedTermInt;
+// Both element types must have identical size and alignment so that indexing into the
+// argument array produces the same byte offsets in both representations.
+const _: () = assert!(size_of::<ATermIndex>() == size_of::<ATermRef<'static>>());
+const _: () = assert!(align_of::<ATermIndex>() == align_of::<ATermRef<'static>>());
 
-    // `symbol` must be at offset 0 in all term representations so that any pointer to a term
-    // can safely be cast to `*const SymbolRef` to read the header.
-    const _: () = assert!(offset_of!(SharedTermFixed<1>, symbol) == 0);
-    const _: () = assert!(offset_of!(SharedTermInt, symbol) == 0);
-
-    // The args (SharedTermFixed) and annotation (SharedTermInt) fields must start at the same
-    // byte offset.
-    const _: () = assert!(offset_of!(SharedTermFixed<1>, args) == offset_of!(SharedTermInt, annotation));
-
-    // Both element types must have identical size and alignment so that indexing into the
-    // argument array produces the same byte offsets in both representations.
-    const _: () = assert!(size_of::<ATermIndex>() == size_of::<ATermRef<'static>>());
-    const _: () = assert!(align_of::<ATermIndex>() == align_of::<ATermRef<'static>>());
-
-    // With a thin `ATermIndex` (one word), a binary term is a symbol word plus two argument
-    // words: 24 bytes, down from 40 when the arguments were wide slice pointers. Only holds in
-    // release builds, where `StablePointer` drops its debug reference counter.
-    #[cfg(not(debug_assertions))]
-    const _: () = assert!(size_of::<SharedTermFixed<2>>() == 3 * size_of::<usize>());
-}
+// A thin `ATermIndex` is one word, so a binary term is a symbol word plus two argument words. Only
+// holds in release builds, where `StablePointer` drops its debug reference counter.
+#[cfg(not(debug_assertions))]
+const _: () = assert!(size_of::<SharedTermFixed<2>>() == 3 * size_of::<usize>());

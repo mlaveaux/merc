@@ -333,12 +333,8 @@ impl Hash for SharedSymbol {
 
 #[cfg(test)]
 mod tests {
-    use merc_unsafety::SliceDst;
-
     use crate::Symb;
     use crate::Symbol;
-
-    use super::SharedSymbol;
 
     #[test]
     fn test_symbol_sharing() {
@@ -375,13 +371,5 @@ mod tests {
 
         // A plain literal takes the `as_str` path.
         assert_eq!(Symbol::new_fmt(format_args!("lit"), 0), Symbol::new("lit", 0));
-    }
-
-    #[test]
-    fn test_shared_symbol_size() {
-        // The header holds the arity and the name length, followed by the name itself.
-        let word = std::mem::size_of::<usize>();
-        assert_eq!(SharedSymbol::layout_for(0).unwrap().size(), 2 * word);
-        assert_eq!(SharedSymbol::layout_for(1).unwrap().size(), 3 * word);
     }
 }

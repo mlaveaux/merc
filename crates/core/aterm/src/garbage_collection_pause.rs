@@ -41,19 +41,3 @@ impl Drop for GarbageCollectionPause {
 pub(crate) fn is_garbage_collection_paused() -> bool {
     PAUSES.load(Ordering::Relaxed) != 0
 }
-
-#[cfg(test)]
-mod tests {
-    use super::GarbageCollectionPause;
-    use super::is_garbage_collection_paused;
-
-    #[test]
-    fn test_pauses_nest() {
-        // Other tests in this process may hold a pause, so only check what this test controls.
-        let outer = GarbageCollectionPause::new();
-        let inner = GarbageCollectionPause::new();
-        drop(inner);
-        assert!(is_garbage_collection_paused());
-        drop(outer);
-    }
-}

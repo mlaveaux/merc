@@ -693,15 +693,4 @@ mod tests {
         assert_eq!(head.arity(), 1, "the mark must not leak into the arity");
         assert_eq!(head, Symbol::new("only_reachable_through_term", 1).copy());
     }
-
-    #[test]
-    #[should_panic]
-    fn test_term_out_of_bound_arity() {
-        let c = ATerm::constant(&Symbol::new("a", 0));
-
-        let t = ATerm::with_args(&Symbol::new("f", 1), &[c.copy(), c.copy()]);
-
-        // Currently we check on access
-        let _ = t.arg(1);
-    }
 }

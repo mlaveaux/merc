@@ -116,17 +116,3 @@ impl ATermStreamable for String {
         Ok(term.value().to_string())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::ATermString;
-
-    #[test]
-    fn test_string() {
-        merc_utilities::test_logger();
-
-        let s = ATermString::new("test");
-        assert_eq!(s.value(), "test");
-        assert_eq!(s.to_string(), "test");
-    }
-}

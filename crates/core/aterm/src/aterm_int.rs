@@ -96,20 +96,3 @@ impl fmt::Display for ATermIntRef<'_> {
 }
 
 pub use inner::*;
-
-#[cfg(test)]
-mod tests {
-    use merc_utilities::test_logger;
-
-    use crate::ATermInt;
-    use crate::is_int_term;
-
-    #[test]
-    fn test_int_term() {
-        test_logger();
-
-        let int_term = ATermInt::new(42);
-        assert_eq!(int_term.value(), 42);
-        assert!(is_int_term(&int_term));
-    }
-}

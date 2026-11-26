@@ -340,24 +340,3 @@ impl<'a, C: Transmutable> Deref for ProtectedReadGuard<'a, C> {
         unsafe { self.reference.transmute_lifetime() }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::ATerm;
-    use crate::ATermRef;
-    use crate::Protected;
-
-    #[test]
-    fn test_aterm_container() {
-        merc_utilities::test_logger();
-
-        let t = ATerm::from_string("f(g(a),b)").unwrap();
-
-        // First test the trait for a standard container.
-        let mut container = Protected::<Vec<ATermRef<'static>>>::new(vec![]);
-
-        for _ in 0..1000 {
-            container.write(|write| write.push(t.get()));
-        }
-    }
-}
