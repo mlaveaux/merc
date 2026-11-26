@@ -21,7 +21,11 @@ Each is a reason to read, never a finding by itself. Run them per crate (`crates
 | Comments longer than the code | read the largest doc comments in the crate (`traverse.rs`, `rec_tests.rs` are examples) | Contract belongs in rustdoc; reasoning and measurements belong on the website (`documentation` skill). |
 | Comments naming private items, tests, or "the same trick used elsewhere in this file" | `grep -rnE "see \`[a-z_]+\` in this module" <path>` and read the hits | They rot when the private item is renamed. |
 | Suppressed warnings | `grep -rn "allow(dead_code)\|allow(unused\|expect(dead_code" --include=*.rs <path>` | Dead code is usually a sign nobody used it; delete it or use `#[expect(..., reason = "...")]`. |
-| Blanket `unwrap()` outside tests | `grep -rc "\.unwrap()" --include=*.rs <path>/src` | An input-dependent `unwrap` should be a `MercError`; an invariant should be `expect("why it holds")`. |
+| `unwrap()` outside tests | `grep -rn "\.unwrap()" --include=*.rs <path>/src`, ignoring hits below `#[cfg(test)]` | `unwrap` is fine in tests only. Elsewhere use `expect("why it holds")`; an `unwrap` that has a comment must become an `expect` carrying that comment. Input-dependent failures return `MercError`. |
+| Integration tests inline in `src/` | `grep -rln "#\[cfg(test)\]" --include=*.rs <path>/src` | Tests that only use the public API belong in `<crate>/tests/`. Inline modules are for tests that need private items. |
+| Tests of compiler guarantees | `grep -rnE "size_of\|align_of\|assert_send\|assert_sync\|assert_impl" --include=*.rs <path>` | A `#[test]` on struct layout or `Send`/`Sync` checks what the compiler already does. Keep a layout invariant only as a `const _: () = assert!(...)` beside the `unsafe` that depends on it. |
+| Tests coupled to the implementation | tests that call private helpers, inspect internal fields, or repeat the algorithm to compute the expected value | They fail on every refactor and prove nothing about behaviour. Rewrite against the public contract or delete. |
+| Trivial helpers | one-line getters and wrappers that only rename another call | Inline and remove. |
 | `TODO` that is a question | `grep -rnE "TODO\|FIXME\|XXX" --include=*.rs <path>` | "Is this correct?" is unfinished reasoning. Answer with a test or an issue. |
 | Duplicate abstractions | search for the same trait name in two crates (`DataExpressionVisitor` exists in `merc_data` and in `mcrl2`) | Two APIs for one idea means one of them was not reviewed against the other. |
 | Tests that assert nothing new | tests whose body only constructs a value, or that mirror the implementation line by line | They pass on both sides of a bug (see the `review` skill, Step 2). |
@@ -31,6 +35,7 @@ Each is a reason to read, never a finding by itself. Run them per crate (`crates
 
 Measure against the `architecture` skill, in particular:
 
+- tests: integration tests in `tests/`, `unwrap` allowed in tests, `expect("reason")` elsewhere; every test must fail on a plausible bug and must not assert layout or implementation details;
 - one `use` per item, no glob imports (except `use super::*` in tests);
 - errors as `merc_utilities::MercError` or a `thiserror` enum, binaries on `clap` derive with the
   `merc_tools` helpers;
@@ -56,6 +61,6 @@ The standing plan with the first scan is in `docs/review-pass.md`.
 ## Do not
 
 - Treat "sounds like an LLM" as a defect. Fluent prose that is correct and specific is fine.
-- Delete a test, an `unsafe` comment or a benchmark because it looks verbose. Run the relevant
+- Delete a test that guards behaviour, an `unsafe` comment or a benchmark because it looks verbose. Run the relevant
   skill (`unsafe-verify`, `benchmark`) and decide on evidence.
 - Rewrite the public API of a published `crates/*` crate without checking `cargo semver-checks`.

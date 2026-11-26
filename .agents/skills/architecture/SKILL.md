@@ -98,11 +98,13 @@ traits. The older one is not the model for new code; see `docs/review-pass.md`.
 
 - **Imports:** one `use` per item (`imports_granularity = "Item"`, needs nightly rustfmt), no glob
   imports in production code, `max_width = 120`.
+- **`unwrap`/`expect`:** outside tests, no bare `unwrap`; use `expect("why this cannot fail")`, and a comment justifying an `unwrap` becomes the `expect` message. Input-dependent failures return an error.
+- **Helpers:** no trivial one-line helpers that only rename another call.
 - **Errors:** `merc_utilities::MercError` for boundary errors (it boxes), `thiserror` enums for
   typed library errors, no `anyhow`. Binaries use `clap` derive plus the `merc_tools` helpers.
 - **Dependencies:** the workspace pins versions in the root `Cargo.toml`; new dependencies need
   `cargo deny check` and a reason.
-- **Tests:** property-style with `merc_utilities::random_test` (reproduce with
+- **Tests:** public-API (integration) tests live in the crate's `tests/` directory; an inline `#[cfg(test)]` module is only for tests that need private items. `unwrap` is fine in tests. Do not test struct layout, `Send`/`Sync` or other compiler checks (keep layout invariants as `const _: () = assert!(...)` next to the `unsafe` relying on them), and do not pin private helpers or internal state: such tests churn on every refactor. A test earns its place by failing when behaviour is wrong. Property-style with `merc_utilities::random_test` (reproduce with
   `MERC_SEED=<seed>`); `test-case` for tables; small deterministic cases for miri. Expected
   outputs live in `snapshot/` files next to the test.
 - **Docs:** rustdoc for the contract (`# Panics`, `# Safety`), crate README for the architecture

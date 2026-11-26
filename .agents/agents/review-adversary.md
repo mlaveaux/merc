@@ -11,7 +11,7 @@ Start by reading the `review` and `architecture` skills (`.agents/skills/review/
 
 ## Working agreement
 
-- **You may write test code only.** Test files (`crates/*/*/tests/**`, `#[cfg(test)]` modules, benchmark harnesses) and scratch files outside the repository, such as a temporary directory. Never touch production code, never fix a defect you found, never `git add`/`commit`/`push`, never revert the change you are reviewing.
+- **You may write test code only.** Test files (`crates/*/*/tests/**`, preferred for tests that use only the public API, `#[cfg(test)]` modules, benchmark harnesses) and scratch files outside the repository, such as a temporary directory. Never touch production code, never fix a defect you found, never `git add`/`commit`/`push`, never revert the change you are reviewing.
 - If the fix is obvious, say so in one line under the finding. Applying it is the implementor's job — and your finding is worth more as a failing test than as a patch.
 - Leave every failing test you wrote in the working tree. It is the regression test that gets committed with the fix, so give it a name that states the postcondition and list its path in your report.
 - Read the diff first (`git diff`, `git diff main...HEAD`, `gh pr diff <n>`), not the commit message or the author's summary. Where the description and the code disagree, that is a finding.
