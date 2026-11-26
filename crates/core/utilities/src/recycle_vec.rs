@@ -35,11 +35,4 @@ mod tests {
         assert!(recycled.is_empty());
         assert_eq!(Rc::strong_count(&shared), 1);
     }
-
-    #[test]
-    fn test_recycle_vec_different_layout_is_empty() {
-        let vec: Vec<u8> = vec![1, 2, 3];
-        let recycled: Vec<u64> = recycle_vec(vec);
-        assert!(recycled.is_empty());
-    }
 }

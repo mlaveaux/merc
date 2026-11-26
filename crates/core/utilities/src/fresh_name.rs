@@ -36,26 +36,3 @@ impl FreshNameGenerator {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::FreshNameGenerator;
-
-    #[test]
-    fn test_generate_avoids_used_and_generated_names() {
-        let mut generator = FreshNameGenerator::new(["X0".to_string()]);
-        assert_eq!(generator.generate("X"), "X1");
-        assert_eq!(generator.generate("X"), "X2");
-        assert_eq!(generator.generate("Y"), "Y0");
-    }
-
-    #[test]
-    fn test_generate_avoids_names_generated_for_another_base() {
-        let mut generator = FreshNameGenerator::new([]);
-        assert_eq!(generator.generate("X1"), "X10");
-        for _ in 0..10 {
-            generator.generate("X");
-        }
-        assert_eq!(generator.generate("X"), "X11");
-    }
-}

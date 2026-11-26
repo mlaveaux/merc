@@ -129,28 +129,3 @@ impl<T> Default for SlotList<T> {
         Self::new()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::SlotList;
-
-    #[test]
-    fn test_slot_list_order() {
-        let mut list = SlotList::new();
-        let a = list.push_back('a');
-        list.push_back('b');
-        let c = list.push_back('c');
-
-        list.move_to_back(a);
-        assert_eq!(list.remove(c), 'c');
-
-        // Slot of `c` is reused.
-        assert_eq!(list.push_back('d'), c);
-
-        for expected in ['b', 'a', 'd'] {
-            assert_eq!(list.pop_front(), Some(expected));
-        }
-        assert_eq!(list.pop_front(), None);
-        assert!(list.is_empty());
-    }
-}

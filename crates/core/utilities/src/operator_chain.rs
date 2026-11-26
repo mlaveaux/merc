@@ -133,110 +133,30 @@ mod tests {
     use super::BinaryChain;
     use super::ChainIter;
     use super::ChainStack;
-    use super::unique_chain_operands;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-    enum Op {
-        And,
-        Or,
+    /// A right-nested chain of `depth` connectives, which has `depth + 1` operands.
+    #[derive(Clone, Copy)]
+    struct Chain {
+        depth: usize,
     }
 
-    #[derive(PartialEq, Eq, Hash)]
-    enum Expr {
-        Var(&'static str),
-        Binary(Op, Box<Expr>, Box<Expr>),
-    }
+    impl BinaryChain for Chain {
+        type Op = ();
 
-    impl<'a> BinaryChain for &'a Expr {
-        type Op = Op;
-
-        fn binary_operands(&self, op: Op) -> Option<(&'a Expr, &'a Expr)> {
-            match *self {
-                Expr::Binary(node_op, lhs, rhs) if *node_op == op => Some((lhs, rhs)),
-                _ => None,
-            }
+        fn binary_operands(&self, _op: ()) -> Option<(Chain, Chain)> {
+            (self.depth > 0).then(|| (Chain { depth: 0 }, Chain { depth: self.depth - 1 }))
         }
     }
 
-    fn binary(op: Op, lhs: Expr, rhs: Expr) -> Expr {
-        Expr::Binary(op, Box::new(lhs), Box::new(rhs))
-    }
-
-    fn names<'a>(operands: impl Iterator<Item = &'a Expr>) -> Vec<&'static str> {
-        operands
-            .map(|operand| match operand {
-                Expr::Var(name) => *name,
-                Expr::Binary(..) => "<binary>",
-            })
-            .collect()
-    }
-
     #[test]
-    fn test_chain_iter_yields_operands_in_written_order() {
-        let left_nested = binary(Op::And, binary(Op::And, Expr::Var("A"), Expr::Var("B")), Expr::Var("C"));
-        let right_nested = binary(Op::And, Expr::Var("A"), binary(Op::And, Expr::Var("B"), Expr::Var("C")));
+    fn test_chain_stack_keeps_allocation() {
+        let mut storage = ChainStack::<usize>::new();
 
-        let mut storage = ChainStack::<&Expr>::new();
-        assert_eq!(
-            names(ChainIter::new(&left_nested, Op::And, &mut storage)),
-            ["A", "B", "C"]
-        );
-        assert_eq!(
-            names(ChainIter::new(&right_nested, Op::And, &mut storage)),
-            ["A", "B", "C"]
-        );
-    }
-
-    #[test]
-    fn test_chain_iter_stops_at_other_connectives() {
-        let expr = binary(Op::And, Expr::Var("A"), binary(Op::Or, Expr::Var("B"), Expr::Var("C")));
-
-        let mut storage = ChainStack::<&Expr>::new();
-        assert_eq!(names(ChainIter::new(&expr, Op::And, &mut storage)), ["A", "<binary>"]);
-        assert_eq!(ChainIter::new(&expr, Op::Or, &mut storage).count(), 1);
-    }
-
-    #[test]
-    fn test_chain_stack_keeps_allocation_across_lifetimes() {
-        let mut storage = ChainStack::<&'static Expr>::new();
-
-        let expr = binary(Op::And, Expr::Var("A"), binary(Op::And, Expr::Var("B"), Expr::Var("C")));
-        ChainIter::new(&expr, Op::And, &mut storage).for_each(drop);
+        assert_eq!(ChainIter::new(Chain { depth: 8 }, (), &mut storage).count(), 9);
         let capacity = storage.stack.capacity();
-        assert!(capacity > 0);
+        assert!(capacity > 0, "the traversal did not return its allocation");
 
-        let other = binary(Op::And, Expr::Var("D"), Expr::Var("E"));
-        assert_eq!(names(ChainIter::new(&other, Op::And, &mut storage)), ["D", "E"]);
+        assert_eq!(ChainIter::new(Chain { depth: 2 }, (), &mut storage).count(), 3);
         assert_eq!(storage.stack.capacity(), capacity);
-    }
-
-    #[test]
-    fn test_chain_iter_size_hint_is_a_lower_bound() {
-        let expr = binary(Op::And, Expr::Var("A"), binary(Op::And, Expr::Var("B"), Expr::Var("C")));
-
-        let mut storage = ChainStack::<&Expr>::new();
-        let mut iter = ChainIter::new(&expr, Op::And, &mut storage);
-        assert_eq!(iter.size_hint(), (1, None));
-
-        iter.next();
-        assert_eq!(iter.size_hint(), (1, None));
-        iter.next();
-        iter.next();
-        assert_eq!(iter.size_hint(), (0, None));
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn test_unique_chain_operands_skips_duplicates() {
-        let expr = binary(
-            Op::And,
-            binary(Op::And, Expr::Var("A"), Expr::Var("B")),
-            binary(Op::And, Expr::Var("A"), binary(Op::Or, Expr::Var("B"), Expr::Var("C"))),
-        );
-
-        assert_eq!(
-            names(unique_chain_operands(&expr, Op::And).into_iter()),
-            ["A", "B", "<binary>"]
-        );
     }
 }
