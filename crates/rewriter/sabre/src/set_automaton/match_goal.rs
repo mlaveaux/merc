@@ -153,7 +153,7 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
         } else {
             let vec = position_to_goals
                 .get_mut(&g.announcement.position)
-                .expect("The position was inserted above");
+                .expect("The position is present, checked above");
             vec.push(i);
         }
     }
@@ -171,7 +171,9 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
         let mut goals_in_partition = vec![];
 
         // put the goals with position p in the partition
-        let g = position_to_goals.get(p).expect("Every position has at least one goal");
+        let g = position_to_goals
+            .get(p)
+            .expect("The positions are the keys of position_to_goals");
         for i in g {
             goals_in_partition.push(goals[*i].clone());
         }
@@ -185,7 +187,7 @@ fn partition_by_position(goals: &[MatchGoal]) -> Vec<Vec<MatchGoal>> {
             // Put the goals with position all_positions[p_index] in the partition
             let g = position_to_goals
                 .get(&all_positions[p_index])
-                .expect("Every position has at least one goal");
+                .expect("The positions are the keys of position_to_goals");
             for i in g {
                 goals_in_partition.push(goals[*i].clone());
             }

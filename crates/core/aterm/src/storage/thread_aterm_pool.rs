@@ -714,6 +714,40 @@ mod tests {
     use crate::storage::THREAD_TERM_POOL;
 
     #[test]
+    #[cfg_attr(miri, ignore)] // On Windows the parking_lot uses an unsupported operation.
+    fn test_thread_local_protection() {
+        merc_utilities::test_logger();
+
+        thread::scope(|scope| {
+            for _ in 0..3 {
+                scope.spawn(|| {
+                    // Create and protect some terms
+                    let symbol = Symbol::new("test", 0);
+                    let term = ATerm::constant(&symbol);
+                    let protected = term.protect();
+
+                    // Verify protection
+                    THREAD_TERM_POOL.with(|tp| {
+                        assert!(
+                            tp.lock_protection_set()
+                                .term_protection_set
+                                .contains_root(protected.root())
+                        );
+                    });
+
+                    // Unprotect
+                    let root = protected.root();
+                    drop(protected);
+
+                    THREAD_TERM_POOL.with(|tp| {
+                        assert!(!tp.lock_protection_set().term_protection_set.contains_root(root));
+                    });
+                });
+            }
+        });
+    }
+
+    #[test]
     fn test_orphaned_thread_term_remains_readable_after_gc() {
         merc_utilities::test_logger();
 

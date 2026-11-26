@@ -260,7 +260,8 @@ pub(crate) fn weak_bisim_presignature_sorted<L: LTS, P: Partition>(
             builder.push((
                 tau_hat(lts),
                 BlockIndex::new(
-                    state_to_key[transition.to].expect("An inert tau transition leads to a state that has a key"),
+                    state_to_key[transition.to]
+                        .expect("Tau successors are processed before their predecessors, so the successor has a key"),
                 ),
             ));
         } else {
@@ -298,8 +299,9 @@ pub(crate) fn weak_bisim_signature_sorted_full<L: LTS, P: Partition>(
         if lts.is_hidden_label(transition.label) {
             // Inert tau transition, take signature from the outgoing tau-transition.
             builder.extend(
-                key_to_signature[state_to_signature[transition.to]
-                    .expect("An inert tau transition leads to a state that has a signature")]
+                key_to_signature[state_to_signature[transition.to].expect(
+                    "Tau successors are processed before their predecessors, so the successor has a signature",
+                )]
                 .as_slice(),
             );
         } else {

@@ -12,6 +12,7 @@ use merc_aterm::ATermSend;
 use merc_aterm::ATermString;
 use merc_aterm::Protected;
 use merc_aterm::StructuralOrd;
+use merc_aterm::Symb;
 use merc_aterm::Symbol;
 use merc_aterm::Term;
 use merc_aterm::storage::THREAD_TERM_POOL;
@@ -112,17 +113,28 @@ fn test_string_term() {
 }
 
 #[test]
-fn test_protected_container_keeps_terms_alive() {
-    let t = term("f(g(a),b)");
+fn test_protected_container_is_the_only_root_across_gc() {
     let mut container = Protected::<Vec<ATermRef<'static>>>::new(vec![]);
-
-    for _ in 0..1000 {
+    {
+        let t = term("pc_root_f(pc_root_g(pc_root_a), pc_root_b)");
         container.write(|write| write.push(t.get()));
+        // `t` is dropped here, so the container is the only root of the term.
     }
 
+    // Create garbage before and after the collection, so a collected slot would be reused.
+    for i in 0..1000 {
+        let _ = term(&format!("pc_garbage_{i}(pc_x, pc_y)"));
+    }
     THREAD_TERM_POOL.with(|tp| tp.force_collect_garbage());
-    assert_eq!(container.read().len(), 1000);
-    assert!(container.read().iter().all(|entry| *entry == t.copy()));
+    for i in 0..1000 {
+        let _ = term(&format!("pc_other_{i}(pc_x, pc_y)"));
+    }
+
+    let read = container.read();
+    let entry = &read[0];
+    assert_eq!(entry.get_head_symbol().name(), "pc_root_f");
+    assert_eq!(entry.arg(0).get_head_symbol().name(), "pc_root_g");
+    assert_eq!(entry.arg(1).get_head_symbol().name(), "pc_root_b");
 }
 
 #[test]
