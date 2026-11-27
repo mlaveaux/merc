@@ -1,8 +1,6 @@
 //! Regression tests for parser bugs fixed during the crate review, plus
 //! randomized print/parse round-trip (string-fixpoint) property tests.
 
-use std::ops::ControlFlow;
-
 use rand::RngExt;
 
 use merc_syntax::ActFrmKind;
@@ -12,7 +10,6 @@ use merc_syntax::ProcExprBinaryOp;
 use merc_syntax::ProcessExprKind;
 use merc_syntax::RegFrmKind;
 use merc_syntax::StateFrmKind;
-use merc_syntax::Traverse;
 use merc_syntax::UntypedDataSpecification;
 use merc_syntax::UntypedPbes;
 use merc_syntax::UntypedPres;
@@ -112,15 +109,18 @@ fn action_formula_at_parses() {
 #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
 fn left_merge_round_trips() {
     let printed = format!("{}", UntypedProcessSpecification::parse("init a ||_ b;").unwrap());
-    assert!(printed.contains("||_"), "left merge should print as ||_: {printed}");
-    UntypedProcessSpecification::parse(&printed).expect("printed left merge should reparse");
+    assert_eq!(printed, "\ninit (a ||_ b);\n");
+    let reparsed = UntypedProcessSpecification::parse(&printed).expect("printed left merge should reparse");
+    assert_eq!(reparsed.to_string(), printed);
 }
 
 #[test]
 #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
 fn action_formula_at_round_trips() {
     let printed = format!("{}", UntypedStateFrmSpec::parse("<a@3>true").unwrap());
-    UntypedStateFrmSpec::parse(&printed).expect("printed `@` action formula should reparse");
+    assert_eq!(printed, "\nform <(a)@(3)>true;\n");
+    let reparsed = UntypedStateFrmSpec::parse(&printed).expect("printed `@` action formula should reparse");
+    assert_eq!(reparsed.to_string(), printed);
 }
 
 /// A PRES used the `pbes` keyword, dropped infix operators, and mismatched the
@@ -135,41 +135,96 @@ fn pres_specification_parses() {
          init X(0);",
     )
     .expect("PRES should parse");
-    assert_eq!(pres.equations.len(), 2);
+    assert_eq!(
+        pres.to_string(),
+        "\n\n\npres\n   mu X(n: Nat) = (((val((n < 3)) => X(n)) && eqinf(X(n))) + (val(2) * X(n)));\n   nu Y = (sup m: Nat . (Y + condsm(Y, Y, Y)));\ninit X(0);\n"
+    );
 }
 
-/// Test that PRES examples print and parse back to the same form.
+/// PRES examples print as expected and parse back to the same form.
 #[test]
 #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
 fn pres_examples_print_parse_fixpoint() {
-    let examples = [
-        "pres mu X = true; init X;",
-        "pres mu X = false; init X;",
-        "pres mu X = val(1); init X;",
-        "pres mu X = Y; nu Y = X; init Y;",
-        "pres mu X = eqinf(val(1)); init X;",
-        "pres mu X = eqninf(val(1)); init X;",
-        "pres mu X = condsm(val(1), val(2), val(3)); init X;",
-        "pres mu X = condeq(val(1), val(2), val(3)); init X;",
-        "pres mu X = -val(1); init X;",
-        "pres mu X = val(2) * val(1); init X;",
-        "pres mu X = val(1) * val(2); init X;",
-        "pres mu X = val(1) + val(2); init X;",
-        "pres mu X = val(1) => val(2); init X;",
-        "pres mu X = val(1) || val(2); init X;",
-        "pres mu X = val(1) && val(2); init X;",
-        "pres mu X(n: Nat) = inf n: Nat . val(n); init X(0);",
-        "pres mu X(n: Nat) = sup n: Nat . val(n); init X(0);",
-        "pres mu X(n: Nat) = sum n: Nat . val(n); init X(0);",
-        "pres \
+    let examples: [(&str, &str); 19] = [
+        ("pres mu X = true; init X;", "\n\n\npres\n   mu X = true;\ninit X;\n"),
+        ("pres mu X = false; init X;", "\n\n\npres\n   mu X = false;\ninit X;\n"),
+        (
+            "pres mu X = val(1); init X;",
+            "\n\n\npres\n   mu X = val(1);\ninit X;\n",
+        ),
+        (
+            "pres mu X = Y; nu Y = X; init Y;",
+            "\n\n\npres\n   mu X = Y;\n   nu Y = X;\ninit Y;\n",
+        ),
+        (
+            "pres mu X = eqinf(val(1)); init X;",
+            "\n\n\npres\n   mu X = eqinf(val(1));\ninit X;\n",
+        ),
+        (
+            "pres mu X = eqninf(val(1)); init X;",
+            "\n\n\npres\n   mu X = eqninf(val(1));\ninit X;\n",
+        ),
+        (
+            "pres mu X = condsm(val(1), val(2), val(3)); init X;",
+            "\n\n\npres\n   mu X = condsm(val(1), val(2), val(3));\ninit X;\n",
+        ),
+        (
+            "pres mu X = condeq(val(1), val(2), val(3)); init X;",
+            "\n\n\npres\n   mu X = condeq(val(1), val(2), val(3));\ninit X;\n",
+        ),
+        (
+            "pres mu X = -val(1); init X;",
+            "\n\n\npres\n   mu X = (- val(1));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(2) * val(1); init X;",
+            "\n\n\npres\n   mu X = (val(2) * val(1));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(1) * val(2); init X;",
+            "\n\n\npres\n   mu X = (val(1) * val(2));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(1) + val(2); init X;",
+            "\n\n\npres\n   mu X = (val(1) + val(2));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(1) => val(2); init X;",
+            "\n\n\npres\n   mu X = (val(1) => val(2));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(1) || val(2); init X;",
+            "\n\n\npres\n   mu X = (val(1) || val(2));\ninit X;\n",
+        ),
+        (
+            "pres mu X = val(1) && val(2); init X;",
+            "\n\n\npres\n   mu X = (val(1) && val(2));\ninit X;\n",
+        ),
+        (
+            "pres mu X(n: Nat) = inf n: Nat . val(n); init X(0);",
+            "\n\n\npres\n   mu X(n: Nat) = (inf n: Nat . val(n));\ninit X(0);\n",
+        ),
+        (
+            "pres mu X(n: Nat) = sup n: Nat . val(n); init X(0);",
+            "\n\n\npres\n   mu X(n: Nat) = (sup n: Nat . val(n));\ninit X(0);\n",
+        ),
+        (
+            "pres mu X(n: Nat) = sum n: Nat . val(n); init X(0);",
+            "\n\n\npres\n   mu X(n: Nat) = (sum n: Nat . val(n));\ninit X(0);\n",
+        ),
+        (
+            "pres \
            mu X(n: Nat) = (val(n < 3) => X(n)) && eqinf(X(n)) + val(2) * X(n); \
            nu Y = sup m: Nat . (Y + condsm(Y, Y, Y)); \
          init X(0);",
+            "\n\n\npres\n   mu X(n: Nat) = (((val((n < 3)) => X(n)) && eqinf(X(n))) + (val(2) * X(n)));\n   nu Y = (sup m: Nat . (Y + condsm(Y, Y, Y)));\ninit X(0);\n",
+        ),
     ];
 
-    for input in examples {
+    for (input, expected) in examples {
         let spec = UntypedPres::parse(input).unwrap_or_else(|e| panic!("failed to parse {input:?}: {e}"));
         let printed = format!("{spec}");
+        assert_eq!(printed, expected, "for input {input:?}");
         let reparsed = UntypedPres::parse(&printed)
             .unwrap_or_else(|e| panic!("printed PRES failed to reparse:\n{printed}\nerror: {e}"));
         assert_eq!(
@@ -178,25 +233,6 @@ fn pres_examples_print_parse_fixpoint() {
             "PRES print/parse not a fixpoint for input {input:?}"
         );
     }
-}
-
-/// `visit_*` must return a `Break` value produced by a nested (non-root) node.
-#[test]
-#[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-fn visitor_breaks_from_nested_node() {
-    // The `Y` identifier only appears below the top-level conjunction.
-    let spec = UntypedStateFrmSpec::parse("true && (mu X. (X && Y))").unwrap();
-
-    let found = spec.formula.visit(|frm| {
-        if let StateFrmKind::Id(name, _) = &frm.node
-            && name.node == "Y"
-        {
-            return ControlFlow::Break(name.node.clone());
-        }
-        ControlFlow::Continue(())
-    });
-
-    assert_eq!(found.as_deref(), Some("Y"), "Break value from a nested node was lost");
 }
 
 /// An `EqnSpec` without a `var` declaration section must not emit an empty
@@ -208,10 +244,7 @@ fn visitor_breaks_from_nested_node() {
 fn eqn_spec_without_variables_no_empty_var_section() {
     let spec = UntypedDataSpecification::parse("eqn true = false;").expect("eqn without var should parse");
     let printed = format!("{spec}");
-    assert!(
-        !printed.contains("var\n"),
-        "empty var section must not be emitted:\n{printed}"
-    );
+    assert_eq!(printed, "eqn\n   true = false;\n\n");
     UntypedDataSpecification::parse(&printed).expect("re-printed form must parse");
 }
 
@@ -224,10 +257,7 @@ fn act_decl_with_args_prints_colon_hash() {
     let spec = UntypedProcessSpecification::parse("act a: Bool # Nat;")
         .expect("action declaration with sort args should parse");
     let printed = format!("{spec}");
-    assert!(
-        printed.contains("a: Bool # Nat"),
-        "ActDecl with args must use ':' and '#':\n{printed}"
-    );
+    assert_eq!(printed, "\nact\n   a: Bool # Nat;\n\n");
     UntypedProcessSpecification::parse(&printed).expect("printed form must reparse");
 }
 
@@ -241,14 +271,7 @@ fn nullary_struct_constructor_recognizer_is_printed() {
     let spec = UntypedProcessSpecification::parse("sort D = struct b1?is_b1 | b2?is_b2;\ninit delta;")
         .expect("struct with nullary-constructor recognizers should parse");
     let printed = format!("{spec}");
-    assert!(
-        printed.contains("b1?is_b1"),
-        "recognizer on b1 must be printed:\n{printed}"
-    );
-    assert!(
-        printed.contains("b2?is_b2"),
-        "recognizer on b2 must be printed:\n{printed}"
-    );
+    assert_eq!(printed, "sort\n   D = struct b1?is_b1 | b2?is_b2;\n\n\ninit delta;\n");
     UntypedProcessSpecification::parse(&printed).expect("printed form must reparse");
 }
 

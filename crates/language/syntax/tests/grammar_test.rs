@@ -43,7 +43,6 @@ fn number_token_does_not_absorb_whitespace() {
     // boundary: `3 div 2`.
     let parsed = Mcrl2Parser::parse(Rule::Number, "3 extra");
     // The Number rule must match exactly the digit run, not consume the space.
-    assert!(parsed.is_ok());
     assert_eq!(
         parsed.unwrap().as_str(),
         "3",
@@ -56,14 +55,8 @@ fn number_token_does_not_absorb_whitespace() {
 fn test_parse_ifthen() {
     let expr = "init a -> b <> b;";
 
-    match UntypedProcessSpecification::parse(expr) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedProcessSpecification::parse(expr).unwrap();
+    assert_eq!(result.to_string(), "\ninit ((a) -> (b) <> (b));\n");
 }
 
 // `ProcExprNoIf` — the grammar rule bounding an if-then(-else)'s `then`/`else` branch — now
@@ -126,14 +119,11 @@ fn test_parse_ifthen() {
 fn test_parse_keywords() {
     let expr = "map or : Boolean # Boolean -> Boolean ;";
 
-    match UntypedProcessSpecification::parse(expr) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedProcessSpecification::parse(expr).unwrap();
+    assert_eq!(
+        result.to_string(),
+        "map\n   or: ((Boolean # Boolean) -> Boolean);\n\n\n"
+    );
 }
 
 #[test]
@@ -148,14 +138,11 @@ fn test_parse_sort_spec() {
         Error = struct e;
     "};
 
-    match UntypedProcessSpecification::parse(sort_spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedProcessSpecification::parse(sort_spec).unwrap();
+    assert_eq!(
+        result.to_string(),
+        "sort\n   D = (Bool -> (Int -> Bool));\n   F = struct d1 | d2;\n   Error = struct e;\n\n\n"
+    );
 }
 
 /// A `type_var` block only declares names at the parser level — `merc_syntax` records them in
@@ -222,14 +209,8 @@ fn is_list_of_reference(sort: &merc_syntax::SortExpression, name: &str) -> bool 
 fn test_parse_regular_expression() {
     let spec = "[true++false]true";
 
-    match UntypedStateFrmSpec::parse(spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedStateFrmSpec::parse(spec).unwrap();
+    assert_eq!(result.to_string(), "\nform [((true)+ + false)]true;\n");
 }
 
 #[test]
@@ -243,14 +224,8 @@ fn test_parse_procexpr() {
         true -> delta <> delta;
     "};
 
-    match UntypedProcessSpecification::parse(spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedProcessSpecification::parse(spec).unwrap();
+    assert_eq!(result.to_string(), "\ninit ((true) -> (delta) <> (delta));\n");
 }
 
 #[test]
@@ -262,14 +237,8 @@ fn test_parse_statefrm() {
 
     let spec: &str = indoc! {"<b> <a> exists b: Bool . b && !b"};
 
-    match UntypedStateFrmSpec::parse(spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let result = UntypedStateFrmSpec::parse(spec).unwrap();
+    assert_eq!(result.to_string(), "\nform <b><a>(exists b: Bool . (b && (! b)));\n");
 }
 
 #[test]
@@ -277,17 +246,11 @@ fn test_parse_statefrm() {
 fn test_sort_precedence() {
     let term = "Bool # Int -> Int -> Bool";
 
-    match Mcrl2Parser::parse(Rule::SortExpr, term) {
-        Ok(result) => {
-            print!("{}", parse_sortexpr(result).unwrap());
-        }
-        Err(e) => {
-            panic!("{}", e);
-        }
-    }
+    let sort = parse_sortexpr(Mcrl2Parser::parse(Rule::SortExpr, term).unwrap()).unwrap();
+    assert_eq!(sort.to_string(), "((Bool # Int) -> (Int -> Bool))");
 }
 
-/// Parses every base data specification shipped in `spec/`.
+/// Parses every base data specification shipped in `spec/`; printing is a parse fixpoint.
 #[test_case(include_str!("../spec/bool.mcrl2") ; "bool.mcrl2")]
 #[test_case(include_str!("../spec/int.mcrl2") ; "int.mcrl2")]
 #[test_case(include_str!("../spec/nat.mcrl2") ; "nat.mcrl2")]
@@ -300,17 +263,12 @@ fn test_sort_precedence() {
 #[test_case(include_str!("../spec/fbag.mcrl2") ; "fbag.mcrl2")]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_data_spec(spec: &str) {
-    match UntypedDataSpecification::parse(spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse expression: {}", e);
-        }
-    }
+    let printed = UntypedDataSpecification::parse(spec).unwrap().to_string();
+    let reparsed = UntypedDataSpecification::parse(&printed).unwrap();
+    assert_eq!(reparsed.to_string(), printed, "print/parse is not a fixpoint");
 }
 
-/// Parses every machine-number (`*64`) specification, ported from the mCRL2
+/// Parses every machine-number (`*64`) specification (printing is a parse fixpoint), ported from the mCRL2
 /// code-generation `.spec` files.
 #[test_case(include_str!("../spec/machine_word.mcrl2") ; "machine_word.mcrl2")]
 #[test_case(include_str!("../spec/pos64.mcrl2") ; "pos64.mcrl2")]
@@ -324,14 +282,9 @@ fn test_data_spec(spec: &str) {
 #[test_case(include_str!("../spec/fbag64.mcrl2") ; "fbag64.mcrl2")]
 #[cfg_attr(miri, ignore)] // Test is too slow under miri
 fn test_machine_number_spec(spec: &str) {
-    match UntypedDataSpecification::parse(spec) {
-        Ok(result) => {
-            println!("{}", result);
-        }
-        Err(e) => {
-            panic!("Failed to parse: {}", e);
-        }
-    }
+    let printed = UntypedDataSpecification::parse(spec).unwrap().to_string();
+    let reparsed = UntypedDataSpecification::parse(&printed).unwrap();
+    assert_eq!(reparsed.to_string(), printed, "print/parse is not a fixpoint");
 }
 
 /// `EqnSpec`'s span covers the whole `var ... eqn ...` block.

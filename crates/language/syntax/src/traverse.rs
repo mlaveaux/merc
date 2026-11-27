@@ -45,8 +45,8 @@ pub enum MixedNode<'a> {
     PresExpr(&'a PresExpr),
 }
 
-/// The shared step of [Traverse::visit_mixed]/[Traverse::try_visit_mixed]: appends `node`'s
-/// children to `stack`, in the order they should be visited in.
+/// Pushes the children of `node`, of any node type, onto `stack` so that they are popped in
+/// written order: first the children of another type, then those of the same type.
 fn mixed_push_children<'a>(node: MixedNode<'a>, stack: &mut Vec<MixedNode<'a>>) {
     fn extend<'a, N: Traverse>(node: &'a N, into: &mut Vec<MixedNode<'a>>) {
         node.push_mixed_children(into);
@@ -66,31 +66,23 @@ fn mixed_push_children<'a>(node: MixedNode<'a>, stack: &mut Vec<MixedNode<'a>>) 
         MixedNode::PbesExpr(node) => extend(node, &mut children),
         MixedNode::PresExpr(node) => extend(node, &mut children),
     }
-    // Reproduces the same "push in written order, then reverse so the LIFO stack pops them back
-    // out in that order" trick every other stack-based walk in this file uses.
+    // Reversed, so that the stack pops them in written order.
     stack.extend(children.into_iter().rev());
 }
 
-/// A syntax tree node whose children are the same type, traversed top-down.
+/// A syntax tree node whose children are of the same type.
 ///
-/// [Traverse::push_children]/[Traverse::push_children_mut] define a node type's direct children;
-/// everything else (iteration, early exit, errors, context, substitution) is shared here. Walks use
-/// an explicit heap stack rather than native recursion, so depth is bounded by memory, not the call
-/// stack (see `stack_depth_probe` in this module's tests). [Traverse::try_transform] does the same
-/// for bottom-up rewriting via two worklists of owned nodes instead, since a bottom-up rewrite needs
-/// a node's children finished before the node itself, which the borrow-based walk above can't do for
-/// a `Box`/`Vec`-owned tree.
+/// An implementation only defines the direct children ([Traverse::push_children] and
+/// [Traverse::push_children_mut]); the walks are provided. Top-down walks visit in pre-order and
+/// children left to right; [Traverse::try_transform] rewrites in post-order. All walks use an
+/// explicit heap stack instead of native recursion, so trees of any depth can be traversed without
+/// overflowing the call stack.
 ///
-/// None of this crosses into a different node type on its own (e.g. a [StateFrm] into the [RegFrm]
-/// of a `Modality`). [Traverse::visit_mixed]/[Traverse::try_visit_mixed] do cross node types in one
-/// walk (see [MixedNode]). [Traverse::visit_subtree_scoped]/[Traverse::apply_subtree_scoped] add an
-/// exit hook alongside [Visit]'s entry callback, for scoped mutable state that must be popped once a
-/// node's whole subtree, not just the node, is done.
+/// The walks stay within one node type, e.g. they do not enter the [RegFrm] of a [StateFrm]
+/// modality, except [Traverse::visit_mixed] and [Traverse::try_visit_mixed], which visit
+/// every [MixedNode].
 pub trait Traverse: Sized {
     /// Appends each direct child of this node to `stack`, paired with `context`, in written order.
-    ///
-    /// The only part of the traversal that knows a node's shape; [Self::drive] and
-    /// [Self::visit_subtree] drain the stack generically.
     fn push_children<'a, C: Copy>(
         &'a self,
         context: C,
@@ -104,10 +96,8 @@ pub trait Traverse: Sized {
         stack: &mut Vec<(&'a mut Self, C)>,
     ) -> Recursion<Infallible, Infallible>;
 
-    /// See [Traverse::apply_children]; this variant rewrites each child bottom-up.
-    ///
-    /// Built on [Traverse::try_transform], one call per direct child, so this adds no native
-    /// recursion of its own — call depth is bounded by branching factor, not tree depth.
+    /// Rewrites the subtree of each direct child bottom-up with [Traverse::try_transform], left to
+    /// right; this node itself is not passed to `function`. Stops at the first error.
     fn transform_children<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
         Self: Default,
@@ -123,18 +113,15 @@ pub trait Traverse: Sized {
         Ok(())
     }
 
-    /// Wraps `self` in the [MixedNode] variant naming its own type, so [Traverse::visit_mixed] can
-    /// hold nodes of every traversable type on one stack.
+    /// Wraps `self` in the [MixedNode] variant of its own type.
     fn as_mixed(&self) -> MixedNode<'_>;
 
-    /// Appends this node's children of a *different* [Traverse] type to `sink`, for
-    /// [Traverse::visit_mixed] to follow. Defaults to nothing; only [StateFrm] and [RegFrm]
-    /// override it.
+    /// Appends the children of this node that are of a different [Traverse] type to `sink`, in
+    /// written order. Only [StateFrm] and [RegFrm] have such children.
     fn push_mixed_children<'a>(&'a self, _sink: &mut Vec<MixedNode<'a>>) {}
 
-    /// Drains an explicit stack of pending `(node, context)` pairs depth-first, in the order they
-    /// would be visited by native pre-order recursion — the shared core of [Self::visit_subtree]
-    /// and [Self::apply_subtree], parameterized only by how a single node is handled.
+    /// Calls `step` on the nodes of `stack` and their subtrees in pre-order, popping from the end
+    /// of `stack`. Stops at the first break or error.
     fn drive<C, T, E>(
         mut stack: Vec<(&mut Self, C)>,
         mut step: impl FnMut(&mut Self, C) -> Visit<Infallible, C, T, E>,
@@ -147,9 +134,7 @@ pub trait Traverse: Sized {
                 Err(error) => return ControlFlow::Break(Err(error)),
                 Ok(ControlFlow::Break(value)) => return ControlFlow::Break(Ok(value)),
                 Ok(ControlFlow::Continue(Step::Prune)) => continue,
-                // `Step::Replace` is uninhabited for a read-only walk, which is how it rules
-                // substitution out without a second callback type; a mutating walk replaces the
-                // node itself inside `step` and never calls back in here for it.
+                // Uninhabited: a mutating walk replaces the node inside `step`.
                 Ok(ControlFlow::Continue(Step::Replace(replacement))) => match replacement {},
                 Ok(ControlFlow::Continue(Step::Into(context))) => context,
             };
@@ -160,7 +145,8 @@ pub trait Traverse: Sized {
         ControlFlow::Continue(())
     }
 
-    /// Visits this node and then, unless the callback breaks or prunes, its children.
+    /// Visits this node and its subtree in pre-order, threading `context` from a node to its
+    /// children. Stops at the first break or error; [Step::Prune] skips the children of a node.
     fn visit_subtree<'a, C, T, E, F>(&'a self, context: C, function: &mut F) -> Recursion<T, E>
     where
         C: Copy,
@@ -182,15 +168,13 @@ pub trait Traverse: Sized {
         ControlFlow::Continue(())
     }
 
-    /// See [Traverse::visit_subtree]; additionally calls `exit` right after a node's children have
-    /// all been visited — the enter/exit pair a plain [Visit] callback cannot express, for scoped
-    /// mutable `state` that must be popped once a node's whole subtree is done, not merely once
-    /// `enter` returns.
+    /// See [Traverse::visit_subtree], with `enter` as the callback; additionally calls `exit` once
+    /// the subtree of a node is done, for scoped `state`.
     ///
-    /// `enter` and `exit` are separate `FnMut`s (so each can borrow `state` independently) that
-    /// typically re-match the same node kinds, pushing or popping only where scoping is needed.
-    /// `exit` always gets the same `context` `enter` was given, and still runs — innermost first —
-    /// for a pruned node or one still open when the walk stops early, so scoped state never dangles.
+    /// `exit` receives the node and the `context` that `enter` received. It runs for every node
+    /// whose `enter` continued, including pruned nodes, innermost first; when the walk stops on a
+    /// break or error, `exit` still runs for every node that is still open, but not for the node
+    /// that stopped it.
     fn visit_subtree_scoped<'a, C, S, T, E, F, G>(
         &'a self,
         context: C,
@@ -248,7 +232,7 @@ pub trait Traverse: Sized {
         ControlFlow::Continue(())
     }
 
-    /// See [Traverse::visit_subtree_scoped]; the ergonomic top-level entry point, mirroring
+    /// See [Traverse::visit_subtree_scoped]; returns the value of a break, like
     /// [Traverse::visit_with].
     fn visit_scoped<'a, C, S, T, E, F, G>(
         &'a self,
@@ -269,13 +253,12 @@ pub trait Traverse: Sized {
         }
     }
 
-    /// The mutating counterpart of [Traverse::visit_subtree_scoped], for callers that must rewrite
-    /// nodes in place while still needing the enter/exit split for scoped state.
+    /// See [Traverse::visit_subtree_scoped]; `enter` may modify the node in place before its
+    /// children are visited.
     ///
-    /// Unlike [Traverse::visit_subtree_scoped], `exit` does not receive the node it is un-scoping —
-    /// holding a reference to it across the later `&mut` borrow used to reach its children would
-    /// alias. `exit` gets only `context` and `state`; a caller whose `exit` needs to know what kind
-    /// of node it's un-scoping has `enter` push that onto `state` for `exit` to pop.
+    /// `exit` receives only the `context` and `state`, not the node, since the node is mutably
+    /// borrowed to reach its children. An `exit` that needs to know the node can have `enter` record
+    /// it in `state`.
     fn apply_subtree_scoped<C, S, T, E, F, G>(
         &mut self,
         context: C,
@@ -333,8 +316,8 @@ pub trait Traverse: Sized {
         ControlFlow::Continue(())
     }
 
-    /// See [Traverse::apply_subtree_scoped]; the ergonomic top-level entry point, mirroring
-    /// [Traverse::visit_scoped]/[Traverse::apply_with].
+    /// See [Traverse::apply_subtree_scoped]; returns the value of a break, like
+    /// [Traverse::apply_with].
     fn apply_scoped<C, S, T, E, F, G>(
         &mut self,
         context: C,
@@ -354,7 +337,8 @@ pub trait Traverse: Sized {
         }
     }
 
-    /// See [Traverse::visit_subtree]; a replaced node is not descended into.
+    /// See [Traverse::visit_subtree]; [Step::Replace] replaces the node in place, and the
+    /// replacement is not descended into.
     fn apply_subtree<C, T, E, F>(&mut self, context: C, function: &mut F) -> Recursion<T, E>
     where
         C: Copy,
@@ -457,13 +441,11 @@ pub trait Traverse: Sized {
         }
     }
 
-    /// Visits `self` and its subtree, crossing into a different [Traverse] type wherever
-    /// [Traverse::push_mixed_children] reports one (e.g. [StateFrm] → [RegFrm] → [ActFrm]) — unlike
-    /// every other traversal here, which stays within a single node type.
+    /// Visits `self` and its subtree in pre-order, including the children of another node type
+    /// (e.g. [StateFrm] to [RegFrm] to [ActFrm]). The children of another type of a node are
+    /// visited before its children of the same type. Stops at the first break or error.
     ///
-    /// The callback receives a [MixedNode]. There is no shared `context`, [Step::Prune], or
-    /// [Step::Replace]: those need a `Copy` context shared across every node type, which a walk
-    /// spanning several unrelated types can't offer without type erasure.
+    /// There is no context and no pruning or replacement.
     fn try_visit_mixed<'a, T, E>(
         &'a self,
         mut function: impl FnMut(MixedNode<'a>) -> Result<ControlFlow<T>, E>,
@@ -533,17 +515,12 @@ pub trait Traverse: Sized {
         Ok(self)
     }
 
-    /// Rewrites this node and its subtree bottom-up: children are rewritten before the node itself,
-    /// so the callback always sees final children — the counterpart of [Traverse::apply_mut]
-    /// (top-down). The callback rewrites through `&mut`, so nothing is cloned.
+    /// Rewrites this node and its subtree in post-order, children left to right: `function` is
+    /// called on a node after its children have been rewritten and put back. Stops at the first
+    /// error, in which case the tree is left in an unspecified state.
     ///
-    /// A bottom-up rewrite needs a node's children finished before the node, which the borrow-based
-    /// stack in [Traverse::apply_subtree] can't do for a `Box`/`Vec`-owned tree. This instead moves
-    /// *owned* nodes between two worklists: `stack` holds `Enter`/`Assemble` frames and `results`
-    /// accumulates finished nodes. `Enter(node)` detaches and pushes its children (via
-    /// [std::mem::take]), then an `Assemble` frame to run once they're done; `Assemble` pulls its
-    /// node's children off the end of `results`, puts them back, calls `function`, and pushes the
-    /// result.
+    /// The children are detached (with [std::mem::take]) while their subtrees are rewritten, since
+    /// a node cannot be borrowed mutably while its rewritten children are moved back into it.
     fn try_transform<E, F>(&mut self, function: &mut F) -> Result<(), E>
     where
         Self: Default,
@@ -620,9 +597,8 @@ pub trait Traverse: Sized {
 /// An optional `mixed: { ... }` section describes children of a *different* node type, for
 /// [Traverse::push_mixed_children]; omitting it leaves that method at its empty default.
 ///
-/// `kind: $Kind` also generates `impl TakeRecursiveChildren for $Kind`, reusing the same arms to fix
-/// a related but distinct recursion issue (see [TakeRecursiveChildren]'s own doc comment); it needs
-/// `$Kind: Default` to detach a child cheaply.
+/// It also implements [TakeRecursiveChildren] for `$Kind` from the same arms, so that dropping a deep
+/// tree does not recurse; this needs `$Kind: Default`.
 macro_rules! define_traversal {
     (
         node: $Node:ident,
@@ -703,9 +679,7 @@ macro_rules! define_traversal {
 
         impl TakeRecursiveChildren for $Kind {
             fn take_recursive_children(&mut self, stack: &mut Vec<Self>) {
-                // The shared `$child`/`$mut_child` arms end each of their statements with `?`,
-                // which needs an enclosing function whose return type supports it; wrapped here so
-                // the trait method itself can keep the plain `()` its default impl already has.
+                // `inner` gives the `?` in the arms a function returning `Recursion`.
                 fn inner(this: &mut $Kind, stack: &mut Vec<$Kind>) -> Recursion<Infallible, Infallible> {
                     let mut $recurse = |child: &mut $Node| -> Recursion<Infallible, Infallible> {
                         stack.push(std::mem::take(child).into_node());
@@ -785,7 +759,7 @@ macro_rules! define_traversal {
 
         impl TakeRecursiveChildren for $Kind {
             fn take_recursive_children(&mut self, stack: &mut Vec<Self>) {
-                // See the other arm's identical block for why this is wrapped in `inner`.
+                // `inner` gives the `?` in the arms a function returning `Recursion`.
                 fn inner(this: &mut $Kind, stack: &mut Vec<$Kind>) -> Recursion<Infallible, Infallible> {
                     let mut $recurse = |child: &mut $Node| -> Recursion<Infallible, Infallible> {
                         stack.push(std::mem::take(child).into_node());
@@ -1080,594 +1054,4 @@ define_traversal! {
         | PresExprKind::True
         | PresExprKind::False => {}
     },
-}
-
-#[cfg(test)]
-mod tests {
-    use std::convert::Infallible;
-    use std::ops::ControlFlow;
-
-    use merc_utilities::Step;
-
-    use crate::ActFrm;
-    use crate::ActFrmKind;
-    use crate::DataExpr;
-    use crate::DataExprKind;
-    use crate::PbesExprKind;
-    use crate::PresExprKind;
-    use crate::ProcessExprKind;
-    use crate::RegFrm;
-    use crate::RegFrmKind;
-    use crate::SortExpression;
-    use crate::SortExpressionKind;
-    use crate::StateFrm;
-    use crate::StateFrmKind;
-    use crate::Traverse;
-    use crate::UntypedDataSpecification;
-    use crate::UntypedPbes;
-    use crate::UntypedPres;
-    use crate::UntypedProcessSpecification;
-    use crate::UntypedStateFrmSpec;
-    use crate::traverse::MixedNode;
-    use crate::traverse::Recursion;
-
-    /// Parses a state formula, for example `mu X. [a]X`.
-    fn state_formula(input: &str) -> StateFrm {
-        UntypedStateFrmSpec::parse(input)
-            .expect("the state formula should parse")
-            .formula
-    }
-
-    /// Parses a regular formula by putting it inside a modality, for example `a . b*`.
-    fn regular_formula(input: &str) -> RegFrm {
-        let formula = state_formula(&format!("[{input}]true"));
-        match formula.into_node() {
-            StateFrmKind::Modality { formula, .. } => formula,
-            _ => panic!("expected a modality"),
-        }
-    }
-
-    /// Parses an action formula, for example `a && b`.
-    fn action_formula(input: &str) -> ActFrm {
-        match regular_formula(input).into_node() {
-            RegFrmKind::Action(act_frm) => act_frm,
-            _ => panic!("expected an action formula"),
-        }
-    }
-
-    /// Parses a sort expression by declaring it as an alias, for example `A # B -> C`.
-    fn sort_expression(input: &str) -> SortExpression {
-        UntypedDataSpecification::parse(&format!("sort S = {input};"))
-            .expect("the sort expression should parse")
-            .sort_declarations
-            .remove(0)
-            .expr
-            .expect("the declaration is an alias")
-    }
-
-    /// Collects the identifiers of a state formula in the order in which they are visited.
-    fn identifiers(formula: &StateFrm) -> Vec<String> {
-        let mut result = Vec::new();
-
-        formula.visit::<(), _>(|formula| {
-            if let StateFrmKind::Id(name, _) = &formula.node {
-                result.push(name.node.clone());
-            }
-
-            ControlFlow::Continue(())
-        });
-
-        result
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_is_top_down_and_left_to_right() {
-        let formula = state_formula("mu X. [a]X && mu Y. Y && Z");
-
-        assert_eq!(identifiers(&formula), ["X", "Y", "Z"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_state_formula_breaks_from_nested_node() {
-        // `Z` only occurs below the top-level conjunction.
-        let formula = state_formula("true && (mu X. (X && Z))");
-
-        let found = formula.visit(|formula| match &formula.node {
-            StateFrmKind::Id(name, _) if name.node == "Z" => ControlFlow::Break(name.node.clone()),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found.as_deref(), Some("Z"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_regular_formula_breaks_from_nested_node() {
-        let formula = regular_formula("a . (b* + c)");
-
-        let found = formula.visit(|formula| match &formula.node {
-            RegFrmKind::Iteration(_) => ControlFlow::Break("iteration"),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found, Some("iteration"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_action_formula_breaks_from_nested_node() {
-        let formula = action_formula("a && (b || !c)");
-
-        let found = formula.visit(|formula| match &formula.node {
-            ActFrmKind::Negation(_) => ControlFlow::Break("negation"),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found, Some("negation"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_sort_expression_breaks_from_nested_node() {
-        let sort = sort_expression("A # List(B) -> C");
-
-        let found = sort.visit(|sort| match &sort.node {
-            SortExpressionKind::Reference(name) if name == "B" => ControlFlow::Break(name.clone()),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found.as_deref(), Some("B"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_data_expression_breaks_from_nested_node() {
-        let expr = DataExpr::parse("f(g(a), b)").expect("the data expression should parse");
-
-        let found = expr.visit(|expr| match &expr.node {
-            DataExprKind::Id(name) if name == "a" => ControlFlow::Break(name.clone()),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found.as_deref(), Some("a"));
-    }
-
-    /// The children of a function update sit behind a `Box`, which the traversal has to reach
-    /// through explicitly.
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_data_expression_descends_into_function_update() {
-        let expr = DataExpr::parse("f[a -> b]").expect("the data expression should parse");
-
-        let mut names = Vec::new();
-        expr.visit::<(), _>(|expr| {
-            if let DataExprKind::Id(name) = &expr.node {
-                names.push(name.clone());
-            }
-
-            ControlFlow::Continue(())
-        });
-
-        assert_eq!(names, ["f", "a", "b"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_process_expression_breaks_from_nested_node() {
-        let spec = UntypedProcessSpecification::parse("init a . (sum n: Nat . b(n)) + delta;")
-            .expect("the process specification should parse");
-        let process = spec.init.expect("the specification has an initial process");
-
-        let found = process.visit(|process| match &process.node {
-            ProcessExprKind::Delta => ControlFlow::Break("delta"),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found, Some("delta"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_pbes_expression_breaks_from_nested_node() {
-        let pbes = UntypedPbes::parse("pbes mu X = forall n: Nat . (val(n < 3) => !X); init X;")
-            .expect("the PBES should parse");
-
-        let found = pbes.equations[0].formula.visit(|expr| match &expr.node {
-            PbesExprKind::Negation(_) => ControlFlow::Break("negation"),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found, Some("negation"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_pres_expression_breaks_from_nested_node() {
-        let pres =
-            UntypedPres::parse("pres mu X = sup n: Nat . (val(n < 3) + X); init X;").expect("the PRES should parse");
-
-        // `X` is only reachable through the bound and the addition below it.
-        let found = pres.equations[0].formula.visit(|expr| match &expr.node {
-            PresExprKind::PropVarInst(instantiation) => ControlFlow::Break(instantiation.identifier.node.clone()),
-            _ => ControlFlow::Continue(()),
-        });
-
-        assert_eq!(found.as_deref(), Some("X"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_prune_skips_the_children() {
-        let formula = state_formula("true && (mu X. (X && Z))");
-
-        // Everything below the fixpoint is skipped, so `Z` is never reached.
-        let found = formula.visit_with::<(), String, Infallible, _>((), |formula, context| {
-            Ok(match &formula.node {
-                StateFrmKind::Id(name, _) if name.node == "Z" => ControlFlow::Break(name.node.clone()),
-                StateFrmKind::FixedPoint { .. } => ControlFlow::Continue(Step::Prune),
-                _ => ControlFlow::Continue(Step::Into(context)),
-            })
-        });
-
-        assert_eq!(found, Ok(None));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_threads_the_context() {
-        let formula = state_formula("true && (mu X. (X && Z))");
-
-        // The context is the depth of the node, which is one more than that of its parent.
-        let mut depths = Vec::new();
-        let found = formula.visit_with::<usize, Infallible, Infallible, _>(0, |formula, depth| {
-            if let StateFrmKind::Id(name, _) = &formula.node {
-                depths.push((name.node.clone(), depth));
-            }
-
-            Ok(ControlFlow::Continue(Step::Into(depth + 1)))
-        });
-
-        assert_eq!(found, Ok(None));
-        assert_eq!(depths, [("X".to_string(), 3), ("Z".to_string(), 3)]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_reports_the_error_of_the_callback() {
-        let formula = state_formula("mu X. X");
-
-        let result: Result<Option<Infallible>, &str> = formula.try_visit(|_formula| Err("failed"));
-
-        assert_eq!(result, Err("failed"));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_apply_collects_variables() {
-        let formula = state_formula("mu X. [a]X && mu X. X && Y");
-
-        let mut variables = Vec::new();
-        let result = formula.apply::<Infallible, _>(|formula| {
-            if let StateFrmKind::Id(name, _) = &formula.node {
-                variables.push(name.node.clone());
-            }
-
-            Ok(None)
-        });
-
-        assert!(result.is_ok());
-        assert_eq!(variables, ["X", "X", "Y"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_apply_without_replacement_is_the_identity() {
-        for input in [
-            "mu X. [a . b*]X && nu Y. <c>Y",
-            "forall n: Nat . val(n < 3) => [a(n)]false",
-            "true && (mu X. (X && Z))",
-        ] {
-            let formula = state_formula(input);
-
-            let result = formula.clone().apply::<Infallible, _>(|_formula| Ok(None));
-
-            assert_eq!(result.as_ref(), Ok(&formula));
-        }
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_apply_does_not_descend_into_the_replacement() {
-        let formula = state_formula("X && Y");
-
-        // The replacement of `X` contains an `X` again, which must not be replaced a second time.
-        let mut replacements = 0;
-        let result = formula.apply::<Infallible, _>(|formula| {
-            if let StateFrmKind::Id(name, _) = &formula.node
-                && name.node == "X"
-            {
-                replacements += 1;
-                return Ok(Some(state_formula("mu X0. X")));
-            }
-
-            Ok(None)
-        });
-
-        assert_eq!(replacements, 1);
-        assert_eq!(
-            format!("{}", result.expect("the callback cannot fail")),
-            "((mu X0 . X) && Y)"
-        );
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_apply_with_breaks_and_keeps_what_was_rewritten() {
-        let mut formula = state_formula("X && Y");
-
-        let found = formula.apply_with::<(), &str, Infallible, _>((), |formula, context| {
-            Ok(match &formula.node {
-                StateFrmKind::Id(name, _) if name.node == "X" => {
-                    ControlFlow::Continue(Step::Replace(StateFrmKind::True.into()))
-                }
-                StateFrmKind::Id(name, _) if name.node == "Y" => ControlFlow::Break("stopped"),
-                _ => ControlFlow::Continue(Step::Into(context)),
-            })
-        });
-
-        assert_eq!(found, Ok(Some("stopped")));
-        assert_eq!(format!("{formula}"), "(true && Y)");
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_children_reaches_every_child() {
-        let formula = state_formula("[a]X && (nu Z0. Z0)");
-
-        // Pruning each child keeps only the direct children of the conjunction.
-        let mut children = Vec::new();
-        let outcome: Recursion<Infallible, Infallible> = formula.visit_children((), &mut |child, _context| {
-            children.push(format!("{child}"));
-            Ok(ControlFlow::Continue(Step::Prune))
-        });
-
-        assert!(matches!(outcome, ControlFlow::Continue(())));
-        assert_eq!(children, ["[a]X", "(nu Z0 . Z0)"]);
-    }
-
-    /// A plain `.visit()` over a [StateFrm] cannot see the actions inside a modality's regular
-    /// formula: `RegFrm`/`ActFrm` are a different node type. `visit_mixed` is the traversal that
-    /// crosses into them.
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_mixed_crosses_from_state_formula_into_its_regular_and_action_formulas() {
-        let formula = state_formula("[a . b*]X");
-
-        let mut labels = Vec::new();
-        formula.visit_mixed::<Infallible>(|node| {
-            labels.push(match node {
-                MixedNode::StateFrm(_) => "state",
-                MixedNode::RegFrm(_) => "reg",
-                MixedNode::ActFrm(_) => "act",
-                _ => "other",
-            });
-            ControlFlow::Continue(())
-        });
-
-        // Pre-order, left to right, and crossing every boundary: the modality itself, then its
-        // whole `RegFrm` subtree (`a . b*`, i.e. `Sequence(Action(a), Iteration(Action(b)))`, each
-        // `Action` node's `ActFrm` payload included), and only then the modality's own `StateFrm`
-        // child `X` -- not reachable at all without the crossing.
-        assert_eq!(labels, ["state", "reg", "reg", "act", "reg", "reg", "act", "state"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_try_visit_mixed_reports_the_error_of_the_callback() {
-        let formula = state_formula("[a]true");
-
-        let result: Result<Option<Infallible>, &str> = formula.try_visit_mixed(|_node| Err("failed"));
-
-        assert_eq!(result, Err("failed"));
-    }
-
-    /// `state_vars` grows for a `FixedPoint`'s body and shrinks once that body is visited, so an
-    /// inner fixpoint's variable is invisible outside it, including to a sibling formula.
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_scoped_pushes_and_pops_fixpoint_variables_like_a_real_checker() {
-        let formula = state_formula("mu X. (mu Y. X) && Z");
-
-        let mut state_vars: Vec<String> = Vec::new();
-        let mut scope_at_each_id = Vec::new();
-
-        let result = formula.visit_scoped::<(), Vec<String>, Infallible, Infallible, _, _>(
-            (),
-            &mut state_vars,
-            |formula, context, state_vars| {
-                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
-                    state_vars.push(variable.identifier.node.clone());
-                }
-                if let StateFrmKind::Id(name, _) = &formula.node {
-                    scope_at_each_id.push((name.node.clone(), state_vars.clone()));
-                }
-                Ok(ControlFlow::Continue(Step::Into(context)))
-            },
-            |formula, _context, state_vars| {
-                if let StateFrmKind::FixedPoint { .. } = &formula.node {
-                    state_vars.pop();
-                }
-            },
-        );
-
-        assert_eq!(result, Ok(None));
-        // `X` is visited while both `mu X` and `mu Y` are open; `Z` only while `mu X` still is,
-        // `mu Y` (and its own variable) having already been exited by the time its sibling `&&`
-        // operand is reached.
-        assert_eq!(
-            scope_at_each_id,
-            [
-                ("X".to_string(), vec!["X".to_string(), "Y".to_string()]),
-                ("Z".to_string(), vec!["X".to_string()]),
-            ]
-        );
-        assert!(state_vars.is_empty());
-    }
-
-    /// The scoped state may borrow from the tree being walked (`&str` names here), which a callback
-    /// bound over an anonymous `&Self` lifetime would reject.
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_scoped_state_can_borrow_from_the_tree() {
-        let formula = state_formula("mu X. (mu Y. X) && Z");
-
-        let mut state_vars: Vec<&str> = Vec::new();
-        let mut scope_at_each_id: Vec<(&str, Vec<&str>)> = Vec::new();
-
-        let result = formula.visit_scoped::<(), Vec<&str>, Infallible, Infallible, _, _>(
-            (),
-            &mut state_vars,
-            |formula, context, state_vars| {
-                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
-                    state_vars.push(variable.identifier.node.as_str());
-                }
-                if let StateFrmKind::Id(name, _) = &formula.node {
-                    scope_at_each_id.push((name.node.as_str(), state_vars.clone()));
-                }
-                Ok(ControlFlow::Continue(Step::Into(context)))
-            },
-            |formula, _context, state_vars| {
-                if let StateFrmKind::FixedPoint { .. } = &formula.node {
-                    state_vars.pop();
-                }
-            },
-        );
-
-        assert_eq!(result, Ok(None));
-        assert_eq!(scope_at_each_id, [("X", vec!["X", "Y"]), ("Z", vec!["X"])]);
-    }
-
-    /// `exit` must still run, innermost first, for every scope still open when the walk breaks
-    /// early, or scoped state is left corrupted.
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_visit_scoped_unwinds_open_scopes_on_break() {
-        let formula = state_formula("mu X. (mu Y. Z)");
-
-        let mut state_vars: Vec<String> = Vec::new();
-        let mut exited_in_order = Vec::new();
-
-        let found = formula.visit_scoped::<(), Vec<String>, &str, Infallible, _, _>(
-            (),
-            &mut state_vars,
-            |formula, context, state_vars| {
-                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
-                    state_vars.push(variable.identifier.node.clone());
-                }
-                if let StateFrmKind::Id(name, _) = &formula.node
-                    && name.node == "Z"
-                {
-                    return Ok(ControlFlow::Break("stopped"));
-                }
-                Ok(ControlFlow::Continue(Step::Into(context)))
-            },
-            |formula, _context, state_vars| {
-                if let StateFrmKind::FixedPoint { variable, .. } = &formula.node {
-                    exited_in_order.push(variable.identifier.node.clone());
-                    state_vars.pop();
-                }
-            },
-        );
-
-        assert_eq!(found, Ok(Some("stopped")));
-        assert_eq!(exited_in_order, ["Y", "X"]);
-        assert!(state_vars.is_empty());
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_transform_visits_bottom_up_left_to_right() {
-        // A leaf's own children (none) finish before it does, each operand of `&&` finishes before
-        // the `&&` node itself, and the left operand before the right one.
-        let mut formula = state_formula("X && Y");
-
-        let mut order = Vec::new();
-        formula.transform(|formula| match &formula.node {
-            StateFrmKind::Id(name, _) => order.push(name.node.clone()),
-            StateFrmKind::Binary { .. } => order.push("&&".to_string()),
-            _ => {}
-        });
-
-        assert_eq!(order, ["X", "Y", "&&"]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_transform_no_op_reassembles_the_exact_same_tree() {
-        // Exercises the take-apart/reassemble round trip across every shape in one formula: a
-        // `FixedPoint`'s own variable, a `Modality`'s `RegFrm`, a `Quantifier` binder, and a
-        // `Binary` -- if any child landed back in the wrong slot, or the wrong number of results
-        // were consumed for some node, this would no longer structurally equal the original
-        // (`Spanned`'s `PartialEq` compares only `.node`, so the placeholder spans transform
-        // briefly leaves behind can never hide a misplaced *value*).
-        let text = "mu X. [a](exists n: Nat . val(n == n) && X)";
-        let original = state_formula(text);
-        let mut formula = state_formula(text);
-
-        formula.transform(|_| {});
-
-        assert_eq!(formula, original);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_transform_rewrites_every_node_including_the_root() {
-        let mut formula = state_formula("X && Y");
-
-        let mut count = 0usize;
-        formula.transform(|_| count += 1);
-
-        // `X`, `Y`, and the `&&` node itself: `transform` (unlike `transform_children`) also
-        // rewrites the root.
-        assert_eq!(count, 3);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_transform_children_rewrites_children_but_not_the_root() {
-        let mut formula = state_formula("X && Y");
-
-        let mut count = 0usize;
-        let result: Result<(), Infallible> = formula.transform_children(&mut |_| {
-            count += 1;
-            Ok(())
-        });
-
-        assert!(result.is_ok());
-        assert_eq!(count, 2); // `X` and `Y`, not the `&&` node itself.
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_try_transform_propagates_an_error_without_rewriting_further() {
-        let mut formula = state_formula("X && Y");
-
-        let mut visited = Vec::new();
-        let result: Result<(), &str> = formula.try_transform(&mut |formula| {
-            if let StateFrmKind::Id(name, _) = &formula.node {
-                visited.push(name.node.clone());
-                if name.node == "Y" {
-                    return Err("stopped at Y");
-                }
-            }
-            Ok(())
-        });
-
-        assert_eq!(result, Err("stopped at Y"));
-        // `X` (whose own subtree finished first) was rewritten before the error on `Y` stopped the
-        // walk; the enclosing `&&` never was, since it comes after both operands in bottom-up order.
-        assert_eq!(visited, ["X", "Y"]);
-    }
 }
