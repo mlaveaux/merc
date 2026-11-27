@@ -296,8 +296,12 @@ mod tests {
     fn test_uninstantiated_template_variable_is_rejected() {
         // An unsubstituted template variable is exactly what a broken
         // `standard_sort` instantiation would leave behind.
-        let err = check_broken("map f: List(S);");
-        assert!(err.to_string().contains("'S'"), "{err}");
+        let err = check_broken("map f: List(S);").to_string();
+        assert_eq!(
+            err.lines().next(),
+            Some("Error: 'the system-defined specification references the undeclared sort 'S'"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -315,17 +319,13 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_undeclared_equation_symbol_is_rejected() {
-        let err = check_broken("map f: Bool; eqn f = g;");
-        assert!(err.to_string().contains("'g'"), "{err}");
+        let err = check_broken("map f: Bool; eqn f = g;").to_string();
+        assert_eq!(
+            err.lines().next(),
+            Some("Error: 'the system-defined specification uses the undeclared name 'g'"),
+            "{err}"
+        );
     }
-
-    // Duplicate `var`-block variables are not this function's job — see its
-    // doc comment — and are covered, on this same system-shaped equation text,
-    // by `is_well_typed.rs`'s
-    // `test_system_shaped_duplicate_equation_variable_is_rejected` for the
-    // shared `check_equation_well_formedness`. Unbound right-hand-side/
-    // condition variables are not a type-checking concern at all — see
-    // `merc_sabre::set_automaton::automaton::free_variables_occur_in_rhs`.
 
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri

@@ -4,9 +4,11 @@ use std::collections::HashSet;
 
 use merc_syntax::SortExpression;
 use merc_syntax::SortExpressionKind;
+use merc_syntax::SourceMap;
 use merc_syntax::UntypedDataSpecification;
 use merc_typecheck::DataSpecification;
 use merc_typecheck::InferenceError;
+use merc_typecheck::NumberEncoding;
 use merc_typecheck::WellTypedError;
 use merc_utilities::random_test;
 use rand::Rng;
@@ -650,6 +652,117 @@ fn test_container_scheme_usable_alongside_numeric_operator_of_same_name() {
          map f: S # S -> S;
          var s, t: S;
          eqn f(s, t) = s + t;",
+        true,
+    );
+}
+
+/// `to_typed_string` annotates every subexpression with its resolved sort.
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_to_typed_string_annotates_every_subexpression() {
+    let spec = DataSpecification::from_untyped(
+        UntypedDataSpecification::parse(
+            "sort Signal; Message;
+             map AssocReq: Nat -> Message;
+                 signal: Signal -> Message;
+                 sig_AssocReq: Nat -> Signal;
+             var t: Nat;
+             eqn AssocReq(t) = signal(sig_AssocReq(t));",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        spec.to_typed_string().to_string(),
+        // `@NatPair` is the one system-internal nominal sort folded into the
+        // shared `sort_declarations` table alongside the user's own, present
+        // here regardless of whether this spec ever uses it.
+        "sort\n\
+         \u{20}  Signal;\n\
+         \u{20}  Message;\n\
+         \u{20}  @NatPair;\n\
+         \n\
+         map\n\
+         \u{20}  AssocReq: (Nat -> Message);\n\
+         \u{20}  signal: (Signal -> Message);\n\
+         \u{20}  sig_AssocReq: (Nat -> Signal);\n\
+         \n\
+         var\n\
+         \u{20}  t: Nat;\n\
+         eqn\n\
+         \u{20}  AssocReq(t: Nat): (Nat -> Message) = \
+         signal(sig_AssocReq(t: Nat): (Nat -> Signal)): (Signal -> Message);\n"
+    );
+}
+
+/// As above, over the polymorphic comparison/`if` schemes and an implicit `Pos -> Nat`
+/// upcast: every operator's own resolved overload is visible, not just the equation's
+/// declared result.
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_to_typed_string_shows_the_resolved_overload_of_a_polymorphic_operator() {
+    let spec = DataSpecification::from_untyped(
+        UntypedDataSpecification::parse(
+            "map f: Nat -> Bool;
+             var i: Nat;
+             eqn f(i) = if(i == 1, true, false);",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        spec.to_typed_string().to_string(),
+        // `@NatPair`, folded into `sort_declarations` unconditionally — see
+        // the other `to_typed_string` test's comment.
+        "sort\n\
+         \u{20}  @NatPair;\n\
+         \n\
+         map\n\
+         \u{20}  f: (Nat -> Bool);\n\
+         \n\
+         var\n\
+         \u{20}  i: Nat;\n\
+         eqn\n\
+         \u{20}  f(i: Nat): (Nat -> Bool) = \
+         if(==(i: Nat, 1: Pos): (Nat # Nat -> Bool), true: Bool, false: Bool): \
+         (Bool # Bool # Bool -> Bool);\n"
+    );
+}
+
+/// The basic sorts are always declared by the system-defined specification, and their
+/// declarations render against the bundled source they come from.
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_basic_sorts_are_declared_in_their_builtin_source() {
+    let mut sources = SourceMap::new();
+    let spec = DataSpecification::from_untyped_with(
+        UntypedDataSpecification::parse("map f: Bool;").unwrap(),
+        NumberEncoding::Binary,
+        &mut sources,
+    )
+    .unwrap();
+    let declarations = &spec.system_defined_specification().sort_declarations;
+    let names: Vec<_> = declarations.iter().map(|decl| decl.identifier.to_string()).collect();
+    assert_eq!(names, ["Bool", "Pos", "Int", "Nat", "@NatPair", "Real"]);
+
+    let bool_decl = declarations.iter().find(|decl| decl.identifier == "Bool").unwrap();
+    let rendered = bool_decl.span.render(&sources);
+    assert!(rendered.contains("<builtin>/bool.mcrl2:11:6"), "{rendered}");
+    assert!(rendered.contains("sort Bool;"), "{rendered}");
+    assert!(sources.is_virtual(sources.lookup(bool_decl.span.start)));
+}
+
+/// The function-update template binds `@f`, `@v`, `@x0`, ...; user mappings named `f`, `v`,
+/// `x0`, ... must not collide with them, since no user name can start with `@`.
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_function_update_template_variables_do_not_collide_with_user_names() {
+    check(
+        "map f: Bool -> Bool; v: Bool -> Bool; w: Bool -> Bool; \
+         x0: Bool -> Bool; x1: Bool -> Bool; y0: Bool -> Bool; y1: Bool -> Bool; \
+         g: Nat # Bool -> Nat;",
         true,
     );
 }

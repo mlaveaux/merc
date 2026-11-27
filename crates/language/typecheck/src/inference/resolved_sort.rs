@@ -54,7 +54,10 @@ pub enum ResolvedSort {
 /// agrees contributes nothing), two equal non-`Equal` orderings agree, and a
 /// `Less`/`Greater` clash — or either side being incomparable — makes the
 /// whole comparison incomparable.
-#[cfg_attr(not(feature = "internal"), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "internal", test)),
+    expect(dead_code, reason = "only the `internal` API and the tests use it")
+)]
 fn combine(lhs: Option<Ordering>, rhs: Option<Ordering>) -> Option<Ordering> {
     match (lhs?, rhs?) {
         (Ordering::Equal, other) | (other, Ordering::Equal) => Some(other),
@@ -134,7 +137,10 @@ impl fmt::Display for DisplaySortContext<'_> {
 
 /// Orders the primitive sorts by the number-sort hierarchy. Distinct sorts that
 /// are not both numbers are incomparable.
-#[cfg_attr(not(feature = "internal"), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "internal", test)),
+    expect(dead_code, reason = "only the `internal` API and the tests use it")
+)]
 fn primitive_partial_cmp(lhs: Sort, rhs: Sort) -> Option<Ordering> {
     if lhs == rhs {
         Some(Ordering::Equal)
@@ -207,7 +213,6 @@ pub struct SortInterner {
     arena: Vec<ResolvedSort>,
     dedup: HashMap<ResolvedSort, ResolvedSortId>,
 
-    unit_sort: ResolvedSortId,
     bool_sort: ResolvedSortId,
     pos_sort: ResolvedSortId,
     nat_sort: ResolvedSortId,
@@ -220,7 +225,6 @@ impl SortInterner {
         let mut interner = SortInterner {
             arena: Vec::new(),
             dedup: HashMap::new(),
-            unit_sort: ResolvedSortId::new(0),
             bool_sort: ResolvedSortId::new(0),
             pos_sort: ResolvedSortId::new(0),
             nat_sort: ResolvedSortId::new(0),
@@ -228,7 +232,7 @@ impl SortInterner {
             real_sort: ResolvedSortId::new(0),
         };
 
-        interner.unit_sort = interner.intern(ResolvedSort::Unit);
+        interner.intern(ResolvedSort::Unit);
         interner.bool_sort = interner.intern(ResolvedSort::Primitive(Sort::Bool));
         interner.pos_sort = interner.intern(ResolvedSort::Primitive(Sort::Pos));
         interner.nat_sort = interner.intern(ResolvedSort::Primitive(Sort::Nat));
@@ -296,13 +300,6 @@ impl SortInterner {
         &self.arena[*id]
     }
 
-    // Renders the `Unit` sort and the `Int`/`Real` literals of an inserted
-    // cast. Exercised by tests only for now.
-    #[allow(dead_code)]
-    pub(crate) fn unit_sort(&self) -> ResolvedSortId {
-        self.unit_sort
-    }
-
     pub(crate) fn bool_sort(&self) -> ResolvedSortId {
         self.bool_sort
     }
@@ -315,12 +312,10 @@ impl SortInterner {
         self.nat_sort
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn int_sort(&self) -> ResolvedSortId {
-        self.int_sort
-    }
-
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(feature = "internal"),
+        expect(dead_code, reason = "only the `internal` API uses it")
+    )]
     pub(crate) fn real_sort(&self) -> ResolvedSortId {
         self.real_sort
     }
@@ -334,7 +329,10 @@ impl SortInterner {
     /// [SortInterner::is_materializable] before treating a comparison as an
     /// accepted typing — this method alone says nothing about whether
     /// lowering can actually build the corresponding term.
-    #[cfg_attr(not(feature = "internal"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(feature = "internal", test)),
+        expect(dead_code, reason = "only the `internal` API and the tests use it")
+    )]
     pub fn partial_cmp(&self, lhs: ResolvedSortId, rhs: ResolvedSortId) -> Option<Ordering> {
         if lhs == rhs {
             return Some(Ordering::Equal);
@@ -639,7 +637,11 @@ mod tests {
     use std::cmp::Ordering::Less;
 
     use merc_syntax::ComplexSort;
+    use merc_syntax::Sort;
     use merc_syntax::SortId;
+    use merc_utilities::random_test;
+    use rand::RngExt;
+    use rand::rngs::StdRng;
 
     use crate::ResolvedSortId;
     use crate::SortInterner;
@@ -663,10 +665,10 @@ mod tests {
 
     impl ExampleSorts {
         fn new(c: &mut SortInterner) -> ExampleSorts {
-            let function_sort1 = c.function(vec![c.pos_sort(), c.nat_sort()], c.real_sort());
-            let function_sort2 = c.function(vec![c.real_sort(), c.real_sort()], c.pos_sort());
-            let function_sort3 = c.function(vec![c.pos_sort(), c.nat_sort(), c.nat_sort()], c.real_sort());
-            let real_list = c.generic(ComplexSort::List, c.real_sort());
+            let function_sort1 = c.function(vec![c.pos_sort(), c.nat_sort()], c.primitive(Sort::Real));
+            let function_sort2 = c.function(vec![c.primitive(Sort::Real), c.primitive(Sort::Real)], c.pos_sort());
+            let function_sort3 = c.function(vec![c.pos_sort(), c.nat_sort(), c.nat_sort()], c.primitive(Sort::Real));
+            let real_list = c.generic(ComplexSort::List, c.primitive(Sort::Real));
             let function_sort4 = c.function(vec![c.pos_sort(), c.nat_sort()], real_list);
 
             ExampleSorts {
@@ -680,8 +682,8 @@ mod tests {
                 fbag_sort2: c.generic(ComplexSort::FBag, function_sort1),
                 bag_sort1: c.generic(ComplexSort::Bag, function_sort1),
                 bag_sort2: c.generic(ComplexSort::Bag, function_sort3),
-                fset_sort1: c.generic(ComplexSort::FSet, c.int_sort()),
-                set_sort1: c.generic(ComplexSort::Set, c.int_sort()),
+                fset_sort1: c.generic(ComplexSort::FSet, c.primitive(Sort::Int)),
+                set_sort1: c.generic(ComplexSort::Set, c.primitive(Sort::Int)),
                 set_sort2: c.generic(ComplexSort::Set, function_sort1),
             }
         }
@@ -694,22 +696,24 @@ mod tests {
 
         assert_eq!(c.partial_cmp(c.bool_sort(), c.pos_sort()), None);
         assert_eq!(c.partial_cmp(c.bool_sort(), c.bool_sort()), Some(Equal));
-        assert_eq!(c.partial_cmp(c.nat_sort(), c.real_sort()), Some(Less));
-        assert_eq!(c.partial_cmp(c.real_sort(), c.nat_sort()), Some(Greater));
+        assert_eq!(c.partial_cmp(c.nat_sort(), c.primitive(Sort::Real)), Some(Less));
+        assert_eq!(c.partial_cmp(c.primitive(Sort::Real), c.nat_sort()), Some(Greater));
         assert_eq!(c.partial_cmp(c.nat_sort(), c.nat_sort()), Some(Equal));
-        assert_eq!(c.partial_cmp(c.pos_sort(), c.real_sort()), Some(Less));
-        assert_eq!(c.partial_cmp(c.unit_sort(), c.real_sort()), None);
-        assert_eq!(c.partial_cmp(c.unit_sort(), c.unit_sort()), Some(Equal));
-        assert_eq!(c.partial_cmp(c.unit_sort(), c.bool_sort()), None);
-        assert_eq!(c.partial_cmp(c.real_sort(), c.real_sort()), Some(Equal));
-        assert_eq!(c.partial_cmp(c.real_sort(), c.int_sort()), Some(Greater));
+        assert_eq!(c.partial_cmp(c.pos_sort(), c.primitive(Sort::Real)), Some(Less));
+        assert_eq!(
+            c.partial_cmp(c.primitive(Sort::Real), c.primitive(Sort::Real)),
+            Some(Equal)
+        );
+        assert_eq!(
+            c.partial_cmp(c.primitive(Sort::Real), c.primitive(Sort::Int)),
+            Some(Greater)
+        );
 
         // `function_sort2` (Real # Real -> Pos) is below `function_sort1`
         // (Pos # Nat -> Real): its domain is wider (Real >= Pos, Real >= Nat,
         // required contravariantly) and its range is narrower (Pos <= Real).
         // This is the book's own worked contravariance example (`(Nat -> Int)
-        // <= (Pos -> Real)`), so unlike today this pair is now comparable; see
-        // `test_function_variance_direction` for the case spelled out fully.
+        // <= (Pos -> Real)`).
         assert_eq!(c.partial_cmp(e.function_sort1, e.function_sort2), Some(Greater));
         assert_eq!(c.partial_cmp(e.function_sort2, e.function_sort1), Some(Less));
         assert_eq!(c.partial_cmp(e.function_sort1, e.function_sort1), Some(Equal));
@@ -730,7 +734,7 @@ mod tests {
 
         assert_eq!(c.partial_cmp(e.def_sort1, e.def_sort1), Some(Equal));
         assert_eq!(c.partial_cmp(e.def_sort1, e.def_sort2), None);
-        assert_eq!(c.partial_cmp(e.def_sort1, c.real_sort()), None);
+        assert_eq!(c.partial_cmp(e.def_sort1, c.primitive(Sort::Real)), None);
         assert_eq!(c.partial_cmp(e.function_sort1, e.def_sort2), None);
     }
 
@@ -739,8 +743,8 @@ mod tests {
         let mut c = SortInterner::new();
         let pos_list = c.generic(ComplexSort::List, c.pos_sort());
         let nat_list = c.generic(ComplexSort::List, c.nat_sort());
-        let int_list = c.generic(ComplexSort::List, c.int_sort());
-        let real_list = c.generic(ComplexSort::List, c.real_sort());
+        let int_list = c.generic(ComplexSort::List, c.primitive(Sort::Int));
+        let real_list = c.generic(ComplexSort::List, c.primitive(Sort::Real));
         let bool_list = c.generic(ComplexSort::List, c.bool_sort());
 
         assert_eq!(c.partial_cmp(pos_list, nat_list), Some(Less));
@@ -758,7 +762,7 @@ mod tests {
         let fset_nat = c.generic(ComplexSort::FSet, c.nat_sort());
         let set_pos = c.generic(ComplexSort::Set, c.pos_sort());
         let fbag_pos = c.generic(ComplexSort::FBag, c.pos_sort());
-        let bag_real = c.generic(ComplexSort::Bag, c.real_sort());
+        let bag_real = c.generic(ComplexSort::Bag, c.primitive(Sort::Real));
 
         // Both the head (FSet <= Set) and the element (Pos <= Nat) widen
         // together.
@@ -772,10 +776,10 @@ mod tests {
     #[test]
     fn test_function_variance_direction() {
         let mut c = SortInterner::new();
-        let nat_to_int = c.function(vec![c.nat_sort()], c.int_sort());
-        let pos_to_real = c.function(vec![c.pos_sort()], c.real_sort());
-        let pos_to_int = c.function(vec![c.pos_sort()], c.int_sort());
-        let nat_to_real = c.function(vec![c.nat_sort()], c.real_sort());
+        let nat_to_int = c.function(vec![c.nat_sort()], c.primitive(Sort::Int));
+        let pos_to_real = c.function(vec![c.pos_sort()], c.primitive(Sort::Real));
+        let pos_to_int = c.function(vec![c.pos_sort()], c.primitive(Sort::Int));
+        let nat_to_real = c.function(vec![c.nat_sort()], c.primitive(Sort::Real));
 
         // (Nat -> Int) <= (Pos -> Real): the domain narrows from Nat to Pos
         // (contravariant — `Pos <= Nat`) while the range widens from Int to
@@ -790,8 +794,8 @@ mod tests {
         assert_eq!(c.partial_cmp(nat_to_int, nat_to_real), Some(Less));
         assert_eq!(c.partial_cmp(nat_to_int, pos_to_int), Some(Less));
 
-        let nat_int_to_nat = c.function(vec![c.nat_sort(), c.int_sort()], c.nat_sort());
-        let pos_nat_to_real = c.function(vec![c.pos_sort(), c.nat_sort()], c.real_sort());
+        let nat_int_to_nat = c.function(vec![c.nat_sort(), c.primitive(Sort::Int)], c.nat_sort());
+        let pos_nat_to_real = c.function(vec![c.pos_sort(), c.nat_sort()], c.primitive(Sort::Real));
         assert_eq!(c.partial_cmp(nat_int_to_nat, pos_nat_to_real), Some(Less));
     }
 
@@ -835,7 +839,7 @@ mod tests {
             c.generic(ComplexSort::Bag, fset)
         };
         let pos = c.pos_sort();
-        let real = c.real_sort();
+        let real = c.primitive(Sort::Real);
         let pos_nested = build(&mut c, pos);
         let real_nested = build(&mut c, real);
 
@@ -849,7 +853,6 @@ mod tests {
 
         assert_eq!(c.partial_cmp(c.bool_sort(), c.pos_sort()), None);
         assert_eq!(c.partial_cmp(def, c.bool_sort()), None);
-        assert_eq!(c.partial_cmp(c.unit_sort(), def), None);
     }
 
     #[test]
@@ -860,7 +863,10 @@ mod tests {
         assert_eq!(c.join(c.bool_sort(), c.pos_sort()), None);
         assert_eq!(c.join(c.pos_sort(), c.pos_sort()), Some(c.pos_sort()));
         assert_eq!(c.join(c.pos_sort(), c.nat_sort()), Some(c.nat_sort()));
-        assert_eq!(c.join(c.real_sort(), c.nat_sort()), Some(c.real_sort()));
+        assert_eq!(
+            c.join(c.primitive(Sort::Real), c.nat_sort()),
+            Some(c.primitive(Sort::Real))
+        );
 
         // `function_sort2 <= function_sort1` (see `test_partial_ord`), so
         // their join is the wider of the two, `function_sort1` itself.
@@ -886,13 +892,13 @@ mod tests {
         // says `Greater`, range says `Less`), but a join/meet still exists:
         // the domain is combined contravariantly (meet for join, join for
         // meet) while the range is combined directly.
-        let pos_to_int = c.function(vec![c.pos_sort()], c.int_sort());
-        let nat_to_real = c.function(vec![c.nat_sort()], c.real_sort());
+        let pos_to_int = c.function(vec![c.pos_sort()], c.primitive(Sort::Int));
+        let nat_to_real = c.function(vec![c.nat_sort()], c.primitive(Sort::Real));
         assert_eq!(c.partial_cmp(pos_to_int, nat_to_real), None);
 
-        let pos_to_real = c.function(vec![c.pos_sort()], c.real_sort());
+        let pos_to_real = c.function(vec![c.pos_sort()], c.primitive(Sort::Real));
         assert_eq!(c.join(pos_to_int, nat_to_real), Some(pos_to_real));
-        let nat_to_int = c.function(vec![c.nat_sort()], c.int_sort());
+        let nat_to_int = c.function(vec![c.nat_sort()], c.primitive(Sort::Int));
         assert_eq!(c.meet(pos_to_int, nat_to_real), Some(nat_to_int));
 
         // The join is at least as wide as both operands and the meet at most
@@ -915,7 +921,7 @@ mod tests {
         assert_eq!(c.meet(c.bool_sort(), c.pos_sort()), None);
         assert_eq!(c.meet(c.pos_sort(), c.pos_sort()), Some(c.pos_sort()));
         assert_eq!(c.meet(c.pos_sort(), c.nat_sort()), Some(c.pos_sort()));
-        assert_eq!(c.meet(c.real_sort(), c.nat_sort()), Some(c.nat_sort()));
+        assert_eq!(c.meet(c.primitive(Sort::Real), c.nat_sort()), Some(c.nat_sort()));
 
         // Dual of the `test_join` case: `function_sort2 <= function_sort1`, so
         // their meet is the narrower of the two, `function_sort2` itself.
@@ -930,12 +936,12 @@ mod tests {
     }
 
     #[test]
-    fn test_widening_distance_matches_legacy_and_extends_compositionally() {
+    fn test_widening_distance() {
         let mut c = SortInterner::new();
 
         assert_eq!(c.widening_distance(c.pos_sort(), c.pos_sort()), Some((0, 0)));
         assert_eq!(c.widening_distance(c.pos_sort(), c.nat_sort()), Some((1, 0)));
-        assert_eq!(c.widening_distance(c.pos_sort(), c.real_sort()), Some((3, 0)));
+        assert_eq!(c.widening_distance(c.pos_sort(), c.primitive(Sort::Real)), Some((3, 0)));
         assert_eq!(c.widening_distance(c.nat_sort(), c.pos_sort()), None);
 
         let fset_pos = c.generic(ComplexSort::FSet, c.pos_sort());
@@ -950,23 +956,23 @@ mod tests {
 
         // Head (FSet -> Set, 1 step) and interior (Pos -> Real, 3 steps)
         // accumulate independently.
-        let set_real = c.generic(ComplexSort::Set, c.real_sort());
+        let set_real = c.generic(ComplexSort::Set, c.primitive(Sort::Real));
         assert_eq!(c.widening_distance(fset_pos, set_real), Some((1, 3)));
     }
 
     #[test]
-    fn test_is_materializable_matches_todays_coercions_only() {
+    fn test_is_materializable_only_for_constructible_coercions() {
         let mut c = SortInterner::new();
 
         assert!(c.is_materializable(c.pos_sort(), c.pos_sort()));
-        assert!(c.is_materializable(c.pos_sort(), c.real_sort()));
-        assert!(!c.is_materializable(c.real_sort(), c.pos_sort()));
+        assert!(c.is_materializable(c.pos_sort(), c.primitive(Sort::Real)));
+        assert!(!c.is_materializable(c.primitive(Sort::Real), c.pos_sort()));
 
         let fset_pos = c.generic(ComplexSort::FSet, c.pos_sort());
         let set_pos = c.generic(ComplexSort::Set, c.pos_sort());
         assert!(c.is_materializable(fset_pos, set_pos));
 
-        // The relation now says `List(Pos) <= List(Nat)`, but no element-wise
+        // The relation says `List(Pos) <= List(Nat)`, but no element-wise
         // traversal exists to build the `List(Nat)` term, so this must stay
         // excluded from the materializable set.
         let pos_list = c.generic(ComplexSort::List, c.pos_sort());
@@ -979,10 +985,116 @@ mod tests {
         assert!(c.partial_cmp(fset_pos, set_nat).is_some());
         assert!(!c.is_materializable(fset_pos, set_nat));
 
-        // And function-sort variance, even though it is now comparable.
-        let nat_to_int = c.function(vec![c.nat_sort()], c.int_sort());
-        let pos_to_real = c.function(vec![c.pos_sort()], c.real_sort());
+        // And function-sort variance, even though it is comparable.
+        let nat_to_int = c.function(vec![c.nat_sort()], c.primitive(Sort::Int));
+        let pos_to_real = c.function(vec![c.pos_sort()], c.primitive(Sort::Real));
         assert!(c.partial_cmp(nat_to_int, pos_to_real).is_some());
         assert!(!c.is_materializable(nat_to_int, pos_to_real));
+    }
+
+    /// A random sort with at most `depth` nested container and function sorts.
+    fn random_sort(c: &mut SortInterner, rng: &mut StdRng, depth: usize) -> ResolvedSortId {
+        if depth == 0 || rng.random_bool(0.4) {
+            return match rng.random_range(0..7) {
+                0 => c.primitive(Sort::Bool),
+                1 => c.primitive(Sort::Pos),
+                2 => c.primitive(Sort::Nat),
+                3 => c.primitive(Sort::Int),
+                4 => c.primitive(Sort::Real),
+                index => c.def(SortId::new(index - 5)),
+            };
+        }
+
+        if rng.random_bool(0.5) {
+            let ops = [
+                ComplexSort::List,
+                ComplexSort::FSet,
+                ComplexSort::Set,
+                ComplexSort::FBag,
+                ComplexSort::Bag,
+            ];
+            let op = ops[rng.random_range(0..ops.len())];
+            let element = random_sort(c, rng, depth - 1);
+            c.generic(op, element)
+        } else {
+            let arity = rng.random_range(1..=2);
+            let domain = (0..arity).map(|_| random_sort(c, rng, depth - 1)).collect();
+            let range = random_sort(c, rng, depth - 1);
+            c.function(domain, range)
+        }
+    }
+
+    /// The sub-sort relation is a partial order, `join`/`meet` are least upper and greatest lower
+    /// bounds among the sampled sorts, and a materializable coercion only ever widens.
+    #[test]
+    #[cfg_attr(miri, ignore)] // Test is too slow under miri
+    fn test_random_sorts_form_a_lattice() {
+        random_test(100, |rng| {
+            let mut c = SortInterner::new();
+            let mut sorts: Vec<_> = (0..10).map(|_| random_sort(&mut c, rng, 2)).collect();
+            // Make related pairs likely: add the joins and meets of the sample.
+            for i in 0..sorts.len() {
+                for j in 0..i {
+                    let (lhs, rhs) = (sorts[i], sorts[j]);
+                    sorts.extend(c.join(lhs, rhs));
+                    sorts.extend(c.meet(lhs, rhs));
+                }
+            }
+            sorts.sort();
+            sorts.dedup();
+
+            let leq = |c: &SortInterner, lhs, rhs| matches!(c.partial_cmp(lhs, rhs), Some(Less | Equal));
+            for &a in &sorts {
+                assert_eq!(c.partial_cmp(a, a), Some(Equal));
+                for &b in &sorts {
+                    let ab = c.partial_cmp(a, b);
+                    assert_eq!(ab, c.partial_cmp(b, a).map(|ordering| ordering.reverse()));
+                    if a != b {
+                        assert_ne!(
+                            ab,
+                            Some(Equal),
+                            "distinct sorts {:?} and {:?} compare equal",
+                            c.get(a),
+                            c.get(b)
+                        );
+                    }
+                    if c.is_materializable(a, b) {
+                        assert!(leq(&c, a, b), "{:?} materializes to {:?}", c.get(a), c.get(b));
+                    }
+
+                    let join = c.join(a, b);
+                    let meet = c.meet(a, b);
+                    assert_eq!(join, c.join(b, a));
+                    assert_eq!(meet, c.meet(b, a));
+                    for &m in &sorts {
+                        if leq(&c, a, b) && leq(&c, b, m) {
+                            assert!(leq(&c, a, m), "{:?} <= {:?} <= {:?}", c.get(a), c.get(b), c.get(m));
+                        }
+                        if let Some(join) = join {
+                            assert!(leq(&c, a, join) && leq(&c, b, join));
+                            if leq(&c, a, m) && leq(&c, b, m) {
+                                assert!(
+                                    leq(&c, join, m),
+                                    "join of {:?} and {:?} is not least",
+                                    c.get(a),
+                                    c.get(b)
+                                );
+                            }
+                        }
+                        if let Some(meet) = meet {
+                            assert!(leq(&c, meet, a) && leq(&c, meet, b));
+                            if leq(&c, m, a) && leq(&c, m, b) {
+                                assert!(
+                                    leq(&c, m, meet),
+                                    "meet of {:?} and {:?} is not greatest",
+                                    c.get(a),
+                                    c.get(b)
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 }

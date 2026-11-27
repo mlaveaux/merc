@@ -822,138 +822,10 @@ pub(crate) fn basic_sort_own_template(sort: Sort, encoding: NumberEncoding) -> &
 
 #[cfg(test)]
 mod tests {
-    use merc_syntax::ConstructorDecl;
-    use merc_syntax::SortExpressionKind;
     use merc_syntax::SourceMap;
-    use merc_syntax::UntypedDataSpecification;
 
-    use super::CONTAINER_TEMPLATES;
-    use super::structured_sort_equations;
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // pest calls into psm, which miri does not support.
-    fn test_container_templates_declare_type_var() {
-        // `list.mcrl2`/`bag.mcrl2`/... each declare one `type_var S;`, resolved
-        // once by `parse_template_bare` — no bare `Reference("S")` should remain.
-        for template in [
-            &CONTAINER_TEMPLATES.list,
-            &CONTAINER_TEMPLATES.set,
-            &CONTAINER_TEMPLATES.fset,
-            &CONTAINER_TEMPLATES.bag,
-            &CONTAINER_TEMPLATES.fbag,
-        ] {
-            assert_eq!(template.type_var_declarations.len(), 1, "{template}");
-            assert_eq!(template.type_var_declarations[0].identifier, "S");
-            assert!(
-                template.type_var_declarations[0].id.is_some(),
-                "resolve_type_var_ids should have assigned an id"
-            );
-        }
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_function_update_template_declares_two_type_vars() {
-        // The arity-1 generic template plays the role the bundled
-        // `function_update.mcrl2` used to: `type_var S0, T;`.
-        let template = super::function_update_template(1);
-        let names: Vec<&str> = template
-            .type_var_declarations
-            .iter()
-            .map(|decl| decl.identifier.as_str())
-            .collect();
-        assert_eq!(names, ["S0", "T"]);
-    }
-
-    /// Extracts the constructors of the structured sort in `sort <ident> = <struct>;`.
-    fn struct_constructors(spec: &str) -> Vec<ConstructorDecl> {
-        let spec = UntypedDataSpecification::parse(spec).unwrap();
-        let expr = spec
-            .sort_declarations
-            .into_iter()
-            .find_map(|decl| decl.expr)
-            .expect("expected a sort alias with a structured sort");
-        let SortExpressionKind::Struct { inner } = expr.into_node() else {
-            panic!("expected a structured sort");
-        };
-        inner
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn structured_sort_equations_generates_a_parseable_specification() {
-        let constructors = struct_constructors("sort D = struct c1(pr1: Nat, pr2: Bool)?is_c1 | c2?is_c2 | c3(Nat);");
-
-        // The generated specification should be well-formed and parseable, and
-        // contain only equations; the declarations come from desugaring.
-        let generated = structured_sort_equations(&mut SourceMap::new(), &constructors).unwrap();
-        assert!(generated.sort_declarations.is_empty());
-        assert!(generated.constructor_declarations.is_empty());
-        assert!(generated.map_declarations.is_empty());
-
-        let equations = generated
-            .equation_declarations
-            .iter()
-            .flat_map(|eqn_spec| &eqn_spec.equations)
-            .map(|eqn| format!("{} = {}", eqn.lhs, eqn.rhs))
-            .collect::<Vec<_>>();
-
-        // Recogniser and projection equations for the declared names.
-        assert!(
-            equations
-                .iter()
-                .any(|eqn| eqn.contains("is_c1") && eqn.contains("true"))
-        );
-        assert!(
-            equations
-                .iter()
-                .any(|eqn| eqn.contains("is_c1") && eqn.contains("false"))
-        );
-        assert!(equations.iter().any(|eqn| eqn.contains("pr1")));
-
-        // c3 has no recogniser, so no equation defines one for it.
-        assert!(!equations.iter().any(|eqn| eqn.contains("is_c3")));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn structured_sort_equations_supports_only_constant_constructors() {
-        // A structured sort where no constructor has arguments generates no
-        // variables, so the `eqn` block must be emitted without a `var` block.
-        let constructors = struct_constructors("sort E = struct red | green | blue;");
-        let generated = structured_sort_equations(&mut SourceMap::new(), &constructors).unwrap();
-
-        assert!(!generated.equation_declarations.is_empty());
-    }
-
-    /// A system-defined declaration's span must render against its true
-    /// origin — the bundled template file it came from — not the caller's
-    /// own specification text, once it is registered into the same
-    /// `SourceMap` the caller renders against.
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_basic_sort_declaration_renders_against_its_builtin_source() {
-        let mut sources = SourceMap::new();
-        let basics = super::basic_sort_data_specification(&mut sources, crate::NumberEncoding::Binary);
-        let bool_decl = basics
-            .sort_declarations
-            .iter()
-            .find(|decl| decl.identifier == "Bool")
-            .expect("Bool is always declared");
-
-        let rendered = bool_decl.span.render(&sources);
-        assert!(
-            rendered.contains("bool.mcrl2"),
-            "expected the Bool sort declaration to render against bool.mcrl2, got: {rendered}"
-        );
-        let id = sources.lookup(bool_decl.span.start);
-        assert!(sources.is_virtual(id), "a builtin template's source must be virtual");
-    }
-
-    /// As [test_basic_sort_declaration_renders_against_its_builtin_source], but
-    /// for a generic container template: [typecheck_templates] must rigidly
-    /// check a clone registered into the caller's own `SourceMap`, not the raw
-    /// static [CONTAINER_TEMPLATES], whose spans resolve against nothing.
+    /// A container template's declarations render against its bundled source, registered in the
+    /// caller's `SourceMap`.
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_container_template_declaration_renders_against_its_builtin_source() {
@@ -974,8 +846,7 @@ mod tests {
         assert!(sources.is_virtual(id), "a builtin template's source must be virtual");
     }
 
-    /// As the container-template test above, for the generic function-update
-    /// template that [typecheck_function_update_template] rigidly checks.
+    /// As above, for the generated function-update template.
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_function_update_template_declaration_renders_against_a_registered_source() {

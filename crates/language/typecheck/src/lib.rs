@@ -18,10 +18,8 @@ pub(crate) use builtins::*;
 pub(crate) use data_specification::*;
 pub(crate) use inference::*;
 pub(crate) use instantiate::*;
-#[allow(unused_imports)]
 pub(crate) use ir::*;
 pub(crate) use resolution::*;
-#[allow(unused_imports)]
 pub(crate) use signature::*;
 
 pub use data_specification::DataSpecification;

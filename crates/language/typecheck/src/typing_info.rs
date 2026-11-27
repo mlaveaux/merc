@@ -531,7 +531,10 @@ pub fn push_sort_references(spec: &DataSpecification, references: &[SortReferenc
 }
 
 /// Records a binder's own declaration occurrence.
-#[cfg_attr(not(feature = "internal"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "internal"),
+    expect(dead_code, reason = "only the `internal` API uses it")
+)]
 pub(crate) fn push_binder_declaration(
     data: &DataSpecification,
     typing: &mut TypingInfo,

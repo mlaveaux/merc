@@ -13,16 +13,12 @@ use merc_syntax::SortId;
 use merc_syntax::SourceMap;
 use merc_syntax::Traverse;
 use merc_syntax::UntypedDataSpecification;
-#[cfg(test)]
-use merc_syntax::VarId;
 
 use crate::AliasError;
 use crate::EquationTyping;
 use crate::InferenceError;
 use crate::NumberEncoding;
 use crate::Roots;
-#[cfg(test)]
-use crate::Signature;
 use crate::TypeCheckContext;
 use crate::TypedRoots;
 use crate::TypingInfo;
@@ -325,58 +321,6 @@ impl DataSpecification {
         &self.context
     }
 
-    /// The resolved sort of the constructor declaration with the given
-    /// [ConstructorId]. Requires `id` to be a valid constructor id from this
-    /// specification; panics if called before `from_untyped` has completed.
-    ///
-    /// Only ever safe for a *user* declaration's id: every one of those has its sort resolved
-    /// unconditionally during `from_untyped`, whether or not anything actually references it. A
-    /// system-defined declaration's id is not resolved this way at all.
-    #[cfg(test)]
-    pub(crate) fn sort_of_constructor(&self, id: merc_syntax::ConstructorId) -> crate::ResolvedSortId {
-        self.context
-            .sort_of_constructor
-            .get(&id)
-            .copied()
-            .expect("constructor sorts are all resolved during from_untyped")
-    }
-
-    /// The resolved sort of the map declaration with the given [MapId].
-    /// Requires `id` to be a valid map id from this specification; panics if
-    /// called before `from_untyped` has completed.
-    ///
-    /// See [`Self::sort_of_constructor`]'s doc comment: safe only for a *user* declaration's id.
-    #[cfg(test)]
-    pub(crate) fn sort_of_map(&self, id: merc_syntax::MapId) -> crate::ResolvedSortId {
-        self.context
-            .sort_of_map
-            .get(&id)
-            .copied()
-            .expect("map sorts are all resolved during from_untyped")
-    }
-
-    /// The resolved sort of the equation `var`-block variable identified by `var_id`. Requires
-    /// `var_id` to be valid from this specification; panics if called before `from_untyped` has
-    /// completed.
-    #[cfg(test)]
-    pub(crate) fn sort_of_equation_var(&self, var_id: VarId) -> crate::ResolvedSortId {
-        self.context
-            .sort_of_equation_var
-            .get(&(crate::EquationRole::User, var_id))
-            .copied()
-            .expect("equation variable sorts are all resolved during from_untyped")
-    }
-
-    /// The (S, C, M) signature: the resolved overload sets of every constructor
-    /// and mapping name.
-    #[cfg(test)]
-    pub(crate) fn signature(&self) -> &Signature {
-        self.context
-            .signature
-            .as_deref()
-            .expect("build_signature ran in from_untyped")
-    }
-
     /// Typing of the equation identified by `key`, read from the
     /// `equation_typing` cache that `from_untyped` populated. Requires `key` to
     /// index an equation of this specification.
@@ -457,7 +401,10 @@ impl DataSpecification {
     /// already-resolved specification's declared sort names.
     ///
     /// Requires `sort` to contain no anonymous `struct` (see `merc_process`).
-    #[cfg_attr(not(feature = "internal"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "internal"),
+        expect(dead_code, reason = "only the `internal` API uses it")
+    )]
     pub(crate) fn resolve_declared_sort(
         &mut self,
         sort: &SortExpression,
@@ -470,7 +417,10 @@ impl DataSpecification {
     /// Splits into simultaneous borrows of the query context and the resolved specification, for
     /// a caller (process-level checking, see `merc_process`) that needs to run inference
     /// against a variable scope of its own rather than one of `self`'s own equations.
-    #[cfg_attr(not(feature = "internal"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "internal"),
+        expect(dead_code, reason = "only the `internal` API uses it")
+    )]
     pub(crate) fn context_and_specs_mut(&mut self) -> (&mut TypeCheckContext, &UntypedDataSpecification) {
         (&mut self.context, &self.spec)
     }
@@ -483,7 +433,10 @@ impl DataSpecification {
     /// expression (an action argument, a condition, …), or a caller-supplied expression to
     /// [`Self::typecheck_expression`] — so a binder over a user-declared sort name resolves
     /// correctly.
-    #[cfg_attr(not(feature = "internal"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "internal"),
+        expect(dead_code, reason = "only the `internal` API uses it")
+    )]
     pub(crate) fn resolve_expression_binder_sorts(&mut self, expr: &mut DataExpr) -> Result<(), WellTypedError> {
         apply_sorts_in_data_expr(
             expr,
@@ -652,148 +605,11 @@ impl TypedExpression {
     }
 
     /// The inferred sorts and name resolutions of the expression, indexed by `ExprId`.
-    #[cfg_attr(not(feature = "internal"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "internal"),
+        expect(dead_code, reason = "only the `internal` API uses it")
+    )]
     pub(crate) fn typing(&self) -> &EquationTyping {
         &self.typing
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use merc_syntax::EqnSpecId;
-    use merc_syntax::EquationId;
-    use merc_syntax::UntypedDataSpecification;
-
-    use crate::DataSpecification;
-    use crate::infer_equation_typing;
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_equation_typing_is_memoized() {
-        let spec = UntypedDataSpecification::parse("map f: Nat; eqn f = 1;").unwrap();
-        let mut checked = DataSpecification::from_untyped(spec).unwrap();
-
-        let key = (EqnSpecId::new(0), EquationId::new(0));
-
-        // `from_untyped` already inferred and cached this equation; querying
-        // again must return the very same `Arc`, not recompute.
-        let first = Arc::clone(
-            checked
-                .context
-                .equation_typing
-                .get(&key)
-                .expect("from_untyped inferred the equation")
-                .as_ref()
-                .expect("the equation is well-typed"),
-        );
-        let again = infer_equation_typing(&mut checked.context, &checked.spec, key).unwrap();
-        assert!(Arc::ptr_eq(&first, &again));
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_struct_constant_and_unrelated_projection_sharing_a_name_is_rejected() {
-        // `a` is both struct A's nullary constant and an unrelated struct's projection — a
-        // constructor-vs-mapping overload of one name. `==` is polymorphic over any single sort,
-        // so once the projection's `a: APos -> A` is pooled in with A's own `a: -> A`, struct A's
-        // own generated, unconstrained reflexivity equation `a == a = true` has two
-        // self-consistent readings with nothing to prefer one over the other. A per-struct
-        // signature scoping fix existed for this (see
-        // `docs/typecheck-struct-system-unification-plan.md`'s "Bug 1"/"Bug 2"), but was removed:
-        // it special-cased compiler-generated equations rather than fixing name resolution in
-        // general (see `signature/system_resolution.rs`'s
-        // `test_struct_nullary_constant_colliding_with_unrelated_struct_function_is_rejected`).
-        // This is now a known, accepted regression.
-        let result = DataSpecification::from_untyped(
-            UntypedDataSpecification::parse(
-                "sort A = struct a?is_a; \
-                 sort APos = struct ca(a: A)?is_ca | cpos(p: Pos)?is_cpos; \
-                 map f: A -> Bool;",
-            )
-            .unwrap(),
-        );
-        assert!(
-            result.is_err(),
-            "expected struct A's own reflexivity equation to be rejected as ambiguous now that \
-             struct equations pool with the full signature unfiltered"
-        );
-    }
-
-    /// Tests that `to_typed_string` correctly annotates every sub-expression
-    /// with its resolved sort.
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_to_typed_string_annotates_every_subexpression() {
-        let spec = DataSpecification::from_untyped(
-            UntypedDataSpecification::parse(
-                "sort Signal; Message;
-                 map AssocReq: Nat -> Message;
-                     signal: Signal -> Message;
-                     sig_AssocReq: Nat -> Signal;
-                 var t: Nat;
-                 eqn AssocReq(t) = signal(sig_AssocReq(t));",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            spec.to_typed_string().to_string(),
-            // `@NatPair` is the one system-internal nominal sort folded into the
-            // shared `sort_declarations` table alongside the user's own, present
-            // here regardless of whether this spec ever uses it.
-            "sort\n\
-             \u{20}  Signal;\n\
-             \u{20}  Message;\n\
-             \u{20}  @NatPair;\n\
-             \n\
-             map\n\
-             \u{20}  AssocReq: (Nat -> Message);\n\
-             \u{20}  signal: (Signal -> Message);\n\
-             \u{20}  sig_AssocReq: (Nat -> Signal);\n\
-             \n\
-             var\n\
-             \u{20}  t: Nat;\n\
-             eqn\n\
-             \u{20}  AssocReq(t: Nat): (Nat -> Message) = \
-             signal(sig_AssocReq(t: Nat): (Nat -> Signal)): (Signal -> Message);\n"
-        );
-    }
-
-    /// As above, over the polymorphic comparison/`if` schemes and an implicit `Pos -> Nat`
-    /// upcast: every operator's own resolved overload is visible, not just the equation's
-    /// declared result.
-    #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_to_typed_string_shows_the_resolved_overload_of_a_polymorphic_operator() {
-        let spec = DataSpecification::from_untyped(
-            UntypedDataSpecification::parse(
-                "map f: Nat -> Bool;
-                 var i: Nat;
-                 eqn f(i) = if(i == 1, true, false);",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            spec.to_typed_string().to_string(),
-            // `@NatPair`, folded into `sort_declarations` unconditionally — see
-            // the other `to_typed_string` test's comment.
-            "sort\n\
-             \u{20}  @NatPair;\n\
-             \n\
-             map\n\
-             \u{20}  f: (Nat -> Bool);\n\
-             \n\
-             var\n\
-             \u{20}  i: Nat;\n\
-             eqn\n\
-             \u{20}  f(i: Nat): (Nat -> Bool) = \
-             if(==(i: Nat, 1: Pos): (Nat # Nat -> Bool), true: Bool, false: Bool): \
-             (Bool # Bool # Bool -> Bool);\n"
-        );
     }
 }

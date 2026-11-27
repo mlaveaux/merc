@@ -7,7 +7,10 @@ mod unification;
 
 #[cfg(feature = "internal")]
 pub use context::TypeCheckContext;
-#[allow(unused_imports)]
+#[cfg_attr(
+    feature = "internal",
+    expect(unused_imports, reason = "the `internal` API re-exports `TypeCheckContext` itself")
+)]
 pub(crate) use context::*;
 #[cfg(feature = "internal")]
 pub use inference::EquationTyping;

@@ -498,6 +498,7 @@ fn related_container(op: ComplexSort, direction: Direction) -> Option<ComplexSor
 #[cfg(test)]
 mod tests {
     use merc_syntax::ComplexSort;
+    use merc_syntax::Sort;
 
     use crate::SortInterner;
     use crate::Unifier;
@@ -550,7 +551,10 @@ mod tests {
         let mut interner = SortInterner::new();
         let mut unifier = Unifier::new();
 
-        let function = interner.function(vec![interner.nat_sort(), interner.bool_sort()], interner.real_sort());
+        let function = interner.function(
+            vec![interner.nat_sort(), interner.bool_sort()],
+            interner.primitive(Sort::Real),
+        );
         let resolved = unifier.resolved_node(function);
 
         let first = unifier.fresh_var();
@@ -561,7 +565,10 @@ mod tests {
         assert!(unifier.unify(&interner, resolved, structural));
         assert_eq!(unifier.resolve(&mut interner, first), Some(interner.nat_sort()));
         assert_eq!(unifier.resolve(&mut interner, second), Some(interner.bool_sort()));
-        assert_eq!(unifier.resolve(&mut interner, range), Some(interner.real_sort()));
+        assert_eq!(
+            unifier.resolve(&mut interner, range),
+            Some(interner.primitive(Sort::Real))
+        );
     }
 
     #[test]
@@ -655,7 +662,11 @@ mod tests {
             .collect();
         assert_eq!(
             resolved,
-            vec![interner.nat_sort(), interner.int_sort(), interner.real_sort()]
+            vec![
+                interner.nat_sort(),
+                interner.primitive(Sort::Int),
+                interner.primitive(Sort::Real)
+            ]
         );
 
         let bool_sort = unifier.resolved_node(interner.bool_sort());
@@ -679,7 +690,7 @@ mod tests {
         let mut interner = SortInterner::new();
         let mut unifier = Unifier::new();
 
-        let real = unifier.resolved_node(interner.real_sort());
+        let real = unifier.resolved_node(interner.primitive(Sort::Real));
         let subs = unifier.strict_sub_sorts(&mut interner, real).unwrap();
         let resolved: Vec<_> = subs
             .into_iter()
@@ -687,7 +698,7 @@ mod tests {
             .collect();
         assert_eq!(
             resolved,
-            vec![interner.int_sort(), interner.nat_sort(), interner.pos_sort()]
+            vec![interner.primitive(Sort::Int), interner.nat_sort(), interner.pos_sort()]
         );
 
         let nat_bag = interner.generic(ComplexSort::Bag, interner.nat_sort());
