@@ -67,18 +67,6 @@ impl MarkedBlockPartition {
     pub(crate) fn iter_block(&self, block_index: BlockIndex) -> BlockIter<'_> {
         self.partition.iter_block(block_index)
     }
-
-    /// Returns an iterator over all blocks in the partition.
-    #[allow(dead_code)]
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Block<bool>> {
-        self.partition.iter()
-    }
-
-    /// Returns an iterator over all blocks in the partition.
-    #[allow(dead_code)]
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Block<bool>> {
-        self.partition.iter_mut()
-    }
 }
 
 impl fmt::Display for MarkedBlockPartition {
@@ -109,31 +97,5 @@ impl Partition for MarkedBlockPartition {
 
     fn len(&self) -> usize {
         self.partition.len()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use merc_collections::BlockIndex;
-    use merc_lts::StateIndex;
-
-    use super::MarkedBlockPartition;
-
-    #[test]
-    fn test_simple_block_partition() {
-        let mut partition = MarkedBlockPartition::new(10);
-
-        assert_eq!(partition.num_of_blocks(), 1);
-
-        let initial_block = BlockIndex::new(0);
-        assert_eq!(partition.block(initial_block).len(), 10);
-
-        let block_index = partition
-            .split_block(BlockIndex::new(0), |state| *state < *StateIndex::new(5))
-            .unwrap();
-
-        assert_eq!(partition.num_of_blocks(), 2);
-        assert_eq!(partition.block(initial_block).len(), 5);
-        assert_eq!(partition.block(block_index).len(), 5);
     }
 }

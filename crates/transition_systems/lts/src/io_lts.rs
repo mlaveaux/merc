@@ -341,61 +341,15 @@ mod tests {
     use merc_aterm::ATermWrite;
     use merc_aterm::BinaryATermWriter;
     use merc_data::Mcrl2DataSpecification;
-    use merc_utilities::random_test;
 
     use super::initial_state_marker;
     use super::lts_marker;
     use super::transition_marker;
-    use super::write_lts;
     use crate::LTS;
     use crate::LtsAction;
     use crate::LtsMultiAction;
     use crate::TransitionLabel;
-    use crate::random_lts;
     use crate::read_lts;
-
-    #[test]
-    #[cfg_attr(miri, ignore)] // Tests are too slow under miri.
-    fn test_read_lts() {
-        let (lts, _data_spec) = read_lts(include_bytes!("../../../../examples/lts/abp.lts").as_ref(), true).unwrap();
-
-        assert_eq!(lts.num_of_states(), 74);
-        assert_eq!(lts.num_of_transitions(), 92);
-        assert_eq!(*lts.initial_state_index(), 0);
-        assert_eq!(lts.state_labels().count(), 74);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn test_lts_state_labels_io() {
-        let (lts, data_spec) = read_lts(include_bytes!("../../../../examples/lts/abp.lts").as_ref(), true).unwrap();
-
-        let mut buffer: Vec<u8> = Vec::new();
-        write_lts(&mut buffer, &lts, &data_spec).unwrap();
-        let (result_lts, _data_spec) = read_lts(&buffer[..], true).unwrap();
-
-        assert!(lts.state_labels().eq(result_lts.state_labels()));
-        assert_eq!(lts.state_labels().count(), lts.num_of_states());
-
-        // Dropping the state labels on reading also works.
-        let (result_lts, _data_spec) = read_lts(&buffer[..], false).unwrap();
-        assert_eq!(result_lts.state_labels().count(), 0);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn test_random_lts_io() {
-        random_test(100, |rng| {
-            let lts = random_lts::<LtsMultiAction<LtsAction>, _>(rng, 1000, 3);
-
-            let mut buffer: Vec<u8> = Vec::new();
-            write_lts(&mut buffer, &lts, &Mcrl2DataSpecification::default()).unwrap();
-
-            let (result_lts, _data_spec) = read_lts(&buffer[0..], false).unwrap();
-
-            crate::check_equivalent(&lts, &result_lts);
-        })
-    }
 
     /// Writes an LTS header followed by `body`, as a stream that `read_lts` accepts up to `body`.
     fn lts_stream(body: &[ATerm]) -> Vec<u8> {

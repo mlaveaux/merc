@@ -46,19 +46,6 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
             .is_some_and(|entry| entry.iter().any(|inner_value| inner_value.is_subset(value)))
     }
 
-    /// Returns true iff the antichain is empty.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.storage.is_empty()
-    }
-
-    /// Returns the number of (key, value) pairs stored, i.e., how many items
-    /// `iter` yields.
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        self.storage.values().map(|values| values.len()).sum()
-    }
-
     /// Returns `(max_antichain_size, insert_misses, insert_calls)`: the largest
     /// number of keys held at once, the number of `insert` calls that added a
     /// new pair, and the total number of `insert` calls.
@@ -77,30 +64,6 @@ impl<K: Eq + Hash, V: Clone + Ord> Antichain<K, V> {
 impl<K: Eq + Hash, V: Clone + Ord> Default for Antichain<K, V> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl<K, V: fmt::Debug + Ord> Antichain<K, V> {
-    /// Checks the internal consistency of the antichain invariant.
-    #[cfg(test)]
-    fn check_consistency(&self) {
-        for values in self.storage.values() {
-            for i in values.iter() {
-                for j in values.iter() {
-                    if i == j {
-                        // Ignore identical entries
-                        continue;
-                    }
-
-                    assert!(
-                        !i.is_subset(j) && !j.is_subset(i),
-                        "Antichain invariant violated: {:?} and {:?} are comparable.",
-                        i,
-                        j
-                    );
-                }
-            }
-        }
     }
 }
 
@@ -174,6 +137,7 @@ impl<T: fmt::Debug, U: fmt::Debug> fmt::Debug for Antichain<T, U> {
 
 #[cfg(test)]
 mod tests {
+    use merc_collections::VecSet;
     use merc_collections::vecset;
     use merc_utilities::random_test;
     use rand::RngExt;
@@ -181,81 +145,66 @@ mod tests {
     use crate::AC;
     use crate::Antichain;
 
+    /// Returns the sorted (key, set) pairs stored in the antichain.
+    fn contents(antichain: &Antichain<u32, u32>) -> Vec<(u32, Vec<u32>)> {
+        let mut result: Vec<_> = antichain
+            .iter()
+            .map(|(key, value)| (*key, value.iter().copied().collect()))
+            .collect();
+        result.sort();
+        result
+    }
+
     #[test]
     fn test_antichain() {
         let mut antichain: Antichain<u32, u32> = Antichain::new();
 
-        let inserted = antichain.insert(1, vecset![2, 3]);
-        assert!(inserted);
+        assert!(antichain.insert(1, vecset![2, 3]));
+        assert!(!antichain.insert(1, vecset![2, 3, 6]), "a superset is dominated");
+        assert!(antichain.insert(1, vecset![2]), "a subset replaces its supersets");
+        assert!(antichain.insert(1, vecset![5, 6]), "an incomparable set is added");
+        assert!(antichain.insert(2, vecset![2, 3]), "keys are independent");
 
-        println!("{:?}", antichain);
-
-        let inserted = antichain.insert(1, vecset![2, 3, 6]);
-        assert!(
-            !inserted,
-            "The pair (1, {{2,3,6}}) should not be inserted in {:?}.",
-            antichain
+        assert_eq!(
+            contents(&antichain),
+            vec![(1, vec![2]), (1, vec![5, 6]), (2, vec![2, 3])]
         );
-
-        let inserted = antichain.insert(1, vecset![2]);
-        assert!(
-            inserted,
-            "The pair (1, {{2}}) should overwrite (1, {{2, 3}}) in {:?}.",
-            antichain
-        );
-
-        let inserted = antichain.insert(1, vecset![5, 6]);
-        assert!(
-            inserted,
-            "The pair (1, {{5, 6}}) should be inserted since it is incomparable to existing pairs in {:?}.",
-            antichain
-        );
+        assert!(antichain.contains_subset(&1, &vecset![2, 7]));
+        assert!(!antichain.contains_subset(&1, &vecset![5, 7]));
+        assert!(antichain.contains_superset(&1, &vecset![5]));
+        assert!(!antichain.contains_superset(&2, &vecset![4]));
+        assert_eq!(antichain.metrics(), (2, 4, 5));
     }
 
+    /// After inserting arbitrary pairs, the antichain holds exactly the minimal inserted sets
+    /// per key, and `insert` returns true iff no inserted set under the key is a subset.
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
     fn test_random_antichain() {
         random_test(100, |rng| {
             let mut antichain: Antichain<u32, u32> = Antichain::new();
+            let mut inserted: Vec<(u32, VecSet<u32>)> = Vec::new();
 
-            // Insert random pairs into the antichain.
             for _ in 0..50 {
-                let key = rng.random_range(0..10);
-                let set_size = rng.random_range(1..5);
+                let key = rng.random_range(0..5);
                 let mut value = vecset![];
-
-                for _ in 0..set_size {
-                    value.insert(rng.random_range(0..20));
+                for _ in 0..rng.random_range(0..5) {
+                    value.insert(rng.random_range(0..8));
                 }
 
-                antichain.insert(key, value);
+                let dominated = inserted.iter().any(|(k, v)| *k == key && v.is_subset(&value));
+                assert_eq!(antichain.insert(key, value.clone()), !dominated);
+                inserted.push((key, value));
+
+                let mut minimal: Vec<(u32, Vec<u32>)> = inserted
+                    .iter()
+                    .filter(|(k, v)| !inserted.iter().any(|(k2, v2)| k == k2 && v2.is_subset(v) && v2 != v))
+                    .map(|(k, v)| (*k, v.iter().copied().collect()))
+                    .collect();
+                minimal.sort();
+                minimal.dedup();
+                assert_eq!(contents(&antichain), minimal);
             }
-
-            antichain.check_consistency();
         })
-    }
-
-    /// `len()` must count (key, value) pairs, not distinct keys: a key that
-    /// maps to multiple incomparable sets should contribute one count per set.
-    #[test]
-    fn test_antichain_len_counts_pairs_not_keys() {
-        let mut antichain: Antichain<u32, u32> = Antichain::new();
-
-        // Insert two incomparable sets under key 1: {2} and {5, 6}.
-        antichain.insert(1, vecset![2]);
-        antichain.insert(1, vecset![5, 6]);
-        // Insert one set under key 2.
-        antichain.insert(2, vecset![10]);
-
-        // The antichain has 2 pairs for key 1 and 1 pair for key 2 → 3 total.
-        // Before the fix, `len()` returned `storage.len()` = 2 (two keys).
-        assert_eq!(
-            antichain.len(),
-            3,
-            "len() must count pairs, not keys; got {:?}",
-            antichain
-        );
-        // Verify that iter yields exactly as many items as len() reports.
-        assert_eq!(antichain.iter().count(), antichain.len());
     }
 }

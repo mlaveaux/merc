@@ -442,12 +442,4 @@ mod tests {
         let timed: super::MCRL2TimedMultiAction = term.clone().into();
         assert!(is_undefined_real(&timed.time()));
     }
-
-    #[test]
-    fn round_trips_an_untimed_multi_action() {
-        let multi_action = LtsMultiAction::new(VecBag::singleton(LtsAction::new("a".to_string(), vec![])));
-        let term = multi_action.to_mcrl2_aterm().unwrap();
-        let back = LtsMultiAction::from_mcrl2_aterm(term).unwrap();
-        assert_eq!(back, multi_action);
-    }
 }

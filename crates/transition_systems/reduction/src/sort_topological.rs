@@ -155,52 +155,109 @@ where
 
 #[cfg(test)]
 mod tests {
-
-    use merc_io::DumpFiles;
-    use merc_lts::LabelledTransitionSystem;
-    use merc_lts::random_lts;
-    use merc_lts::write_aut;
-    use merc_utilities::random_test;
+    use rand::Rng;
+    use rand::RngExt;
     use rand::seq::SliceRandom;
+
+    use merc_lts::LTS;
+    use merc_lts::LabelIndex;
+    use merc_lts::LabelledTransitionSystem;
+    use merc_lts::StateIndex;
+    use merc_lts::TransitionLabel;
+    use merc_utilities::random_test;
     use test_log::test;
 
-    use super::LTS;
-    use super::StateIndex;
-    use super::is_topologically_sorted;
     use super::sort_topological;
 
+    /// Builds an LTS whose `a` transitions (label 1) form a DAG over a shuffled order of the
+    /// states, with additional backward tau transitions (label 0) and self-loops.
+    fn random_dag(rng: &mut impl Rng) -> LabelledTransitionSystem<String> {
+        let num_of_states = rng.random_range(1..30);
+        let mut order: Vec<usize> = (0..num_of_states).collect();
+        order.shuffle(rng);
+
+        let mut transitions = Vec::new();
+        for _ in 0..rng.random_range(0..60) {
+            let i = rng.random_range(0..num_of_states);
+            let j = rng.random_range(0..num_of_states);
+            let (low, high) = (order[i.min(j)], order[i.max(j)]);
+            transitions.push((low, if i == j { 0 } else { 1 }, high));
+            if rng.random_bool(0.3) {
+                transitions.push((high, 0, low));
+            }
+        }
+
+        transitions.sort();
+        transitions.dedup();
+        let transitions: Vec<_> = transitions
+            .into_iter()
+            .map(|(from, label, to)| (StateIndex::new(from), LabelIndex::new(label), StateIndex::new(to)))
+            .collect();
+        LabelledTransitionSystem::new(
+            StateIndex::new(0),
+            Some(num_of_states),
+            || transitions.iter().cloned(),
+            vec![String::tau_label(), "a".to_string()],
+        )
+    }
+
+    /// The result maps every state to its position: a permutation in which every accepted
+    /// transition (other than a self-loop) goes forward, or backward when reversed.
     #[test]
     #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_random_sort_topological_with_cycles() {
+    fn test_random_sort_topological() {
         random_test(100, |rng| {
-            let lts = random_lts::<String, _>(rng, 1000, 3);
-            if let Ok(order) = sort_topological(&lts, |_, _| true, false) {
-                assert!(is_topologically_sorted(&lts, |_, _| true, |i| order[i], false))
+            let lts = random_dag(rng);
+            let visible = |label: LabelIndex, _| label.value() == 1;
+
+            for reverse in [false, true] {
+                let position = sort_topological(&lts, visible, reverse).unwrap();
+
+                let mut sorted: Vec<usize> = position.iter().map(|p| p.value()).collect();
+                sorted.sort();
+                assert_eq!(sorted, (0..lts.num_of_states()).collect::<Vec<_>>());
+
+                for s in lts.iter_states() {
+                    for t in lts
+                        .outgoing_transitions(s)
+                        .filter(|t| t.label.value() == 1 && t.to != s)
+                    {
+                        if reverse {
+                            assert!(position[s] > position[t.to], "{s} -a-> {} (reversed)", t.to);
+                        } else {
+                            assert!(position[s] < position[t.to], "{s} -a-> {}", t.to);
+                        }
+                    }
+                }
+            }
+
+            // Without backward tau transitions, accepting every transition still gives an order.
+            let has_backward = lts
+                .iter_states()
+                .any(|s| lts.outgoing_transitions(s).any(|t| t.label.value() == 0 && t.to != s));
+            if !has_backward {
+                assert!(sort_topological(&lts, |_, _| true, false).is_ok());
             }
         });
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Test is too slow under miri
-    fn test_random_reorder_states() {
-        random_test(100, |rng| {
-            let files = DumpFiles::new("test_random_reorder_states");
+    fn test_sort_topological_cycle() {
+        // 0 -a-> 1 -a-> 2 -tau-> 0 is a cycle; without the tau transition it is a chain.
+        let transitions = [(0, 1, 1), (1, 1, 2), (2, 0, 0), (2, 0, 2)]
+            .map(|(from, label, to)| (StateIndex::new(from), LabelIndex::new(label), StateIndex::new(to)));
+        let lts = LabelledTransitionSystem::new(
+            StateIndex::new(0),
+            None,
+            || transitions.iter().cloned(),
+            vec![String::tau_label(), "a".to_string()],
+        );
 
-            let lts = random_lts::<String, _>(rng, 1000, 3);
-            files.dump("input.aut", |f| write_aut(f, &lts)).unwrap();
+        assert!(sort_topological(&lts, |_, _| true, false).is_err());
 
-            // Generate a random permutation.
-            let mut rng = rand::rng();
-            let order: Vec<StateIndex> = {
-                let mut order: Vec<StateIndex> = (0..lts.num_of_states()).map(StateIndex::new).collect();
-                order.shuffle(&mut rng);
-                order
-            };
-
-            let new_lts = LabelledTransitionSystem::new_from_permutation(lts.clone(), |i| order[i]);
-            files.dump("reordered.aut", |f| write_aut(f, &new_lts)).unwrap();
-
-            assert_eq!(new_lts.num_of_labels(), lts.num_of_labels());
-        });
+        let position = sort_topological(&lts, |label, _| label.value() == 1, false).unwrap();
+        assert_eq!(position, [0, 1, 2].map(StateIndex::new));
+        let position = sort_topological(&lts, |label, _| label.value() == 1, true).unwrap();
+        assert_eq!(position, [2, 1, 0].map(StateIndex::new));
     }
 }

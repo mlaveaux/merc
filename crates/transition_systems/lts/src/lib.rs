@@ -19,10 +19,6 @@ mod reachability;
 pub(crate) use io_aut::AUT_TAU_LABEL;
 pub(crate) use io_aut::MCRL2_TAU_LABEL;
 pub(crate) use io_bcg::read_bcg;
-#[cfg(test)]
-pub(crate) use labelled_transition_system::check_equivalent;
-#[cfg(test)]
-pub(crate) use reachability::num_reachable_states;
 
 // Public API
 pub use incoming_transitions::FromTransition;

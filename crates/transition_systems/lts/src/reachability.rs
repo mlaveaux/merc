@@ -47,13 +47,6 @@ where
 }
 
 /// Returns the number of states reachable from the given state of the LTS.
-#[cfg(test)]
-pub(crate) fn num_reachable_states<L: LTS>(lts: &L, state: StateIndex) -> usize {
-    let mut count = 0;
-    reachability(lts, state, |_| true, |_| count += 1);
-    count
-}
-
 /// Returns a new LTS containing only the states and transitions reachable from
 /// the initial state of `lts`.
 pub fn reachable_lts<L: LTS>(lts: &L) -> LabelledTransitionSystem<L::Label>
