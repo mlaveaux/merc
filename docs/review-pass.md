@@ -33,7 +33,7 @@ to read a place, not a verdict: only a human decision (keep, rewrite, delete) cl
    early crates carry the safety invariants everything else relies on, so inconsistencies there
    are the expensive ones. For each crate, one reviewer, one sitting, using the `review` skill;
    for `unsafe` also the `unsafe-verify` skill.
-3. **Test pass**, per crate after its read: move integration tests to `tests/`, drop layout, trait-bound and implementation-coupled tests, and check that each remaining test would fail on a plausible bug (revert the fix or mutate the code and watch it fail). Fewer, behavioural tests are the goal.
+3. **Test pass** (the `tests` skill), per crate after its read: move integration tests to `tests/`, drop layout, trait-bound and implementation-coupled tests, and check that each remaining test would fail on a plausible bug (revert the fix or mutate the code and watch it fail). Fewer, behavioural tests are the goal.
 4. **Cross-crate consistency**, which the per-crate read cannot see: visitors and traversal
    (above), error types (`MercError` vs ad hoc `thiserror` enums vs `Box<dyn Error>`), CLI
    structure (`clap` derive plus `merc_tools` helpers in every binary), naming of

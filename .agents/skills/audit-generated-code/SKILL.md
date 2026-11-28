@@ -31,6 +31,8 @@ Each is a reason to read, never a finding by itself. Run them per crate (`crates
 | Tests that assert nothing new | tests whose body only constructs a value, or that mirror the implementation line by line | They pass on both sides of a bug (see the `review` skill, Step 2). |
 | Style drift | `cargo +nightly fmt --all -- --check`, `cargo clippy --all-targets` | Formatting needs nightly (`imports_granularity = "Item"`). |
 
+The `tests` skill defines what a good test is and how to run and review a test pass.
+
 ## What counts as the repo's own style
 
 Measure against the `architecture` skill, in particular:

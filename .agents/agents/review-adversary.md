@@ -35,7 +35,7 @@ Assertions in the diff ("callers never pass empty", "this is safe because the lo
 - Tests in the diff: do they fail without the fix? Stash the production change and rerun them; a test that passes on both sides verifies nothing, and that is itself a finding.
 - Three cargo workspaces (root, `tools/mcrl2`, `tools/gui`): run commands from the right directory, and check whether a change in `crates/` broke a workspace the author did not test.
 
-Prefer randomized tests (`merc_utilities::random_test`, reproducible with `MERC_SEED=<seed>`) so the postcondition is an explicit assertion over arbitrary inputs; keep miri tests small and deterministic.
+A test pass or a diff of moved and deleted tests is also reviewable: follow "Reviewing a test pass" in the `tests` skill. Prefer randomized tests (`merc_utilities::random_test`, reproducible with `MERC_SEED=<seed>`) so the postcondition is an explicit assertion over arbitrary inputs; keep miri tests small and deterministic.
 
 ## Guard against
 

@@ -104,7 +104,7 @@ traits. The older one is not the model for new code; see `docs/review-pass.md`.
   typed library errors, no `anyhow`. Binaries use `clap` derive plus the `merc_tools` helpers.
 - **Dependencies:** the workspace pins versions in the root `Cargo.toml`; new dependencies need
   `cargo deny check` and a reason.
-- **Tests:** public-API (integration) tests live in the crate's `tests/` directory; an inline `#[cfg(test)]` module is only for tests that need private items. `unwrap` is fine in tests. Do not test struct layout, `Send`/`Sync` or other compiler checks (keep layout invariants as `const _: () = assert!(...)` next to the `unsafe` relying on them), and do not pin private helpers or internal state: such tests churn on every refactor. A test earns its place by failing when behaviour is wrong. Property-style with `merc_utilities::random_test` (reproduce with
+- **Tests:** see the `tests` skill. In short: public-API (integration) tests live in the crate's `tests/` directory; an inline `#[cfg(test)]` module is only for tests that need private items. `unwrap` is fine in tests. Do not test struct layout, `Send`/`Sync` or other compiler checks (keep layout invariants as `const _: () = assert!(...)` next to the `unsafe` relying on them), and do not pin private helpers or internal state: such tests churn on every refactor. A test earns its place by failing when behaviour is wrong. Property-style with `merc_utilities::random_test` (reproduce with
   `MERC_SEED=<seed>`); `test-case` for tables; small deterministic cases for miri. Expected
   outputs live in `snapshot/` files next to the test.
 - **Docs:** rustdoc for the contract (`# Panics`, `# Safety`), crate README for the architecture
