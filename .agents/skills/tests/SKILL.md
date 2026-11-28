@@ -41,6 +41,87 @@ CI does; `unsafe-verify` covers miri, loom and kani.
 - Delete duplicates, trivial one-line helpers, and tests of a constructor that only sets fields.
 - Do not narrate history in test comments ("before the fix", "used to"). State the behaviour.
 
+## What a test file looks like
+
+One file per public topic of the crate (`slot_list_test.rs`, `traverse_test.rs`, `srf_test.rs`).
+Inside it, in this order:
+
+1. A `//!` line saying what the file covers, in terms of behaviour. No history, no "regression for".
+2. One `use` per item: external crates, then the crate under test, then `merc_utilities`.
+3. Small fixtures and builders (`term("f(a)")`, `spec()`), only when several tests share them.
+   A helper that only renames one call is not a fixture.
+4. **Exact, deterministic tests first**: a few hand-checked cases, with the expected value written
+   out literally. They are what miri runs and what a failing oracle test is debugged against.
+5. **The oracle test**: random operations compared with a model, with a doc comment that names
+   the model.
+6. Edge and failure cases: empty input, the maximum, deep and shared terms, the exact error
+   (`should_panic(expected = "...")` or an exact `Err`), never a bare `should_panic`.
+
+Skeleton (from `crates/core/utilities/tests/slot_list_test.rs`):
+
+```rust
+use rand::RngExt;
+
+use merc_utilities::SlotList;
+use merc_utilities::random_test;
+
+#[test]
+fn test_slot_list_order() {
+    let mut list = SlotList::new();
+    let a = list.push_back('a');
+    list.push_back('b');
+    let c = list.push_back('c');
+
+    list.move_to_back(a);
+    assert_eq!(list.remove(c), 'c');
+
+    // Slot of `c` is reused.
+    assert_eq!(list.push_back('d'), c);
+
+    for expected in ['b', 'a', 'd'] {
+        assert_eq!(list.pop_front(), Some(expected));
+    }
+    assert_eq!(list.pop_front(), None);
+}
+
+/// Compares a random sequence of operations against a vector of `(slot, value)` pairs in list
+/// order.
+#[test]
+#[cfg_attr(miri, ignore)] // Test is too slow under miri
+fn test_random_slot_list() {
+    random_test(100, |rng| {
+        let mut list = SlotList::new();
+        let mut model: Vec<(usize, u32)> = Vec::new();
+        // ... pick an operation with `rng`, apply it to both, and compare after every step.
+    });
+}
+```
+
+Weak to strong, each taken from a real fix in these passes:
+
+| Weak | Strong |
+|---|---|
+| `debug_assert_eq!(read_back, written)` in a test | `assert_eq!`: `debug_assert` is gone in release, where CI also runs the tests |
+| a round trip `decode(encode(x)) == x` | also `assert_eq!(encode(300u64), [0xac, 0x02])` for a few values and the boundaries |
+| `assert!(output.contains("f(a)"))` | `assert_eq!(output, "f(a, b, g(b))")` |
+| `assert!(result.is_some())` | `assert_eq!(result, Some(expected))`, and one case that must be `None` |
+| `assert!(set.len() > 0)` | the exact length, and the exact members |
+| the result checked only for the first element or block | every element, in order, with an independent model |
+| a test whose subject also lives in a local variable | drop the local first; otherwise it keeps the thing alive that the test claims the container keeps alive |
+| expected value computed with the function under test | a literal, or an independent algorithm (a naive solver, `BigUint`, a model collection) |
+| `#[should_panic]` | `#[should_panic(expected = "reserved for internal use")]` |
+
+Good examples to copy, by what they show:
+
+| Pattern | File |
+|---|---|
+| exact cases plus a model test | `crates/core/utilities/tests/slot_list_test.rs` |
+| exact byte format | `crates/core/number/tests/variablewidth_test.rs` (`test_exact_encoding`) |
+| a miri-sized test of unsafe code next to slow ones | `crates/core/unsafety/tests/concurrent_indexed_set_test.rs` |
+| visitors: early exit, prune, context, shared and deep terms | `crates/rewriter/data/tests/visitor_test.rs` |
+| every `Traverse` operation on every node type | `crates/language/syntax/tests/traverse_test.rs` |
+| a semantic oracle (a small solver) instead of pinning the output shape | `crates/language/pbes/tests/srf_test.rs` |
+
 ## Slow tests, miri, loom, kani
 
 - Slow tests carry `#[cfg_attr(miri, ignore)]` with the reason, and have a small deterministic
