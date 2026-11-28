@@ -129,36 +129,12 @@ fn branching_bisim_sigref_impl<L: LTS>(preprocessed_lts: &L, timing: &Timing) ->
         debug!("longest_tau_path" = path.len(); "The longest tau path is {:?}", path);
     }
 
-    let mut expected_builder = SignatureBuilder::default();
-    let mut visited = FxHashSet::default();
-    let mut stack = Vec::new();
-
     timing.measure("reduction", || {
         signature_refinement::<_, _, _, true>(
             preprocessed_lts,
             &incoming,
             |state_index, partition, state_to_key, builder| {
                 branching_bisim_signature_inductive(state_index, preprocessed_lts, partition, state_to_key, builder);
-
-                // Compute the expected signature, only used in debugging.
-                if cfg!(debug_assertions) {
-                    branching_bisim_signature(
-                        state_index,
-                        preprocessed_lts,
-                        partition,
-                        &mut expected_builder,
-                        &mut visited,
-                        &mut stack,
-                    );
-                    let expected_result = builder.clone();
-
-                    let signature = Signature::new(builder);
-                    debug_assert_eq!(
-                        signature.as_slice(),
-                        expected_result,
-                        "The sorted and expected signature should be the same"
-                    );
-                }
             },
             |signature, key_to_signature| {
                 // Inductive signatures.
@@ -229,12 +205,14 @@ fn branching_bisim_sigref_naive_impl<L: LTS>(preprocessed_lts: &L, timing: &Timi
                         &mut visited,
                         &mut stack,
                     );
-                    let expected_result = builder.clone();
-
-                    let signature = Signature::new(builder);
+                    // The signature is a set, so only the order of the pairs may differ.
+                    expected_builder.sort_unstable();
+                    expected_builder.dedup();
+                    let mut sorted = builder.clone();
+                    sorted.sort_unstable();
+                    sorted.dedup();
                     debug_assert_eq!(
-                        signature.as_slice(),
-                        expected_result,
+                        sorted, expected_builder,
                         "The sorted and expected signature should be the same"
                     );
                 }

@@ -21,9 +21,10 @@ use merc_lts::StateIndex;
 use merc_utilities::Timing;
 
 use crate::DivergencePreservingLts;
-use crate::Equivalence;
 use crate::MarkedBlockPartition;
-use crate::reduce_lts;
+use crate::Partition;
+use crate::branching_bisim_sigref;
+use crate::quotient_lts_block;
 use crate::tau_cycle_elimination_and_reorder;
 
 /// Type alias because we use bitvec for marking states
@@ -47,14 +48,13 @@ pub(crate) fn weak_bisimulation<L: LTS>(
 ) -> (LabelledTransitionSystem<L::Label>, StateIndex, MarkedBlockPartition) {
     // Preprocess the LTS if desired.
     if preprocess {
+        let (preprocessed_lts, mapped_state, partition) =
+            branching_bisim_sigref(lts, state, divergence_preserving, timing);
+        let quotiented_state = StateIndex::new(*partition.block_number(mapped_state));
         let lts = timing.measure("preprocess", || {
-            if divergence_preserving {
-                reduce_lts(lts, Equivalence::BranchingBisimDivergencePreserving, true, timing)
-            } else {
-                reduce_lts(lts, Equivalence::BranchingBisim, true, timing)
-            }
+            quotient_lts_block::<_, true>(&preprocessed_lts, &partition, !divergence_preserving)
         });
-        weak_bisimulation_preprocessed(lts, state, divergence_preserving, timing)
+        weak_bisimulation_preprocessed(lts, quotiented_state, divergence_preserving, timing)
     } else {
         weak_bisimulation_preprocessed(lts, state, divergence_preserving, timing)
     }
@@ -79,14 +79,13 @@ pub(crate) fn weak_bisimulation_parallel<L: LTS>(
 ) -> (LabelledTransitionSystem<L::Label>, StateIndex, MarkedBlockPartition) {
     // Preprocess the LTS if desired.
     if preprocess {
+        let (preprocessed_lts, mapped_state, partition) =
+            branching_bisim_sigref(lts, state, divergence_preserving, timing);
+        let quotiented_state = StateIndex::new(*partition.block_number(mapped_state));
         let lts = timing.measure("preprocess", || {
-            if divergence_preserving {
-                reduce_lts(lts, Equivalence::BranchingBisimDivergencePreserving, true, timing)
-            } else {
-                reduce_lts(lts, Equivalence::BranchingBisim, true, timing)
-            }
+            quotient_lts_block::<_, true>(&preprocessed_lts, &partition, !divergence_preserving)
         });
-        weak_bisimulation_parallel_preprocessed(lts, state, divergence_preserving, timing)
+        weak_bisimulation_parallel_preprocessed(lts, quotiented_state, divergence_preserving, timing)
     } else {
         weak_bisimulation_parallel_preprocessed(lts, state, divergence_preserving, timing)
     }

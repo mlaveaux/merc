@@ -56,16 +56,6 @@ fn runs_under_miri(equivalence: Equivalence) -> bool {
 
 /// Returns the `preprocess` flags to test for `equivalence`.
 ///
-/// `WeakBisim` and `WeakBisimParallel` are not tested with preprocessing: they look up the
-/// given state of the input in the branching-reduced LTS, which panics or compares the wrong
-/// states once the reduction removes states.
-fn preprocess_flags(equivalence: Equivalence) -> &'static [bool] {
-    match equivalence {
-        Equivalence::WeakBisim | Equivalence::WeakBisimParallel => &[false],
-        _ => &[false, true],
-    }
-}
-
 /// The divergence-preserving equivalences, grouped by the bisimulation they refine.
 const DIVERGENCE_PRESERVING: [(Kind, &[Equivalence]); 2] = [
     (
@@ -268,7 +258,7 @@ fn test_random_reduce_matches_oracle() {
     random_test(100, |rng| {
         let lts = random_lts::<String, _>(rng, 10, 3);
         for (equivalence, kind) in EQUIVALENCES {
-            for &preprocess in preprocess_flags(equivalence) {
+            for preprocess in [false, true] {
                 check_reduce(&lts, equivalence, kind, preprocess);
             }
         }
@@ -298,7 +288,7 @@ fn test_random_compare_matches_oracle() {
         for (equivalence, kind) in EQUIVALENCES {
             let expected = oracle(&left, &right, kind);
             verdicts[usize::from(expected)] += 1;
-            for &preprocess in preprocess_flags(equivalence) {
+            for preprocess in [false, true] {
                 assert_eq!(
                     compare_lts(equivalence, left.clone(), right.clone(), preprocess, false, &timing).0,
                     expected,
