@@ -1318,7 +1318,7 @@ impl<'a> ConstraintGenerator<'a> {
                 self.unifier.function(domain, range)
             }
             // Already ground — no variable can occur any deeper.
-            ResolvedSort::Unit | ResolvedSort::Primitive(_) | ResolvedSort::Def(_) => self.unifier.resolved_node(sort),
+            ResolvedSort::Primitive(_) | ResolvedSort::Def(_) => self.unifier.resolved_node(sort),
         }
     }
 }

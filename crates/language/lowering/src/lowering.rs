@@ -136,7 +136,6 @@ pub(crate) fn lower_sort(
     id: ResolvedSortId,
 ) -> DataSortExpression {
     match ctx.sorts.get(id) {
-        ResolvedSort::Unit => unreachable_not_a_value_sort("Unit"),
         ResolvedSort::Primitive(sort) => BasicSort::new(sort.name()).into(),
         ResolvedSort::Container { op, subsort } => {
             SortCons::new(container_kind(*op), lower_sort(ctx, spec, *subsort)).into()

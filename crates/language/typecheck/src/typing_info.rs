@@ -561,7 +561,6 @@ pub(crate) fn push_binder_declaration(
 /// Every produced node gets [`Span::default`].
 fn sort_expression(ctx: &TypeCheckContext, spec: &UntypedDataSpecification, id: ResolvedSortId) -> SortExpression {
     match ctx.sorts.get(id) {
-        ResolvedSort::Unit => unreachable_not_a_value_sort("Unit"),
         ResolvedSort::Primitive(sort) => SortExpressionKind::Simple(*sort).into(),
         ResolvedSort::Container { op, subsort } => {
             SortExpressionKind::Complex(*op, Box::new(sort_expression(ctx, spec, *subsort))).into()

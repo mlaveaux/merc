@@ -573,9 +573,8 @@ pub(crate) fn extend_system_with_inferred_sorts(
 
     // ...then every sort that shows up as the inferred sort of some
     // expression node in a well-typed equation — `resolved_sort_to_syntax`
-    // already returns `None` for the two `ResolvedSort` variants that never
-    // denote a comparable data sort (`Var`, `Unit`), so no extra filter is
-    // needed here beyond that.
+    // already returns `None` for a `ResolvedSort::TypeVar`, which never denotes a
+    // comparable data sort, so no extra filter is needed here beyond that.
     let mut comparison_worklist = Vec::new();
     for typing in ctx.equation_typing.values().filter_map(|typing| typing.as_ref().ok()) {
         for &id in &typing.sorts {
@@ -609,7 +608,7 @@ pub(crate) fn extend_system_with_inferred_sorts(
 /// the Appendix-B templates are written in — the mirror of
 /// `mcrl2_lowering::lower_sort`, but targeting the syntax tree rather than the
 /// aterm schema, since [standard_sort] substitutes into syntax-tree templates.
-/// Returns `None` for [ResolvedSort::Unit] (never a data sort) or a
+/// Returns `None` for a [ResolvedSort::TypeVar] (never a data sort) or a
 /// [ResolvedSort::Def] whose declaration cannot be named (out of range of
 /// `spec`, which does not happen for a sort that inference actually produced).
 fn resolved_sort_to_syntax(
@@ -618,12 +617,11 @@ fn resolved_sort_to_syntax(
     id: ResolvedSortId,
 ) -> Option<SortExpression> {
     match ctx.sorts.get(id) {
-        // Never a data sort, like `Unit`: a bound type variable is always
+        // Never a data sort: a bound type variable is always
         // instantiated to a fresh unification variable before sort
         // solving produces a node's final ResolvedSortId, so this case does
         // not happen for a sort inference actually produced either.
         ResolvedSort::TypeVar(_) => None,
-        ResolvedSort::Unit => None,
         ResolvedSort::Primitive(sort) => Some(SortExpressionKind::Simple(*sort).into()),
         ResolvedSort::Container { op, subsort } => {
             let sub = resolved_sort_to_syntax(ctx, spec, *subsort)?;

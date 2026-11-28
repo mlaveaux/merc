@@ -27,10 +27,6 @@ pub type ResolvedSortId = TagIndex<usize, ResolvedSortTag>;
 /// coincides with id equality.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResolvedSort {
-    /// The sort with a single element, used internally for the result of an
-    /// action. It has no surface syntax, which is why it is a variant here
-    /// rather than a member of [merc_syntax::Sort].
-    Unit,
     /// A built-in primitive sort such as `Bool` or `Nat`.
     Primitive(Sort),
     /// A container sort such as `List(S)` or `Set(S)`.
@@ -117,7 +113,6 @@ impl<'a> DisplaySortContext<'a> {
 impl fmt::Display for DisplaySortContext<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ctx.sorts.get(self.id) {
-            ResolvedSort::Unit => write!(f, "@Unit"),
             ResolvedSort::Primitive(sort) => write!(f, "{sort}"),
             ResolvedSort::Container { op, subsort } => {
                 write!(f, "{op}({})", self.sub(*subsort))
@@ -151,7 +146,7 @@ fn primitive_partial_cmp(lhs: Sort, rhs: Sort) -> Option<Ordering> {
     }
 }
 
-/// Panics: neither `Unit` nor `TypeVar` ever denotes a data-expression's own resolved sort..
+/// Panics: a `TypeVar` never denotes a data-expression's own resolved sort..
 pub fn unreachable_not_a_value_sort(variant: &str) -> ! {
     unreachable!("{variant} never denotes a data-expression's own resolved sort")
 }
@@ -232,7 +227,6 @@ impl SortInterner {
             real_sort: ResolvedSortId::new(0),
         };
 
-        interner.intern(ResolvedSort::Unit);
         interner.bool_sort = interner.intern(ResolvedSort::Primitive(Sort::Bool));
         interner.pos_sort = interner.intern(ResolvedSort::Primitive(Sort::Pos));
         interner.nat_sort = interner.intern(ResolvedSort::Primitive(Sort::Nat));
@@ -454,7 +448,7 @@ impl SortInterner {
             // Already ground, or a distinct bound variable never introduced by
             // this substitution's own template — no occurrence of `var` can
             // occur any deeper.
-            ResolvedSort::Unit | ResolvedSort::Primitive(_) | ResolvedSort::Def(_) | ResolvedSort::TypeVar(_) => sort,
+            ResolvedSort::Primitive(_) | ResolvedSort::Def(_) | ResolvedSort::TypeVar(_) => sort,
         }
     }
 
